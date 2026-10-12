@@ -14,11 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      program_days: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          name: string
+          position: number
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          user_id?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       program_exercises: {
         Row: {
           archived_at: string | null
           created_at: string
           day: string
+          day_id: string | null
           example_reps: number[] | null
           id: string
           name: string
@@ -31,7 +59,8 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           created_at?: string
-          day: string
+          day?: string
+          day_id?: string | null
           example_reps?: number[] | null
           id?: string
           name: string
@@ -45,6 +74,7 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           day?: string
+          day_id?: string | null
           example_reps?: number[] | null
           id?: string
           name?: string
@@ -54,12 +84,22 @@ export type Database = {
           user_id?: string
           working_weight?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "program_exercises_day_owner_fkey"
+            columns: ["day_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "program_days"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
       }
       workout_entries: {
         Row: {
           created_at: string
           day: string
+          day_id: string | null
+          day_name: string | null
           exercise_id: string
           id: string
           notes: string | null
@@ -71,7 +111,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          day: string
+          day?: string
+          day_id?: string | null
+          day_name?: string | null
           exercise_id: string
           id?: string
           notes?: string | null
@@ -84,6 +126,8 @@ export type Database = {
         Update: {
           created_at?: string
           day?: string
+          day_id?: string | null
+          day_name?: string | null
           exercise_id?: string
           id?: string
           notes?: string | null
@@ -94,6 +138,13 @@ export type Database = {
           weight?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "workout_entries_day_owner_fkey"
+            columns: ["day_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "program_days"
+            referencedColumns: ["id", "user_id"]
+          },
           {
             foreignKeyName: "workout_entries_exercise_id_fkey"
             columns: ["exercise_id"]
@@ -115,7 +166,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      setup_program: {
+        Args: { _names: string[]; _template?: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

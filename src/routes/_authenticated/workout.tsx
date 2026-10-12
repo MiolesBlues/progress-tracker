@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { DAYS, prefillFor, toISO, type DayId } from "@/lib/workout";
-import { lastEntryQuery, programQuery } from "@/lib/queries";
+import { prefillFor, toISO } from "@/lib/workout";
+import { Link } from "@tanstack/react-router";
+import { daysQuery, lastEntryQuery, programQuery } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,8 +31,11 @@ const selectCls = "h-12 w-full rounded-md border border-input bg-card px-3 text-
 function WorkoutPage() {
   const qc = useQueryClient();
   const { data: program = [] } = useQuery(programQuery);
-  const [day, setDay] = useState<DayId>("upper1");
-  const exercises = useMemo(() => program.filter((e) => e.day === day && !e.archived_at), [program, day]);
+  const { data: allDays = [] } = useQuery(daysQuery);
+  const days = useMemo(() => allDays.filter((d) => !d.archived_at), [allDays]);
+  const [day, setDay] = useState("");
+  useEffect(() => { if (!days.some((d) => d.id === day)) setDay(days[0]?.id ?? ""); }, [days, day]);
+  const exercises = useMemo(() => program.filter((e) => e.day_id === day && !e.archived_at), [program, day]);
   const [exerciseId, setExerciseId] = useState("");
   const [date, setDate] = useState(() => toISO(new Date()));
   const [weight, setWeight] = useState("");
@@ -67,7 +71,7 @@ function WorkoutPage() {
     if (rirNum !== null && (!Number.isFinite(rirNum) || rirNum < 0 || rirNum > 10)) return void toast.error("RIR от 0 до 10");
     setSaving(true);
     const { error } = await supabase.from("workout_entries").insert({
-      exercise_id: exerciseId, day, performed_on: date, weight: w, reps: r,
+      exercise_id: exerciseId, day_id: day, day_name: days.find((d) => d.id === day)?.name ?? null, performed_on: date, weight: w, reps: r,
       rir: rirNum, notes: notes.trim() || null,
     });
     setSaving(false);
@@ -84,14 +88,16 @@ function WorkoutPage() {
     <form onSubmit={save} className="space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">Тренировка</h1>
 
-      <div className="grid grid-cols-4 gap-1 rounded-xl bg-secondary p-1">
-        {DAYS.map((d) => (
+      <div className="-mx-5 flex gap-1.5 overflow-x-auto px-5 pb-1">
+        {days.map((d) => (
           <button type="button" key={d.id} onClick={() => setDay(d.id)}
-            className={`rounded-lg py-2 text-xs font-bold transition ${day === d.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
-            {d.label}
+            className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition ${day === d.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}>
+            {d.name}
           </button>
         ))}
       </div>
+      {days.length === 0 && <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Нет активных дней. <Link to="/program" className="text-primary">Добавьте день</Link></p>}
+      {day && exercises.length === 0 && <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">В этом дне нет упражнений. <Link to="/program" className="text-primary">Добавить в «Программе»</Link></p>}
 
       <div className="space-y-2">
         <Label htmlFor="ex">Упражнение</Label>

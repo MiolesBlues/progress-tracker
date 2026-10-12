@@ -39,3 +39,16 @@ describe("prefillFor", () => {
       .toEqual({ weight: "", reps: ["", "", "", ""] });
   });
 });
+
+import { defaultDayNames, needsOnboarding } from "./workout";
+describe("onboarding", () => {
+  it("only for accounts without any days", () => {
+    expect(needsOnboarding([])).toBe(true);
+    expect(needsOnboarding([{ id: "x" }])).toBe(false);
+  });
+  it("default names clamp to 1..7", () => {
+    expect(defaultDayNames(3)).toEqual(["День A", "День B", "День C"]);
+    expect(defaultDayNames(9)).toHaveLength(7);
+    expect(defaultDayNames(0)).toEqual(["День A"]);
+  });
+});
