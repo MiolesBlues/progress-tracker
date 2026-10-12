@@ -32,7 +32,7 @@ function ProgressPage() {
   const today = new Date();
   const periodStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (period - 1));
   const prevWeekStart = weekRange(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7))[0];
-  const since = [toISO(periodStart), prevWeekStart].sort()[0];
+  const since = [toISO(periodStart), prevWeekStart].sort()[0]!;
   const { data: entries = [], isLoading } = useQuery(entriesQuery(exerciseId, since));
 
   const periodISO = toISO(periodStart);

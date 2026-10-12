@@ -37,7 +37,7 @@ function ProgramPage() {
     if (!name) return;
     const position = (list.at(-1)?.position ?? -1) + 1;
     const { error } = await supabase.from("program_exercises").insert({ day, name: name.slice(0, 100), position });
-    if (error) return toast.error("Не удалось добавить");
+    if (error) return void toast.error("Не удалось добавить");
     setNewName("");
     refresh();
   }
@@ -46,7 +46,7 @@ function ProgramPage() {
     const n = name.trim();
     if (!n || n === ex.name) return;
     const { error } = await supabase.from("program_exercises").update({ name: n.slice(0, 100) }).eq("id", ex.id);
-    if (error) return toast.error("Не удалось сохранить");
+    if (error) return void toast.error("Не удалось сохранить");
     toast.success("Переименовано");
     refresh();
   }
@@ -54,7 +54,7 @@ function ProgramPage() {
   async function remove(ex: Exercise) {
     if (!confirm(`Удалить «${ex.name}» и все его записи?`)) return;
     const { error } = await supabase.from("program_exercises").delete().eq("id", ex.id);
-    if (error) return toast.error("Не удалось удалить");
+    if (error) return void toast.error("Не удалось удалить");
     refresh();
   }
 

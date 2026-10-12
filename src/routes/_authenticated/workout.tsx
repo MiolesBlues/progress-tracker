@@ -62,24 +62,24 @@ function WorkoutPage() {
     e.preventDefault();
     const w = Number(weight.replace(",", "."));
     const r = reps.map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x) && x >= 0);
-    if (!exerciseId) return toast.error("Выберите упражнение");
-    if (!Number.isFinite(w) || w < 0) return toast.error("Укажите рабочий вес");
-    if (r.length === 0) return toast.error("Укажите повторения");
+    if (!exerciseId) return void toast.error("Выберите упражнение");
+    if (!Number.isFinite(w) || w < 0) return void toast.error("Укажите рабочий вес");
+    if (r.length === 0) return void toast.error("Укажите повторения");
     const rirNum = rir.trim() === "" ? null : Number(rir.replace(",", "."));
-    if (rirNum !== null && (!Number.isFinite(rirNum) || rirNum < 0 || rirNum > 10)) return toast.error("RIR от 0 до 10");
+    if (rirNum !== null && (!Number.isFinite(rirNum) || rirNum < 0 || rirNum > 10)) return void toast.error("RIR от 0 до 10");
     setSaving(true);
     const { error } = await supabase.from("workout_entries").insert({
       exercise_id: exerciseId, day, performed_on: date, weight: w, reps: r,
       rir: rirNum, notes: notes.trim() || null,
     });
     setSaving(false);
-    if (error) return toast.error("Не удалось сохранить");
+    if (error) return void toast.error("Не удалось сохранить");
     toast.success("Сохранено");
     // keep weight/reps for the next set of the same exercise; clear one-off fields
     setRir("");
     setNotes("");
     qc.invalidateQueries({ queryKey: ["entries", exerciseId] });
-    qc.setQueryData(lastEntryQuery(exerciseId).queryKey, { performed_on: date, weight: w, reps: r, rir: rirNum });
+    qc.invalidateQueries({ queryKey: ["last-entry", exerciseId] });
   }
 
   return (
