@@ -16,28 +16,43 @@ export type Database = {
     Tables: {
       program_exercises: {
         Row: {
+          archived_at: string | null
           created_at: string
           day: string
+          example_reps: number[] | null
           id: string
           name: string
           position: number
+          target_reps: string | null
+          target_sets: number | null
           user_id: string
+          working_weight: number | null
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           day: string
+          example_reps?: number[] | null
           id?: string
           name: string
           position?: number
+          target_reps?: string | null
+          target_sets?: number | null
           user_id?: string
+          working_weight?: number | null
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           day?: string
+          example_reps?: number[] | null
           id?: string
           name?: string
           position?: number
+          target_reps?: string | null
+          target_sets?: number | null
           user_id?: string
+          working_weight?: number | null
         }
         Relationships: []
       }
@@ -85,6 +100,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "program_exercises"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_entries_exercise_owner_fkey"
+            columns: ["exercise_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "program_exercises"
+            referencedColumns: ["id", "user_id"]
           },
         ]
       }

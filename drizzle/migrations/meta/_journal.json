@@ -8,6 +8,13 @@
       "when": 1791827847845,
       "tag": "0000_workout_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791840310172,
+      "tag": "0001_program_fields_soft_delete_restrict_fk",
+      "breakpoints": true
     }
   ]
 }
