@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { DAYS, toISO, type DayId } from "@/lib/workout";
+import { DAYS, prefillFor, toISO, type DayId } from "@/lib/workout";
 import { lastEntryQuery, programQuery } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,7 @@ function WorkoutPage() {
   const qc = useQueryClient();
   const { data: program = [] } = useQuery(programQuery);
   const [day, setDay] = useState<DayId>("upper1");
-  const exercises = useMemo(() => program.filter((e) => e.day === day), [program, day]);
+  const exercises = useMemo(() => program.filter((e) => e.day === day && !e.archived_at), [program, day]);
   const [exerciseId, setExerciseId] = useState("");
   const [date, setDate] = useState(() => toISO(new Date()));
   const [weight, setWeight] = useState("");
@@ -44,19 +44,17 @@ function WorkoutPage() {
     if (!exercises.some((e) => e.id === exerciseId)) setExerciseId(exercises[0]?.id ?? "");
   }, [exercises, exerciseId]);
 
-  const { data: last } = useQuery(lastEntryQuery(exerciseId));
+  const current = exercises.find((e) => e.id === exerciseId);
+  const { data: last, isFetched } = useQuery(lastEntryQuery(exerciseId));
   useEffect(() => {
-    // prefill from last session for this exercise
-    if (last) {
-      setWeight(String(Number(last.weight)));
-      setReps(last.reps.map(String));
-    } else {
-      setWeight("");
-      setReps(["", "", ""]);
-    }
+    if (!isFetched) return;
+    const p = prefillFor(current, last);
+    setWeight(p.weight);
+    setReps(p.reps.length ? p.reps : [""]);
     setRir("");
     setNotes("");
-  }, [last, exerciseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last, exerciseId, isFetched]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -101,6 +99,11 @@ function WorkoutPage() {
           {exercises.length === 0 && <option value="">Нет упражнений</option>}
           {exercises.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
+        {current && (current.target_sets || current.target_reps || current.working_weight !== null) && (
+          <p className="text-xs text-muted-foreground">Цель: <span className="num font-semibold text-foreground">{current.target_sets ?? "?"} × {current.target_reps ?? "?"}</span>
+            {current.working_weight !== null && <> · стартовый вес <span className="num">{current.working_weight === 0 ? "0 (соб. вес/ассист)" : `${current.working_weight} кг`}</span></>}
+          </p>
+        )}
         {last && <p className="text-xs text-muted-foreground">Прошлый раз {last.performed_on}: <span className="num">{Number(last.weight)} кг × {last.reps.join(" / ")}</span></p>}
       </div>
 
