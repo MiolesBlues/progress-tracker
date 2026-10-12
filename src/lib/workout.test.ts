@@ -23,3 +23,19 @@ describe("workout metrics", () => {
     expect(r.delta).toBe(10);
   });
 });
+
+import { prefillFor } from "./workout";
+describe("prefillFor", () => {
+  it("uses last session when present", () => {
+    expect(prefillFor({ working_weight: 50, example_reps: [7, 7, 6, 6], target_sets: 4 }, { weight: "52.5", reps: [8, 8] }))
+      .toEqual({ weight: "52.5", reps: ["8", "8"] });
+  });
+  it("falls back to program starting weight and example reps", () => {
+    expect(prefillFor({ working_weight: 12.5, example_reps: [10, 10, 10], target_sets: 3 }, null))
+      .toEqual({ weight: "12.5", reps: ["10", "10", "10"] });
+  });
+  it("null weight stays empty, sets from target", () => {
+    expect(prefillFor({ working_weight: null, example_reps: null, target_sets: 4 }, null))
+      .toEqual({ weight: "", reps: ["", "", "", ""] });
+  });
+});

@@ -72,3 +72,14 @@ export function dailySeries(entries: EntryLike[], m: Metric) {
   for (const e of entries) by.set(e.performed_on, [...(by.get(e.performed_on) ?? []), e]);
   return [...by.keys()].sort().map((date) => ({ date, value: aggregate(by.get(date)!, m)! }));
 }
+
+/** Prefill for the log form: last logged session wins, else the program's starting weight/example reps. */
+export function prefillFor(
+  ex: { working_weight: number | null; example_reps: number[] | null; target_sets: number | null } | undefined,
+  last: { weight: number | string; reps: number[] } | null | undefined,
+): { weight: string; reps: string[] } {
+  if (last) return { weight: String(Number(last.weight)), reps: last.reps.map(String) };
+  const sets = ex?.target_sets ?? ex?.example_reps?.length ?? 3;
+  const reps = ex?.example_reps?.length ? ex.example_reps.map(String) : Array.from({ length: sets }, () => "");
+  return { weight: ex?.working_weight == null ? "" : String(ex.working_weight), reps };
+}

@@ -46,7 +46,7 @@ function ProgressPage() {
       <select aria-label="Упражнение" className={selectCls} value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
         {DAYS.map((d) => (
           <optgroup key={d.id} label={d.label}>
-            {program.filter((p) => p.day === d.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {program.filter((p) => p.day === d.id).map((p) => <option key={p.id} value={p.id}>{p.name}{p.archived_at ? " (архив)" : ""}</option>)}
           </optgroup>
         ))}
       </select>
