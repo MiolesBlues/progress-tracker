@@ -1,5 +1,8 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { daysQuery } from "@/lib/queries";
+import { needsOnboarding } from "@/lib/workout";
 import { Dumbbell, ListChecks, LineChart, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -28,6 +31,12 @@ function Layout() {
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   }
+  const { data: days } = useQuery(daysQuery);
+  const path = useLocation({ select: (l) => l.pathname });
+  useEffect(() => {
+    if (days && needsOnboarding(days) && path !== "/onboarding") navigate({ to: "/onboarding", replace: true });
+    if (days && !needsOnboarding(days) && path === "/onboarding") navigate({ to: "/workout", replace: true });
+  }, [days, path, navigate]);
   return (
     <div className="mx-auto min-h-dvh max-w-md">
       <header className="safe-top flex items-center justify-between px-5 pb-2">

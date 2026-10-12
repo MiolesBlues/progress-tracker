@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { DAYS, METRICS, PERIODS, dailySeries, toISO, weekComparison, weekRange, type Metric } from "@/lib/workout";
-import { entriesQuery, programQuery } from "@/lib/queries";
+import { METRICS, PERIODS, dailySeries, toISO, weekComparison, weekRange, type Metric } from "@/lib/workout";
+import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/_authenticated/progress")({
   head: () => ({
@@ -24,6 +24,7 @@ const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("ru-RU");
 
 function ProgressPage() {
   const { data: program = [] } = useQuery(programQuery);
+  const { data: days = [] } = useQuery(daysQuery);
   const [exerciseId, setExerciseId] = useState("");
   const [period, setPeriod] = useState<number>(30);
   const [metric, setMetric] = useState<Metric>("weight");
@@ -44,9 +45,9 @@ function ProgressPage() {
     <div className="space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">Прогресс</h1>
       <select aria-label="Упражнение" className={selectCls} value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
-        {DAYS.map((d) => (
-          <optgroup key={d.id} label={d.label}>
-            {program.filter((p) => p.day === d.id).map((p) => <option key={p.id} value={p.id}>{p.name}{p.archived_at ? " (архив)" : ""}</option>)}
+        {days.map((d) => (
+          <optgroup key={d.id} label={d.name + (d.archived_at ? " (архив)" : "")}>
+            {program.filter((p) => p.day_id === d.id).map((p) => <option key={p.id} value={p.id}>{p.name}{p.archived_at ? " (архив)" : ""}</option>)}
           </optgroup>
         ))}
       </select>
@@ -92,6 +93,20 @@ function ProgressPage() {
               {cmp.pct !== null && <div className="num text-xs text-muted-foreground">{cmp.pct > 0 ? "+" : ""}{fmt(cmp.pct)}%</div>}
             </div>
           </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl bg-card p-4">
+        <h2 className="text-sm font-bold text-muted-foreground">Записи</h2>
+        {entries.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Записей пока нет</p> : (
+          <ul className="mt-2 divide-y divide-border">
+            {[...entries].reverse().slice(0, 20).map((e) => (
+              <li key={e.id} className="flex items-center justify-between py-2 text-sm">
+                <span><span className="num">{e.performed_on.split("-").reverse().join(".")}</span> <span className="text-muted-foreground">· {e.day_name ?? "—"}</span></span>
+                <span className="num font-semibold">{fmt(e.weight)} кг × {e.reps.join("/")}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </div>
