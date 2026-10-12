@@ -16,3 +16,4 @@
 - Each new user gets a default Upper/Lower program via a trigger on signup; the program template lives in that DB function — keeps seeding atomic with account creation.
 - Signed-in pages live under `src/routes/_authenticated/` (client-only gate) — session is in localStorage.
 - Metric/week-comparison math lives in `src/lib/workout.ts` with tests — keep it pure and tested.
+- Program exercises are soft-deleted via `archived_at` (no DELETE grant/policy); workout_entries FKs are RESTRICT, incl. composite (exercise_id, user_id) — history must never be lost or cross-linked.
