@@ -15,6 +15,13 @@
       "when": 1791840310172,
       "tag": "0001_program_fields_soft_delete_restrict_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791840567392,
+      "tag": "0002_personal_program_days",
+      "breakpoints": true
     }
   ]
 }
