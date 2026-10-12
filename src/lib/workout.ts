@@ -1,10 +1,13 @@
-export const DAYS = [
-  { id: "upper1", label: "Upper 1" },
-  { id: "lower1", label: "Lower 1" },
-  { id: "upper2", label: "Upper 2" },
-  { id: "lower2", label: "Lower 2" },
-] as const;
-export type DayId = (typeof DAYS)[number]["id"];
+export const MAX_DAYS = 7;
+export const DAY_NAME_PRESETS = ["День A", "День B", "День C", "Full Body", "Push", "Pull", "Legs", "Upper 1", "Lower 1", "Upper 2", "Lower 2"];
+export const UPPER_LOWER_NAMES = ["Upper 1", "Lower 1", "Upper 2", "Lower 2"];
+
+/** Onboarding is shown only to accounts that have never had any day (archived days count). */
+export const needsOnboarding = (days: unknown[]) => days.length === 0;
+
+/** Default names for a fresh program of `count` days: День A, День B, … */
+export const defaultDayNames = (count: number) =>
+  Array.from({ length: Math.min(Math.max(count, 1), MAX_DAYS) }, (_, i) => `День ${String.fromCharCode(65 + i)}`);
 
 export type Metric = "weight" | "reps" | "volume";
 export const METRICS: { id: Metric; label: string; unit: string }[] = [
