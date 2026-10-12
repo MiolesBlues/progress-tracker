@@ -1,0 +1,12 @@
+{
+  "name": "Workout Tracker",
+  "short_name": "Тренировки",
+  "lang": "ru",
+  "start_url": "/workout",
+  "display": "standalone",
+  "background_color": "#16171c",
+  "theme_color": "#16171c",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
