@@ -16,61 +16,87 @@ export type Exercise = {
 };
 
 /** All personal days including archived (history needs them). */
-export const daysQuery = queryOptions({
-  queryKey: ["days"],
-  queryFn: async (): Promise<Day[]> => {
-    const { data, error } = await supabase
-      .from("program_days")
-      .select("id, name, position, archived_at")
-      .order("position")
-      .order("created_at");
-    if (error) throw error;
-    return data;
-  },
-});
+export const userKeys = {
+  all: (userId: string) => ["user", userId] as const,
+  days: (userId: string) => ["user", userId, "days"] as const,
+  program: (userId: string) => ["user", userId, "program"] as const,
+  entries: (userId: string, exerciseId: string) => ["user", userId, "entries", exerciseId] as const,
+  lastEntry: (userId: string, exerciseId: string) =>
+    ["user", userId, "last-entry", exerciseId] as const,
+};
+
+export const daysQuery = (userId: string) =>
+  queryOptions({
+    queryKey: userKeys.days(userId),
+    queryFn: async ({ signal }): Promise<Day[]> => {
+      const { data, error } = await supabase
+        .from("program_days")
+        .select("id, name, position, archived_at")
+        .eq("user_id", userId)
+        .order("position")
+        .order("created_at")
+        .order("id")
+        .abortSignal(signal);
+      if (error) throw error;
+      return data;
+    },
+  });
 
 /** All exercises including archived ones (history needs them). Filter `archived_at` for new entries. */
-export const programQuery = queryOptions({
-  queryKey: ["program"],
-  queryFn: async (): Promise<Exercise[]> => {
-    const { data, error } = await supabase
-      .from("program_exercises")
-      .select("id, day_id, name, position, target_sets, target_reps, working_weight, example_reps, archived_at")
-      .order("position")
-      .order("created_at");
-    if (error) throw error;
-    return data.map((e) => ({ ...e, working_weight: e.working_weight === null ? null : Number(e.working_weight) }));
-  },
-});
-
-export const entriesQuery = (exerciseId: string, sinceISO: string) =>
+export const programQuery = (userId: string) =>
   queryOptions({
-    queryKey: ["entries", exerciseId, sinceISO],
+    queryKey: userKeys.program(userId),
+    queryFn: async ({ signal }): Promise<Exercise[]> => {
+      const { data, error } = await supabase
+        .from("program_exercises")
+        .select(
+          "id, day_id, name, position, target_sets, target_reps, working_weight, example_reps, archived_at",
+        )
+        .eq("user_id", userId)
+        .order("position")
+        .order("created_at")
+        .order("id")
+        .abortSignal(signal);
+      if (error) throw error;
+      return data.map((e) => ({
+        ...e,
+        working_weight: e.working_weight === null ? null : Number(e.working_weight),
+      }));
+    },
+  });
+
+export const entriesQuery = (userId: string, exerciseId: string, sinceISO: string) =>
+  queryOptions({
+    queryKey: [...userKeys.entries(userId, exerciseId), sinceISO],
     enabled: !!exerciseId,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
         .select("id, performed_on, weight, reps, rir, notes, day_name")
+        .eq("user_id", userId)
         .eq("exercise_id", exerciseId)
         .gte("performed_on", sinceISO)
-        .order("performed_on");
+        .order("performed_on")
+        .abortSignal(signal);
       if (error) throw error;
       return data.map((e) => ({ ...e, weight: Number(e.weight) }));
     },
   });
 
-export const lastEntryQuery = (exerciseId: string) =>
+export const lastEntryQuery = (userId: string, exerciseId: string) =>
   queryOptions({
-    queryKey: ["last-entry", exerciseId],
+    queryKey: userKeys.lastEntry(userId, exerciseId),
     enabled: !!exerciseId,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
         .select("performed_on, weight, reps, rir")
+        .eq("user_id", userId)
         .eq("exercise_id", exerciseId)
         .order("performed_on", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(1)
+        .abortSignal(signal)
         .maybeSingle();
       if (error) throw error;
       return data;

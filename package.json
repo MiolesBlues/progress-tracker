@@ -11,6 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:db": "node --test scripts/program-db.test.mjs",
     "test:watch": "vitest"
   },
   "overrides": {
@@ -76,6 +78,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.25.3",
     "@testing-library/jest-dom": "^6.6.0",

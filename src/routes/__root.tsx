@@ -8,11 +8,11 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { supabase } from "@/integrations/supabase/client";
+import { SessionProvider } from "@/lib/session";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -21,7 +21,10 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <p className="mt-2 text-sm text-muted-foreground">Страница не найдена.</p>
-        <Link to="/" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
+        <Link
+          to="/"
+          className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        >
           На главную
         </Link>
       </div>
@@ -40,7 +43,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold text-foreground">Не удалось загрузить страницу</h1>
         <button
-          onClick={() => { router.invalidate(); reset(); }}
+          onClick={() => {
+            router.invalidate();
+            reset();
+          }}
           className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
           Повторить
@@ -66,7 +72,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -78,8 +87,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="ru">
-      <head><HeadContent /></head>
-      <body>{children}<Scripts /></body>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
     </html>
   );
 }
@@ -87,19 +101,15 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event === "SIGNED_OUT") queryClient.clear();
-      else queryClient.invalidateQueries();
-    });
-    return () => data.subscription.unsubscribe();
-  }, [router, queryClient]);
+  const onIdentityChange = useCallback(() => {
+    void router.invalidate();
+  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <SessionProvider onIdentityChange={onIdentityChange}>
+        <Outlet />
+      </SessionProvider>
       <Toaster position="top-center" />
     </QueryClientProvider>
   );
