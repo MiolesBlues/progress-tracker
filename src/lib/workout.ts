@@ -55,7 +55,7 @@ export function aggregate(entries: EntryLike[], m: Metric): number | null {
 }
 
 export function toISO(d: Date): string {
-  const y = d.getFullYear();
+  const y = String(d.getFullYear()).padStart(4, "0");
   const mo = String(d.getMonth() + 1).padStart(2, "0");
   const da = String(d.getDate()).padStart(2, "0");
   return `${y}-${mo}-${da}`;
@@ -63,7 +63,8 @@ export function toISO(d: Date): string {
 
 /** Monday-based calendar week containing `d`: [start, end] ISO dates inclusive. */
 export function weekRange(d: Date): [string, string] {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
   const dow = (x.getDay() + 6) % 7;
   const start = new Date(x);
   start.setDate(x.getDate() - dow);

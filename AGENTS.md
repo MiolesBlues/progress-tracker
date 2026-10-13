@@ -15,7 +15,11 @@
 
 - UI is Russian-only, mobile-first, dark single theme — target audience is iPhone users.
 - Data access goes through the browser client with strict per-user RLS (`auth.uid() = user_id`); no shared/global training data — users must be fully isolated.
-- Each new user gets a default Upper/Lower program via a trigger on signup; the program template lives in that DB function — keeps seeding atomic with account creation.
+- The user creates 1–7 personal active days via `setup_program` after signup. Days use `program_days.id`, exercises use `day_id`. Upper/Lower is an optional four-day template, never a fixed domain model; there is no automatic signup seed trigger after migration 0002.
 - Signed-in pages live under `src/routes/_authenticated/` (client-only gate) — session is in localStorage.
-- Metric/week-comparison math lives in `src/lib/workout.ts` with tests — keep it pure and tested.
+- Pure metric math lives in `src/lib/workout.ts`; session-relative comparisons and date bounds live in `src/lib/analytics.ts`. Compare only the selected user's exercise and earlier `(performed_on, created_at, id)` records. Volume is not a guaranteed measure of strength.
 - Program exercises are soft-deleted via `archived_at` (no DELETE grant/policy); workout_entries FKs are RESTRICT, incl. composite (exercise_id, user_id) — history must never be lost or cross-linked.
+- Personal query keys start with `['user', userId]`; use AbortSignal and the account boundary. Token refresh for the same identity must preserve drafts. Drafts and stable save-operation UUIDs are scoped to user/exercise.
+- SQL migrations 0000–0004 are the source of truth. Never run `drizzle-kit push` against an existing database: the declarative schema/snapshots are placeholders. No production migration or legacy-data repair without explicit user confirmation; run read-only preflight and isolated SQL tests first.
+- Before committing, run typecheck, lint, unit tests, SQL tests, toolchain tests, production build and dependency audit. Browser tests intercept every external request and do not prove production JWT/RLS correctness. Follow `docs/E2E-RELEASE-RU.md` on isolated staging before release.
+- Use LF per `.gitattributes` and Prettier. Keep bulk formatting in its own commit. Do not edit or scan the unrelated nested project directory. Never deploy or merge automatically.

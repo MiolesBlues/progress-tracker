@@ -22,9 +22,11 @@ export class SessionStore {
     signal: this.controller.signal,
   };
   private listeners = new Set<() => void>();
+  private readonly serverSnapshot = this.snapshot;
   private signingOut = false;
   constructor(private queryClient: QueryClient) {}
   getSnapshot = () => this.snapshot;
+  getServerSnapshot = () => this.serverSnapshot;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -88,7 +90,11 @@ export function SessionProvider({
 export function useSession() {
   const store = useContext(SessionContext);
   if (!store) throw new Error("SessionProvider is required");
-  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const snapshot = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
+  );
   return { ...snapshot, store, isCurrent: () => store.getSnapshot() === snapshot };
 }
 

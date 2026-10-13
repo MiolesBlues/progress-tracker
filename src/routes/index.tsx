@@ -2,19 +2,22 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Workout Tracker — дневник силовых тренировок" },
+      { title: "Прогресс Тренер — дневник силовых тренировок" },
       {
         name: "description",
-        content: "Записывайте подходы, вес и RIR по программе Upper/Lower и следите за прогрессом.",
+        content:
+          "Личная программа из 1–7 тренировочных дней, запись подходов, веса и RIR, история и графики.",
       },
-      { property: "og:title", content: "Workout Tracker — дневник силовых тренировок" },
+      { property: "og:title", content: "Прогресс Тренер — дневник силовых тренировок" },
       {
         property: "og:description",
-        content: "Программа Upper/Lower, запись подходов и графики прогресса.",
+        content:
+          "Персональные тренировочные дни, запись результатов и сравнение с предыдущими сессиями.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -24,6 +27,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const { ready } = useSession();
   const navigate = useNavigate();
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -40,13 +44,18 @@ function Index() {
           <span className="text-primary">в цифрах.</span>
         </h1>
         <p className="mt-4 text-muted-foreground">
-          Программа Upper 1 / Lower 1 / Upper 2 / Lower 2, быстрая запись подходов и честный
-          прогресс неделя к неделе.
+          Ваша программа из 1–7 дней с любыми названиями, запись результатов и сравнение тренировок.
+          Upper/Lower доступен как необязательный шаблон.
         </p>
       </div>
       <div className="safe-bottom space-y-3">
-        <Button asChild size="lg" className="h-14 w-full text-base font-bold">
-          <Link to="/auth">Начать</Link>
+        <Button
+          asChild={ready}
+          disabled={!ready}
+          size="lg"
+          className="h-14 w-full text-base font-bold"
+        >
+          {ready ? <Link to="/auth">Начать</Link> : "Начать"}
         </Button>
       </div>
     </main>

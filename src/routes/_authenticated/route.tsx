@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AccountBoundary, useUserSession } from "@/lib/session";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/query-feedback";
+import { signOutSafely } from "@/lib/auth-actions";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -53,17 +54,9 @@ function SessionLayout() {
   const { userId, store } = useUserSession();
   const navigate = useNavigate();
   async function signOut() {
-    store.startSignOut();
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      const { data } = await supabase.auth.getSession();
-      store.finishSignOut(data.session?.user.id ?? null);
-      toast.error("Не удалось выйти. Повторите попытку.");
-      if (!data.session) void navigate({ to: "/auth", replace: true });
-      return;
-    }
-    store.finishSignOut();
-    void navigate({ to: "/auth", replace: true });
+    const result = await signOutSafely(store);
+    if (result.message) toast.error(result.message);
+    if (result.signedOut) void navigate({ to: "/auth", replace: true });
   }
   const daysResult = useQuery(daysQuery(userId));
   const days = daysResult.data;
@@ -79,7 +72,7 @@ function SessionLayout() {
     <div className="mx-auto min-h-dvh max-w-md">
       <header className="safe-top flex items-center justify-between px-5 pb-2">
         <span className="text-sm font-bold tracking-widest text-muted-foreground uppercase">
-          Workout
+          Прогресс Тренер
         </span>
         <button
           onClick={signOut}

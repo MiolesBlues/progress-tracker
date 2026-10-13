@@ -49,6 +49,14 @@ function app(qc: QueryClient, verifiedUserId: string, changed = vi.fn()) {
 }
 
 describe("account isolation", () => {
+  it("keeps the hydration snapshot anonymous even if auth arrives before a lazy page hydrates", () => {
+    const store = new SessionStore(client());
+    const initial = store.getServerSnapshot();
+    store.setUser("A");
+    expect(store.getServerSnapshot()).toBe(initial);
+    expect(initial).toMatchObject({ ready: false, userId: null });
+    expect(store.getSnapshot()).toMatchObject({ ready: true, userId: "A" });
+  });
   it("SIGNED_IN A → B removes A data before the router verifies B, then mounts a fresh draft", async () => {
     const qc = client();
     fake.state.rows.program_days = [

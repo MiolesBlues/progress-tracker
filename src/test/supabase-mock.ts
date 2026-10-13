@@ -8,7 +8,11 @@ export type Row = Record<string, unknown> & {
   day_id?: string | null;
 };
 const fake = vi.hoisted(() => {
-  type Response = { data: Row[] | Row | null; error: { message: string } | null };
+  type Response = {
+    data: Row[] | Row | null;
+    error: { message: string } | null;
+    count?: number | null;
+  };
   const state = {
     rows: {
       program_days: [] as Row[],
@@ -40,6 +44,7 @@ const fake = vi.hoisted(() => {
     ),
     delayMutation: null as Promise<void> | null,
     sequence: 0,
+    maxRows: Infinity,
     rpc: vi.fn(async (name: string, args: { _ids: string[]; _day_id?: string }) => {
       const table = name === "reorder_program_days" ? "program_days" : "program_exercises";
       args._ids.forEach((id, position) => {
@@ -53,7 +58,10 @@ const fake = vi.hoisted(() => {
     let operation = "select";
     let values: Row = {};
     const filters: Row = {};
-    const orders: string[] = [];
+    const orders: { key: string; ascending: boolean }[] = [];
+    const bounds: { key: string; value: string; lower: boolean }[] = [];
+    let rangeFrom = 0;
+    let rangeTo = Infinity;
     let single = false;
     let signal: AbortSignal | undefined;
     async function execute(): Promise<Response> {
@@ -75,8 +83,12 @@ const fake = vi.hoisted(() => {
         return { data: null, error: { message } };
       }
       const rows = state.rows[table]!;
-      let found = rows.filter((row) =>
-        Object.entries(filters).every(([key, value]) => row[key] === value),
+      let found = rows.filter(
+        (row) =>
+          Object.entries(filters).every(([key, value]) => row[key] === value) &&
+          bounds.every(({ key, value, lower }) =>
+            lower ? String(row[key]) >= value : String(row[key]) <= value,
+          ),
       );
       if (operation === "insert") {
         const row = {
@@ -92,8 +104,12 @@ const fake = vi.hoisted(() => {
         found = [row];
       } else if (operation === "update") found.forEach((row) => Object.assign(row, values));
       found = [...found].sort((a, b) => {
-        for (const key of orders) {
-          if (a[key] !== b[key]) return Number(a[key]) - Number(b[key]);
+        for (const { key, ascending } of orders) {
+          if (a[key] !== b[key])
+            return (
+              String(a[key]).localeCompare(String(b[key]), undefined, { numeric: true }) *
+              (ascending ? 1 : -1)
+            );
         }
         return 0;
       });
@@ -102,7 +118,13 @@ const fake = vi.hoisted(() => {
         state.delayMutation = null;
         await delay;
       }
-      return { data: single ? (found[0] ?? null) : found.map((row) => ({ ...row })), error: null };
+      const count = found.length;
+      found = found.slice(rangeFrom, Math.min(rangeTo + 1, rangeFrom + state.maxRows));
+      return {
+        data: single ? (found[0] ?? null) : found.map((row) => ({ ...row })),
+        count,
+        error: null,
+      };
     }
     const builder = {
       select: (_columns?: string) => builder,
@@ -110,12 +132,27 @@ const fake = vi.hoisted(() => {
         filters[key] = value;
         return builder;
       },
-      gte: (_key: string, _value: unknown) => builder,
-      order: (key: string) => {
-        orders.push(key);
+      gte: (key: string, value: string) => {
+        bounds.push({ key, value, lower: true });
         return builder;
       },
-      limit: (_count: number) => builder,
+      lte: (key: string, value: string) => {
+        bounds.push({ key, value, lower: false });
+        return builder;
+      },
+      range: (from: number, to: number) => {
+        rangeFrom = from;
+        rangeTo = to;
+        return builder;
+      },
+      order: (key: string, options?: { ascending?: boolean }) => {
+        orders.push({ key, ascending: options?.ascending ?? true });
+        return builder;
+      },
+      limit: (count: number) => {
+        rangeTo = count - 1;
+        return builder;
+      },
       insert: (row: Row) => {
         operation = "insert";
         values = row;
@@ -179,5 +216,6 @@ export function resetFake() {
   }));
   fake.state.delayMutation = null;
   fake.state.sequence = 0;
+  fake.state.maxRows = Infinity;
   fake.state.rpc.mockClear();
 }

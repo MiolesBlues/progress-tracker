@@ -52,7 +52,7 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
   const acknowledged = useRef(false);
   const mounted = useRef(true);
   const appliedLast = useRef(false);
-  const lastResult = useQuery(lastEntryQuery(userId, exercise.id));
+  const lastResult = useQuery(lastEntryQuery(userId, exercise.id, draft.fields.date));
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -92,6 +92,8 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
 
   function change<K extends keyof WorkoutFields>(key: K, value: WorkoutFields[K]) {
     if (draftRef.current.operation || blocked || acknowledged.current) return;
+    // A date change must never allow a late response to prefill this edited form.
+    if (key === "date") appliedLast.current = true;
     commit({
       ...draftRef.current,
       fields: { ...draftRef.current.fields, [key]: value },

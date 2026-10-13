@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+.release-node-modules-backup/
+test-results/
+playwright-report/
 dist
 dist-ssr
 .output

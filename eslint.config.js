@@ -6,7 +6,20 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      ".tanstack",
+      ".wrangler",
+      ".release-node-modules-backup",
+      "src/routeTree.gen.ts",
+      "project-c7efcdd9-ad98-4274-8b6f-fd8abfebd574",
+      "test-results",
+      "playwright-report",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -37,4 +50,8 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}", "src/lib/session.tsx"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
 );

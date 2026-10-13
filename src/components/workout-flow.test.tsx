@@ -135,13 +135,13 @@ it("late last-entry only fills untouched fields, and subsequent refetch cannot o
   await act(async () => {
     resolve({ data: last(), error: null });
   });
-  await ready();
+  await screen.findByText("Предыдущих записей пока нет.");
   expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
   expect(screen.getByLabelText("Подход 1")).toHaveValue("11");
   expect(screen.getByLabelText("Заметки")).toHaveValue("Не потерять");
   expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2,5");
   expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-10");
-  act(() => qc.setQueryData(["user", A, "last-entry", EX], last(EX, 90)));
+  act(() => qc.setQueryData(["user", A, "last-entry", EX, "2026-10-10"], last(EX, 90)));
   expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
 });
 it("a reply for previously selected exercise cannot change the current exercise", async () => {
@@ -385,7 +385,7 @@ it("loading, empty and success states are distinct from a load error", async () 
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.queryByText(/нет активных упражнений/i)).not.toBeInTheDocument();
   await act(async () => {
-    resolve({ data: [], error: null });
+    resolve({ data: [], error: null, count: 0 } as { data: Row[]; error: null });
   });
   await screen.findByText(/В этом дне нет активных упражнений/);
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();

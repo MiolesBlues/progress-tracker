@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -9,273 +9,315 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { METRICS, PERIODS, toISO, type Metric } from "@/lib/workout";
 import {
-  METRICS,
-  PERIODS,
-  dailySeries,
-  toISO,
-  weekComparison,
-  weekRange,
-  type Metric,
-} from "@/lib/workout";
+  chartRange,
+  chartSeries,
+  compareSessions,
+  previousSessions,
+  type HistoryEntry,
+} from "@/lib/analytics";
 import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { LoadError, Loading } from "@/components/query-feedback";
+import { Button } from "./ui/button";
 
-const selectCls =
-  "h-12 w-full rounded-md border border-input bg-card px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
-const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString("ru-RU");
-const NO_DATA: never[] = [];
+const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
+const fmt = (n: number) => n.toLocaleString("ru-RU", { maximumFractionDigits: 1 });
+const signed = (n: number) => `${n > 0 ? "+" : ""}${fmt(n)}`;
+const PAGE_SIZE = 20;
 
 export function ProgressPage() {
   const { userId } = useUserSession();
   const programResult = useQuery(programQuery(userId));
   const daysResult = useQuery(daysQuery(userId));
-  const program = programResult.data ?? NO_DATA;
-  const days = daysResult.data ?? NO_DATA;
-  const [exerciseId, setExerciseId] = useState("");
-  const [period, setPeriod] = useState<number>(30);
-  const [metric, setMetric] = useState<Metric>("weight");
-  useEffect(() => {
-    if (!exerciseId && program[0]) setExerciseId(program[0].id);
-  }, [program, exerciseId]);
-
-  const today = new Date();
-  const periodStart = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate() - (period - 1),
-  );
-  const prevWeekStart = weekRange(
-    new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7),
-  )[0];
-  const since = [toISO(periodStart), prevWeekStart].sort()[0]!;
-  const entriesResult = useQuery({
-    ...entriesQuery(userId, exerciseId, since),
-    enabled: !!exerciseId && programResult.isSuccess && daysResult.isSuccess,
-  });
-  const entries = entriesResult.data ?? NO_DATA;
-
-  const periodISO = toISO(periodStart);
-  const series = useMemo(
-    () =>
-      dailySeries(
-        entries.filter((e) => e.performed_on >= periodISO),
-        metric,
-      ),
-    [entries, periodISO, metric],
-  );
-  const cmp = weekComparison(entries, metric, today);
-  const unit = METRICS.find((m) => m.id === metric)!.unit;
-
-  if (programResult.isError || daysResult.isError)
-    return (
-      <LoadError
-        onRetry={() => {
-          void programResult.refetch();
-          void daysResult.refetch();
-        }}
-      >
-        Не удалось загрузить программу для просмотра истории.
-      </LoadError>
-    );
-  if (programResult.isPending || daysResult.isPending)
-    return <Loading>Загрузка программы…</Loading>;
-  if (!program.length)
-    return <p className="py-4 text-sm text-muted-foreground">В программе пока нет упражнений.</p>;
-
+  const [chosenExercise, setExercise] = useState("");
+  const exerciseId = chosenExercise || programResult.data?.[0]?.id || "";
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">Прогресс</h1>
-      <select
-        aria-label="Упражнение"
-        className={selectCls}
-        value={exerciseId}
-        onChange={(e) => setExerciseId(e.target.value)}
-      >
-        {program.some((p) => p.day_id === null) && (
-          <optgroup label="Без назначенного дня">
-            {program
-              .filter((p) => p.day_id === null)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.archived_at ? " (архив)" : ""}
-                </option>
-              ))}
-          </optgroup>
-        )}
-        {days.map((d) => (
-          <optgroup key={d.id} label={d.name + (d.archived_at ? " (архив)" : "")}>
-            {program
-              .filter((p) => p.day_id === d.id)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.archived_at ? " (архив)" : ""}
-                </option>
-              ))}
-          </optgroup>
-        ))}
-      </select>
-
-      <Segment
-        items={PERIODS.map((p) => ({ id: String(p), label: `${p} дн` }))}
-        value={String(period)}
-        onChange={(v) => setPeriod(Number(v))}
-      />
-      <Segment
-        items={METRICS.map((m) => ({ id: m.id, label: m.label }))}
-        value={metric}
-        onChange={(v) => setMetric(v as Metric)}
-      />
-
-      {!exerciseId || entriesResult.isPending ? (
-        <Loading>Загрузка истории…</Loading>
-      ) : entriesResult.isError ? (
-        <LoadError onRetry={() => void entriesResult.refetch()}>
-          Не удалось загрузить историю тренировок.
+      {programResult.isError || daysResult.isError ? (
+        <LoadError
+          onRetry={() => {
+            void programResult.refetch();
+            void daysResult.refetch();
+          }}
+        >
+          Не удалось загрузить программу для просмотра истории.
         </LoadError>
+      ) : programResult.isPending || daysResult.isPending ? (
+        <Loading>Загрузка программы…</Loading>
+      ) : !programResult.data.length ? (
+        <p>В программе пока нет упражнений.</p>
       ) : (
         <>
-          <div className="h-56 rounded-2xl bg-card p-3">
-            {series.length === 0 ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Нет записей за период
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.4} />
-                      <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(d: string) => d.slice(5).split("-").reverse().join(".")}
-                    stroke="var(--muted-foreground)"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="var(--muted-foreground)"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--popover)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 12,
-                    }}
-                    labelStyle={{ color: "var(--muted-foreground)" }}
-                    formatter={(v: number) => [`${fmt(v)} ${unit}`, ""]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="var(--chart-1)"
-                    strokeWidth={2.5}
-                    fill="url(#g)"
-                    dot={{ r: 3, fill: "var(--chart-1)" }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          <section className="rounded-2xl bg-card p-4">
-            <h2 className="text-sm font-bold text-muted-foreground">Эта неделя vs прошлая</h2>
-            {cmp.current === null && cmp.previous === null ? (
-              <p className="mt-3 text-sm text-muted-foreground">Нет записей для сравнения</p>
-            ) : (
-              <div className="mt-3 grid grid-cols-3 gap-3">
-                <Stat label="Эта" value={cmp.current} unit={unit} />
-                <Stat label="Прошлая" value={cmp.previous} unit={unit} />
-                <div>
-                  <div className="text-xs text-muted-foreground">Разница</div>
-                  <div
-                    className={`num mt-1 text-lg font-bold ${cmp.delta === null ? "text-muted-foreground" : cmp.delta >= 0 ? "text-success" : "text-destructive"}`}
-                  >
-                    {cmp.delta === null ? "—" : `${cmp.delta > 0 ? "+" : ""}${fmt(cmp.delta)}`}
-                  </div>
-                  {cmp.pct !== null && (
-                    <div className="num text-xs text-muted-foreground">
-                      {cmp.pct > 0 ? "+" : ""}
-                      {fmt(cmp.pct)}%
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-2xl bg-card p-4">
-            <h2 className="text-sm font-bold text-muted-foreground">Записи</h2>
-            {entries.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">Записей пока нет</p>
-            ) : (
-              <ul className="mt-2 divide-y divide-border">
-                {[...entries]
-                  .reverse()
-                  .slice(0, 20)
-                  .map((e) => (
-                    <li key={e.id} className="flex items-center justify-between py-2 text-sm">
-                      <span>
-                        <span className="num">{e.performed_on.split("-").reverse().join(".")}</span>{" "}
-                        <span className="text-muted-foreground">· {e.day_name ?? "—"}</span>
-                      </span>
-                      <span className="num font-semibold">
-                        {fmt(e.weight)} кг × {e.reps.join("/")}
-                      </span>
-                    </li>
-                  ))}
-              </ul>
-            )}
-          </section>
+          <label className="block text-sm">
+            Упражнение
+            <select
+              aria-label="Упражнение"
+              className={selectCls}
+              value={exerciseId}
+              onChange={(e) => setExercise(e.target.value)}
+            >
+              {programResult.data.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name} ·{" "}
+                  {daysResult.data.find((d) => d.id === e.day_id)?.name ?? "Без назначенного дня"}
+                  {e.archived_at ? " (архив)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <ExerciseHistory
+            key={`${userId}:${exerciseId}`}
+            userId={userId}
+            exerciseId={exerciseId}
+          />
         </>
       )}
     </div>
   );
 }
 
-function Stat({ label, value, unit }: { label: string; value: number | null; unit: string }) {
+function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: string }) {
+  const [period, setPeriod] = useState<number | "all">(30);
+  const [metric, setMetric] = useState<Metric>("weight");
+  const [selectedId, setSelected] = useState("");
+  const [page, setPage] = useState(0);
+  const today = toISO(new Date());
+  const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
+  if (result.isError)
+    return (
+      <LoadError onRetry={() => void result.refetch()}>
+        {result.error instanceof Error &&
+        (result.error.message.startsWith("В истории есть некорректные") ||
+          result.error.message.startsWith("История"))
+          ? result.error.message
+          : "Не удалось загрузить историю тренировок. Расчёты недоступны до полной загрузки."}
+      </LoadError>
+    );
+  if (result.isPending) return <Loading>Загрузка полной истории…</Loading>;
+  const entries = result.data;
+  const selected = entries.find((e) => e.id === selectedId) ?? entries.at(-1);
+  const previous = selected ? previousSessions(entries, selected) : null;
+  const series = chartSeries(entries, metric, period, today);
+  const [from, to] = chartRange(period, today);
+  const history = entries.filter((e) => e.performed_on >= from && e.performed_on <= to).reverse();
+  const lastPage = Math.max(0, Math.ceil(history.length / PAGE_SIZE) - 1);
+  const currentPage = Math.min(page, lastPage);
+  const unit = METRICS.find((m) => m.id === metric)!.unit;
   return (
-    <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="num mt-1 text-lg font-bold">
-        {value === null ? "—" : fmt(value)}
-        <span className="ml-1 text-xs text-muted-foreground">{value !== null && unit}</span>
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-1" aria-label="Период графика">
+        {[...PERIODS, "all" as const].map((p) => (
+          <Button
+            key={p}
+            variant={period === p ? "default" : "secondary"}
+            aria-pressed={period === p}
+            onClick={() => {
+              setPeriod(p);
+              setPage(0);
+            }}
+          >
+            {p === "all" ? "Всё время" : `${p} дн`}
+          </Button>
+        ))}
       </div>
+      <label className="block text-sm">
+        Показатель
+        <select
+          aria-label="Показатель"
+          className={selectCls}
+          value={metric}
+          onChange={(e) => setMetric(e.target.value as Metric)}
+        >
+          {METRICS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="text-xs text-muted-foreground">
+        {period === "all" ? "Вся история" : from} — {to}. За день: максимальный вес; повторения и
+        объём суммируются. Будущие записи исключены.
+      </p>
+      <div className="h-56 min-w-0 rounded-2xl bg-card p-3" aria-label="График тренировок">
+        {!series.length ? (
+          <p>Нет записей за период</p>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+              <CartesianGrid stroke="var(--border)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickFormatter={(d: string) => d.slice(5).split("-").reverse().join(".")}
+                fontSize={11}
+              />
+              <YAxis fontSize={11} />
+              <Tooltip
+                contentStyle={{ background: "var(--popover)", borderRadius: 12 }}
+                formatter={(v: number) => [`${fmt(v)} ${unit}`, ""]}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="var(--chart-1)"
+                fill="var(--chart-1)"
+                fillOpacity={0.3}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+      {selected ? (
+        <>
+          <label className="block text-sm">
+            Тренировка для сравнения
+            <select
+              aria-label="Тренировка для сравнения"
+              className={selectCls}
+              value={selected.id}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              {[...entries].reverse().map((e, index) => (
+                <option key={e.id} value={e.id}>
+                  {e.performed_on} · {fmt(e.weight)} кг · {e.reps.length} подх. · запись{" "}
+                  {entries.length - index}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Сравнения относятся к выбранной записи и не зависят от периода графика. Несколько сессий
+            в день упорядочены по времени создания и ID.
+          </p>
+          <Comparison
+            title="С предыдущей сессией"
+            selected={selected}
+            previous={previous!.session}
+          />
+          <Comparison
+            title="С прошлой календарной неделей"
+            selected={selected}
+            previous={previous!.week}
+            description={`Последняя сессия того же упражнения за ${previous!.weekRange[0]} — ${previous!.weekRange[1]} (пн–вс).`}
+          />
+          <p className="text-xs text-muted-foreground">
+            Объём — вес × сумма повторений. Изменение объёма само по себе не доказывает рост силы.
+            Вес 0 учитывается, процент относительно 0 не определяется.
+          </p>
+        </>
+      ) : (
+        <p>Записей пока нет</p>
+      )}
+      <section className="rounded-2xl bg-card p-4">
+        <h2 className="font-bold">Записи за период ({history.length})</h2>
+        <ul className="divide-y divide-border">
+          {history.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map((e) => (
+            <li key={e.id} className="min-w-0 py-3 text-sm">
+              <button className="w-full min-w-0 text-left" onClick={() => setSelected(e.id)}>
+                <span className="block break-words">
+                  {e.performed_on} · {e.day_name ?? "Без названия дня"}
+                </span>
+                <span className="num block break-all font-semibold">
+                  {fmt(e.weight)} кг × {e.reps.join("/")}
+                </span>
+                <span className="text-muted-foreground">
+                  {e.reps.length} подх. · RIR {e.rir === null ? "—" : fmt(e.rir)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {!history.length ? (
+          <p className="text-sm">Нет записей за период</p>
+        ) : (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <Button
+              variant="secondary"
+              disabled={currentPage === 0}
+              onClick={() => setPage(currentPage - 1)}
+            >
+              Назад
+            </Button>
+            <span className="text-xs">
+              {currentPage + 1} / {lastPage + 1}
+            </span>
+            <Button
+              variant="secondary"
+              disabled={currentPage === lastPage}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              Далее
+            </Button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function Segment({
-  items,
-  value,
-  onChange,
+function Comparison({
+  title,
+  description,
+  selected,
+  previous,
 }: {
-  items: { id: string; label: string }[];
-  value: string;
-  onChange: (v: string) => void;
+  title: string;
+  description?: string;
+  selected: HistoryEntry;
+  previous: HistoryEntry | null;
 }) {
+  const comparison = compareSessions(selected, previous);
   return (
-    <div className="flex gap-1 rounded-xl bg-secondary p-1">
-      {items.map((i) => (
-        <button
-          key={i.id}
-          onClick={() => onChange(i.id)}
-          className={`flex-1 rounded-lg py-2 text-xs font-bold transition ${value === i.id ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-        >
-          {i.label}
-        </button>
-      ))}
-    </div>
+    <section className="space-y-3 rounded-2xl bg-card p-4">
+      <h2 className="font-bold">{title}</h2>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      {!comparison || !previous ? (
+        <p className="text-sm text-muted-foreground">Нет прошлой записи для сравнения</p>
+      ) : (
+        <>
+          <p className="text-xs">
+            {previous.performed_on} → {selected.performed_on}
+          </p>
+          <dl className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <dt>Рабочий вес</dt>
+              <dd>
+                {fmt(previous.weight)} → {fmt(selected.weight)} кг (
+                {comparison.weightPct === null ? "—" : `${signed(comparison.weightPct)}%`})
+              </dd>
+            </div>
+            <div>
+              <dt>Сумма повторений</dt>
+              <dd>{signed(comparison.repsDelta)}</dd>
+            </div>
+            <div>
+              <dt>Объём, кг × повт.</dt>
+              <dd>{signed(comparison.volumeDelta)}</dd>
+            </div>
+            <div>
+              <dt>Подходы</dt>
+              <dd>
+                {previous.reps.length} → {selected.reps.length}
+              </dd>
+            </div>
+            <div>
+              <dt>RIR</dt>
+              <dd>
+                {previous.rir === null ? "—" : fmt(previous.rir)} →{" "}
+                {selected.rir === null ? "—" : fmt(selected.rir)}
+              </dd>
+            </div>
+          </dl>
+          {comparison.warnings.map((w) => (
+            <p key={w} role="note" className="text-sm text-amber-400">
+              {w}
+            </p>
+          ))}
+        </>
+      )}
+    </section>
   );
 }
