@@ -9,11 +9,13 @@ import { WorkoutPage } from "@/components/workout-page";
 import { ProgramManager } from "@/components/program-manager";
 import { ProgressPage } from "@/components/progress-page";
 import { draftKey, readDraft } from "@/lib/workout-draft";
+import { toast } from "sonner";
 
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn() }) }));
 const A = "11111111-1111-4111-8111-111111111111",
   B = "22222222-2222-4222-8222-222222222222";
 const EX = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -65,9 +67,18 @@ async function chooseTrainingDay(name: RegExp | string) {
   fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
   fireEvent.click(await screen.findByRole("option", { name }));
 }
-const save = () => fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+const submit = () => fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+const save = () => {
+  screen.getAllByLabelText(/^Подход \d+$/).forEach((input) => {
+    if ((input as HTMLInputElement).value === "")
+      fireEvent.change(input, { target: { value: "8" } });
+  });
+  submit();
+};
 beforeEach(() => {
   resetFake();
+  vi.mocked(toast).mockClear();
+  vi.mocked(toast.success).mockClear();
   localStorage.clear();
   vi.stubGlobal("crypto", { randomUUID });
   qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -177,7 +188,7 @@ it("falls back to the first active day when the stored day has been archived", a
   expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("Силовой");
   expect(JSON.parse(localStorage.getItem(`workout:selection:v1:${A}`) ?? "null")).toEqual({
     dayId: DAY,
-    exerciseId: "",
+    exerciseId: EX,
   });
   expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
 });
@@ -221,6 +232,52 @@ it("rejects empty weight without sending or losing input", async () => {
   expect(fake.state.saveRpc).not.toHaveBeenCalled();
   expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("");
 });
+it.each([50, 0])(
+  "prefills weight, every rep and RIR from the last record, including weight %s",
+  async (weight) => {
+    fake.state.rows.workout_entries = [{ ...last(EX, weight), rir: 2 }];
+    mount();
+    await ready();
+    expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue(String(weight));
+    expect(
+      screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+    ).toEqual(["8", "8", "7", "6"]);
+    expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
+    expect(screen.getByLabelText("Заметки")).toHaveValue("");
+  },
+);
+it("uses program weight, target sets and example reps when exercise history is absent", async () => {
+  fake.state.rows.workout_entries = [];
+  mount();
+  await ready();
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30");
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "7", "6"]);
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("");
+});
+it("leaves reps empty when there is no history and no example reps", async () => {
+  fake.state.rows.workout_entries = [];
+  fake.state.rows.program_exercises = [
+    { ...exercise(EX), target_sets: 2, working_weight: null, example_reps: null },
+  ];
+  mount();
+  await screen.findByText("Истории нет");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("");
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(2);
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["", ""]);
+});
+it("refreshes the suggested weight for the selected date and ignores future history", async () => {
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-10" } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30"));
+  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50"));
+});
 it.each([
   ["0", 0],
   ["52,5", 52.5],
@@ -229,20 +286,139 @@ it.each([
   await ready();
   fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value } });
   save();
-  await screen.findByText("Сохранено");
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
   expect(fake.state.saveRpc).toHaveBeenCalledWith(
     expect.objectContaining({ _weight: weight, _reps: [8, 8, 7, 6] }),
   );
   expect(fake.state.saveRpc.mock.calls[0]?.[0]).not.toHaveProperty("_day_name");
   expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
 });
+it("advances after server confirmation and prefills the next exercise history", async () => {
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
+  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "52,5" } });
+  fireEvent.change(screen.getByLabelText("Подход 1"), { target: { value: "10" } });
+  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Первое упражнение" } });
+  save();
+
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Тяга");
+  expect(await screen.findByText("План 4×6–8")).toBeVisible();
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-13");
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "7", "6"]);
+  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
+  expect(screen.getByLabelText("Заметки")).toHaveValue("");
+  expect(toast.success).toHaveBeenCalledWith("Ваша тренировка сохранена", {
+    id: "workout-saved",
+    duration: 3000,
+    position: "bottom-center",
+    style: { pointerEvents: "none" },
+  });
+
+  for (let index = 1; index <= 4; index++)
+    fireEvent.change(screen.getByLabelText(`Подход ${index}`), { target: { value: "8" } });
+  save();
+  await screen.findByText(/Все упражнения этого дня пройдены/);
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-13");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toBeEnabled();
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "8", "8"]);
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("");
+  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
+  expect(toast.success).toHaveBeenCalledTimes(2);
+
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX));
+  expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+});
+it("loads only the selected exercise's own recorded reps and RIR", async () => {
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "7", "6"]);
+  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
+});
+it("saves only the edited fourth set and shows it as the latest result when returning", async () => {
+  fake.state.rows.workout_entries = [{ ...last(EX), rir: 2 }, last(EX2, 60)];
+  fake.state.saveRpc.mockImplementation(async (args) => {
+    const id = String(args["_id"]);
+    fake.state.rows.workout_entries.push({
+      id,
+      user_id: A,
+      exercise_id: args["_exercise_id"],
+      performed_on: args["_performed_on"],
+      created_at: "2026-10-14T12:00:00.000Z",
+      weight: args["_weight"],
+      reps: args["_reps"],
+      rir: args["_rir"],
+      notes: args["_notes"],
+    });
+    return { data: id, error: null };
+  });
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
+  save();
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(fake.state.saveRpc).toHaveBeenCalledWith(
+    expect.objectContaining({ _reps: [8, 8, 7, 7], _rir: 2 }),
+  );
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50"));
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "7", "7"]);
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
+});
+it("does not let late next-exercise history overwrite a weight the user has started editing", async () => {
+  fake.state.rows.program_exercises[1]!["example_reps"] = [5, 5, 5, 5];
+  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX2 },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  mount();
+  await ready();
+  save();
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30"));
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["5", "5", "5", "5"]);
+  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "72,5" } });
+  await act(async () => {
+    resolve({ data: last(EX2, 60), error: null });
+  });
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
+  await waitFor(() =>
+    expect(
+      screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+    ).toEqual(["8", "8", "7", "6"]),
+  );
+  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
+});
 it.each(["", "8-8-7-6"])(
   "keeps invalid approach %j visible instead of dropping/concatenating it",
   async (value) => {
     mount();
     await ready();
+    fireEvent.change(screen.getByLabelText("Подход 1"), { target: { value: "8" } });
     fireEvent.change(screen.getByLabelText("Подход 2"), { target: { value } });
-    save();
+    submit();
     await screen.findByRole("alert");
     expect(fake.state.saveRpc).not.toHaveBeenCalled();
     expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
@@ -327,9 +503,9 @@ it("double click submits once, including a second submit event before acknowledg
   await act(async () => {
     resolve({ data: id, error: null });
   });
-  await screen.findByText("Сохранено");
-  fireEvent.submit(screen.getByRole("form", { name: "Запись тренировки" }));
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
   expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
 });
 it("a timeout after INSERT and reopening the app retry the same UUID and immutable payload", async () => {
   const server = new Map<string, unknown>();
@@ -352,7 +528,7 @@ it("a timeout after INSERT and reopening the app retry the same UUID and immutab
   mount();
   await screen.findByRole("button", { name: "Повторить сохранение" });
   fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
-  await screen.findByText("Сохранено");
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
   expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(initial);
   expect(server.size).toBe(1);
   expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
@@ -367,21 +543,25 @@ it("a definite INSERT failure retains editable input and retries with the same U
   fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Сохранить меня" } });
   save();
   await screen.findByText(/Запись отклонена/);
+  expect(toast.success).not.toHaveBeenCalled();
   expect(screen.getByLabelText("Заметки")).toHaveValue("Сохранить меня");
   expect(screen.getByLabelText("Рабочий вес, кг")).toBeEnabled();
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
   const id = fake.state.saveRpc.mock.calls[0]![0]["_id"];
   save();
-  await screen.findByText("Сохранено");
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
   expect(fake.state.saveRpc.mock.calls[1]![0]["_id"]).toBe(id);
 });
 it("an intentional second entry on the same date gets a new UUID", async () => {
+  fake.state.rows.program_exercises = [exercise(EX)];
   mount();
   await ready();
   save();
-  await screen.findByText("Сохранено");
-  fireEvent.click(screen.getByRole("button", { name: "Ещё одна запись" }));
+  await screen.findByText(/Все упражнения этого дня пройдены/);
+  for (let index = 1; index <= 4; index++)
+    fireEvent.change(screen.getByLabelText(`Подход ${index}`), { target: { value: "8" } });
   save();
-  await screen.findByText("Сохранено");
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
   const [first, second] = fake.state.saveRpc.mock.calls;
   expect(first![0]["_id"]).not.toBe(second![0]["_id"]);
   expect(first![0]["_performed_on"]).toBe(second![0]["_performed_on"]);
@@ -423,6 +603,7 @@ it("success for previous exercise clears only that draft and leaves the new form
   });
   expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
   expect(readDraft(A, EX2)?.fields.notes).toBe("Другой черновик");
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
   expect(screen.getByLabelText("Заметки")).toHaveValue("Другой черновик");
   expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
 });
@@ -442,6 +623,10 @@ it("account A → B → A never exposes A's draft to B and restores A's own draf
   act(() => authEvent("SIGNED_IN", B));
   view.rerender(tree(<WorkoutPage />, B));
   await ready();
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80"));
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
+  ).toEqual(["8", "8", "7", "6"]);
   expect(screen.getByLabelText("Заметки")).toHaveValue("");
   expect(screen.queryByDisplayValue("Секрет A")).not.toBeInTheDocument();
   act(() => authEvent("SIGNED_IN", A));

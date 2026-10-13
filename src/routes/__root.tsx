@@ -110,7 +110,11 @@ function RootComponent() {
       <SessionProvider onIdentityChange={onIdentityChange}>
         <Outlet />
       </SessionProvider>
-      <Toaster position="top-center" />
+      <Toaster
+        position="top-center"
+        offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+        mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+      />
     </QueryClientProvider>
   );
 }

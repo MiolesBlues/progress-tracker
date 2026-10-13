@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
-import { prefillFor, toISO } from "@/lib/workout";
+import { prefillFor } from "@/lib/workout";
 import { MAX_SETS, validateWorkout, type WorkoutFields } from "@/lib/workout-input";
 import {
   newDraft,
@@ -19,15 +20,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: string }) {
+type WorkoutFormProps = {
+  exercise: Exercise;
+  dayId: string;
+  initialDate: string;
+  onDateChange: (date: string) => void;
+  onSaved: (exerciseId: string, dayId: string, date: string) => boolean;
+};
+
+export function WorkoutForm({
+  exercise,
+  dayId,
+  initialDate,
+  onDateChange,
+  onSaved,
+}: WorkoutFormProps) {
   const { userId, signal, isCurrent } = useUserSession();
   const qc = useQueryClient();
-  const defaults = (): WorkoutFields => ({
-    date: toISO(new Date()),
-    ...prefillFor(exercise, null),
-    rir: "",
-    notes: "",
-  });
+  const defaults = (): WorkoutFields => {
+    const prefill = prefillFor(exercise, null);
+    return {
+      date: initialDate,
+      ...prefill,
+      rir: "",
+      notes: "",
+    };
+  };
   const [initial] = useState(() => {
     try {
       return {
@@ -47,11 +65,10 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
   const [blocked, setBlocked] = useState(!!initial.error);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const submitting = useRef(false);
-  const acknowledged = useRef(false);
   const mounted = useRef(true);
-  const appliedLast = useRef(false);
+  const appliedLastKey = useRef("");
+  const lastEntryKey = JSON.stringify([userId, exercise.id, draft.fields.date]);
   const lastResult = useQuery(lastEntryQuery(userId, exercise.id, draft.fields.date));
   useEffect(() => {
     mounted.current = true;
@@ -59,6 +76,7 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
       mounted.current = false;
     };
   }, []);
+  useEffect(() => onDateChange(draft.fields.date), [draft.fields.date, onDateChange]);
 
   function commit(next: WorkoutDraft) {
     draftRef.current = next;
@@ -73,27 +91,27 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
     }
   }
   useEffect(() => {
-    if (appliedLast.current || !lastResult.isSuccess || blocked) return;
-    appliedLast.current = true;
+    if (appliedLastKey.current === lastEntryKey || !lastResult.isSuccess || blocked) return;
+    appliedLastKey.current = lastEntryKey;
     const current = draftRef.current;
-    if (current.operation || !lastResult.data) return;
+    if (current.operation) return;
     const prefill = prefillFor(exercise, lastResult.data);
+    const rir = lastResult.data?.rir;
     commit({
       ...current,
       fields: {
         ...current.fields,
         weight: current.dirty.weight ? current.fields.weight : prefill.weight,
         reps: current.dirty.reps ? current.fields.reps : prefill.reps,
+        rir: current.dirty.rir ? current.fields.rir : rir == null ? "" : String(Number(rir)),
       },
     });
-    // Only the first completed last-entry request for this explicitly selected form may prefill.
+    // A response only applies to its user/exercise/date key and never replaces edited fields.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastResult.isSuccess, lastResult.data, blocked]);
+  }, [lastEntryKey, lastResult.isSuccess, lastResult.data, blocked]);
 
   function change<K extends keyof WorkoutFields>(key: K, value: WorkoutFields[K]) {
-    if (draftRef.current.operation || blocked || acknowledged.current) return;
-    // A date change must never allow a late response to prefill this edited form.
-    if (key === "date") appliedLast.current = true;
+    if (draftRef.current.operation || blocked) return;
     commit({
       ...draftRef.current,
       fields: { ...draftRef.current.fields, [key]: value },
@@ -102,7 +120,7 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (submitting.current || acknowledged.current || blocked || !isCurrent()) return;
+    if (submitting.current || blocked || !isCurrent()) return;
     submitting.current = true; // Covers two events before React can disable the button.
     setError("");
     setSaving(true);
@@ -133,12 +151,28 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
           );
       }
       if (!isCurrent()) return;
-      if (mounted.current) {
-        acknowledged.current = true;
-        setSaved(true);
-      }
+      toast.success("Ваша тренировка сохранена", {
+        id: "workout-saved",
+        duration: 3000,
+        position: "bottom-center",
+        style: { pointerEvents: "none" },
+      });
       void qc.invalidateQueries({ queryKey: userKeys.entries(userId, exercise.id) });
       void qc.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exercise.id) });
+      if (mounted.current) {
+        const advanced = onSaved(exercise.id, dayId, operation.payload.performed_on);
+        if (!advanced && mounted.current) {
+          commit(
+            newDraft(userId, exercise.id, {
+              date: operation.payload.performed_on,
+              weight: String(operation.payload.weight),
+              reps: operation.payload.reps.map(String),
+              rir: operation.payload.rir === null ? "" : String(operation.payload.rir),
+              notes: "",
+            }),
+          );
+        }
+      }
     } catch (err) {
       if (!mounted.current || !isCurrent()) return;
       if (err instanceof SaveWorkoutError && err.rejected)
@@ -153,16 +187,8 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
       if (mounted.current && isCurrent()) setSaving(false);
     }
   }
-  function anotherEntry() {
-    const fields = { ...draftRef.current.fields, date: toISO(new Date()), rir: "", notes: "" };
-    acknowledged.current = false;
-    appliedLast.current = true;
-    setSaved(false);
-    setError("");
-    commit(newDraft(userId, exercise.id, fields));
-  }
   const fields = draft.fields;
-  const locked = saving || !!draft.operation || saved || blocked;
+  const locked = saving || !!draft.operation || blocked;
   const plan =
     exercise.target_sets !== null && exercise.target_reps
       ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
@@ -230,21 +256,12 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
           {error}
         </p>
       )}
-      {draft.operation && !saved && (
+      {draft.operation && (
         <p role="status" className="text-sm text-muted-foreground">
           Операция ожидает подтверждения. При повторе отправятся те же значения; поля временно
           заблокированы.
         </p>
       )}
-      {saved && (
-        <div role="status" className="space-y-3">
-          <p>Сохранено</p>
-          <Button type="button" onClick={anotherEntry}>
-            Ещё одна запись
-          </Button>
-        </div>
-      )}
-
       <fieldset disabled={locked} className="space-y-5">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
@@ -342,15 +359,13 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
           />
         </div>
       </fieldset>
-      {!saved && (
-        <Button
-          type="submit"
-          disabled={saving || blocked}
-          className="h-14 w-full text-base font-bold"
-        >
-          {saving ? "Сохранение…" : draft.operation ? "Повторить сохранение" : "Сохранить"}
-        </Button>
-      )}
+      <Button
+        type="submit"
+        disabled={saving || blocked}
+        className="h-14 w-full text-base font-bold"
+      >
+        {saving ? "Сохранение…" : draft.operation ? "Повторить сохранение" : "Сохранить"}
+      </Button>
     </form>
   );
 }
