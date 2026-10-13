@@ -107,6 +107,30 @@ test("read-only preflight finds invalid legacy rows; migration retains them exac
   assert.equal(constraints.length, 3);
   assert.ok(constraints.every((row) => !row.convalidated));
 });
+
+test("workout save RPC exists with the idempotent SQL signature", async () => {
+  const [fn] = await rows(`
+    SELECT p.proargnames, pg_get_function_identity_arguments(p.oid) AS identity_args,
+      p.prorettype::regtype::text AS return_type
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'save_workout_entry'
+  `);
+  assert.deepEqual(fn, {
+    proargnames: [
+      "_id",
+      "_exercise_id",
+      "_day_id",
+      "_performed_on",
+      "_weight",
+      "_reps",
+      "_rir",
+      "_notes",
+    ],
+    identity_args:
+      "_id uuid, _exercise_id uuid, _day_id uuid, _performed_on date, _weight numeric, _reps integer[], _rir numeric, _notes text",
+    return_type: "uuid",
+  });
+});
 for (const [name, reps] of [
   ["empty", "'{}'"],
   ["negative", "'{-1,8}'"],

@@ -204,10 +204,15 @@ export function ProgramManager() {
         </p>
       )}
       <Sheet open={managingDays} onOpenChange={setManagingDays}>
-        <section aria-label="Тренировочные дни" className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <section
+          aria-label="Тренировочные дни"
+          className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
+        >
           <div className="min-w-0">
             <h2 className="font-bold">Тренировочные дни</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{active.length} из {MAX_DAYS}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {active.length} из {MAX_DAYS}
+            </p>
           </div>
           <SheetTrigger asChild>
             <Button variant="secondary" className="h-11 shrink-0">
@@ -216,80 +221,94 @@ export function ProgramManager() {
             </Button>
           </SheetTrigger>
         </section>
-        <SheetContent side="bottom" className="flex h-dvh flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:ml-auto sm:h-[90dvh] sm:max-w-xl sm:rounded-t-lg [&>button]:hidden">
+        <SheetContent
+          side="bottom"
+          className="flex h-dvh flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:ml-auto sm:h-[90dvh] sm:max-w-xl sm:rounded-t-lg [&>button]:hidden"
+        >
           <SheetHeader className="safe-top shrink-0 border-b px-4 pb-4 text-left sm:px-6">
             <div className="flex items-center justify-between gap-3">
               <SheetTitle>Тренировочные дни</SheetTitle>
               <SheetClose asChild>
-                <Button className="h-11 shrink-0" disabled={busy}>Готово</Button>
+                <Button className="h-11 shrink-0" disabled={busy}>
+                  Готово
+                </Button>
               </SheetClose>
             </div>
-            <SheetDescription>{active.length} из {MAX_DAYS} активных дней</SheetDescription>
+            <SheetDescription>
+              {active.length} из {MAX_DAYS} активных дней
+            </SheetDescription>
           </SheetHeader>
           <div className="safe-bottom min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pt-4 sm:px-6">
-            {error && <p role="alert" className="break-words rounded-lg border border-destructive p-3 text-sm">{error}</p>}
-        {active.map((day, index) => (
-          <DayEditor
-            key={day.id}
-            day={day}
-            busy={busy}
-            run={run}
-            save={(patch) => updateDay(day.id, patch)}
-            canArchive={active.length > 1}
-            canRestore={false}
-            canUp={index > 0}
-            canDown={index < active.length - 1}
-            move={(direction) =>
-              run(() =>
-                supabase
-                  .rpc("reorder_program_days", { _ids: movedIds(active, index, direction) })
-                  .abortSignal(signal),
-              )
-            }
-          />
-        ))}
-        <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
-          <Input
-            aria-label="Название нового дня"
-            value={newDay}
-            onChange={(event) => setNewDay(event.target.value)}
-            maxLength={60}
-            placeholder="Новый день"
-            className="h-12 min-w-0 flex-1 basis-40"
-            disabled={busy || active.length >= MAX_DAYS}
-          />
-          <Button
-            type="submit"
-            className="h-12 shrink-0"
-            disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
-          >
-            Добавить день
-          </Button>
-        </form>
-        {active.length >= MAX_DAYS && (
-          <p className="text-sm text-muted-foreground">Можно иметь не более 7 активных дней.</p>
-        )}
-        {days.some((day) => day.archived_at) && (
-          <details className="space-y-3">
-            <summary className="cursor-pointer py-2 font-bold">Архив дней</summary>
-            {days
-              .filter((day) => day.archived_at)
-              .map((day) => (
-                <DayEditor
-                  key={day.id}
-                  day={day}
-                  busy={busy}
-                  run={run}
-                  save={(patch) => updateDay(day.id, patch)}
-                  canArchive={false}
-                  canRestore={active.length < MAX_DAYS}
-                  canUp={false}
-                  canDown={false}
-                  move={async () => false}
-                />
-              ))}
-          </details>
-        )}
+            {error && (
+              <p
+                role="alert"
+                className="break-words rounded-lg border border-destructive p-3 text-sm"
+              >
+                {error}
+              </p>
+            )}
+            {active.map((day, index) => (
+              <DayEditor
+                key={day.id}
+                day={day}
+                busy={busy}
+                run={run}
+                save={(patch) => updateDay(day.id, patch)}
+                canArchive={active.length > 1}
+                canRestore={false}
+                canUp={index > 0}
+                canDown={index < active.length - 1}
+                move={(direction) =>
+                  run(() =>
+                    supabase
+                      .rpc("reorder_program_days", { _ids: movedIds(active, index, direction) })
+                      .abortSignal(signal),
+                  )
+                }
+              />
+            ))}
+            <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
+              <Input
+                aria-label="Название нового дня"
+                value={newDay}
+                onChange={(event) => setNewDay(event.target.value)}
+                maxLength={60}
+                placeholder="Новый день"
+                className="h-12 min-w-0 flex-1 basis-40"
+                disabled={busy || active.length >= MAX_DAYS}
+              />
+              <Button
+                type="submit"
+                className="h-12 shrink-0"
+                disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
+              >
+                Добавить день
+              </Button>
+            </form>
+            {active.length >= MAX_DAYS && (
+              <p className="text-sm text-muted-foreground">Можно иметь не более 7 активных дней.</p>
+            )}
+            {days.some((day) => day.archived_at) && (
+              <details className="space-y-3">
+                <summary className="cursor-pointer py-2 font-bold">Архив дней</summary>
+                {days
+                  .filter((day) => day.archived_at)
+                  .map((day) => (
+                    <DayEditor
+                      key={day.id}
+                      day={day}
+                      busy={busy}
+                      run={run}
+                      save={(patch) => updateDay(day.id, patch)}
+                      canArchive={false}
+                      canRestore={active.length < MAX_DAYS}
+                      canUp={false}
+                      canDown={false}
+                      move={async () => false}
+                    />
+                  ))}
+              </details>
+            )}
           </div>
         </SheetContent>
       </Sheet>

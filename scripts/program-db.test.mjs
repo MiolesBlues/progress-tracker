@@ -73,6 +73,30 @@ test("migration preserves existing NULL day_id rows and all history exactly", as
   );
 });
 
+test("program reorder RPCs exist with the SQL argument names and types", async () => {
+  const functions = await rows(`
+    SELECT p.proname, p.proargnames, pg_get_function_identity_arguments(p.oid) AS identity_args,
+      p.prorettype::regtype::text AS return_type
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname IN ('reorder_program_days', 'reorder_program_exercises')
+    ORDER BY p.proname
+  `);
+  assert.deepEqual(functions, [
+    {
+      proname: "reorder_program_days",
+      proargnames: ["_ids"],
+      identity_args: "_ids uuid[]",
+      return_type: "void",
+    },
+    {
+      proname: "reorder_program_exercises",
+      proargnames: ["_day_id", "_ids"],
+      identity_args: "_day_id uuid, _ids uuid[]",
+      return_type: "void",
+    },
+  ]);
+});
+
 test("onboarding supports every day count 1..7 and arbitrary names", async () => {
   for (let count = 1; count <= 7; count++) {
     const uid = `33333333-3333-4333-8333-${String(count).padStart(12, "0")}`;

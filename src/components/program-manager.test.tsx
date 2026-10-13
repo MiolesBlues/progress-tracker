@@ -37,6 +37,9 @@ function mount() {
   );
   act(() => authEvent("SIGNED_IN", "A"));
 }
+async function openDayManagement() {
+  fireEvent.click(await screen.findByRole("button", { name: "Изменить дни" }));
+}
 beforeEach(() => {
   resetFake();
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -49,6 +52,7 @@ afterEach(() => {
 
 it("adds a named day after registration, renames, reorders, archives and restores it", async () => {
   mount();
+  await openDayManagement();
   const first = await screen.findByRole("form", { name: "День: Первый" });
   expect(within(first).getByRole("button", { name: "В архив" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Название нового дня"), {
@@ -185,6 +189,7 @@ it("limits active days to seven, including restore", async () => {
   );
   fake.state.rows.program_days!.push(day("Архивный", 7, "2026-10-01"));
   mount();
+  await openDayManagement();
   await screen.findByText("Можно иметь не более 7 активных дней.");
   expect(screen.getByRole("button", { name: "Добавить день" })).toBeDisabled();
   fireEvent.click(screen.getByText("Архив дней"));
@@ -193,6 +198,7 @@ it("limits active days to seven, including restore", async () => {
 
 it("keeps the input and displays a failed save instead of claiming success", async () => {
   mount();
+  await openDayManagement();
   await screen.findByLabelText("Название нового дня");
   fireEvent.change(screen.getByLabelText("Название нового дня"), {
     target: { value: "Не потерять" },
@@ -230,6 +236,7 @@ it("a late mutation reply from A cannot update B's form or repopulate A's cache"
   );
   const view = render(app("A"));
   act(() => authEvent("SIGNED_IN", "A"));
+  await openDayManagement();
   await screen.findByLabelText("Название нового дня");
   let resolve!: () => void;
   fake.state.delayMutation = new Promise<void>((done) => {
@@ -246,6 +253,8 @@ it("a late mutation reply from A cannot update B's form or repopulate A's cache"
   act(() => authEvent("SIGNED_IN", "B"));
   expect(request.signal?.aborted).toBe(true);
   view.rerender(app("B"));
+  await waitFor(() => expect(screen.getByLabelText("День для упражнений")).toHaveValue("День B"));
+  await openDayManagement();
   await screen.findByRole("form", { name: "День: День B" });
   fireEvent.change(screen.getByLabelText("Название нового дня"), {
     target: { value: "Черновик B" },

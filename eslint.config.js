@@ -15,6 +15,7 @@ export default tseslint.config(
       ".wrangler",
       ".release-node-modules-backup",
       "src/routeTree.gen.ts",
+      "src/integrations/supabase/types.ts",
       "project-c7efcdd9-ad98-4274-8b6f-fd8abfebd574",
       "test-results",
       "playwright-report",
