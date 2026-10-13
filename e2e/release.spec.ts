@@ -28,9 +28,10 @@ async function noOverflow(page: Page) {
   );
 }
 async function addExercise(page: Page) {
-  await page.getByLabel("Название нового упражнения").fill("Жим с длинным названием упражнения");
-  await page.getByRole("button", { name: "Добавить", exact: true }).click();
-  await expect(page.getByRole("form", { name: /Упражнение: Жим/ })).toBeVisible();
+  const name = "Жим с длинным названием упражнения";
+  await page.getByLabel("Название нового упражнения").fill(name);
+  await page.getByRole("button", { name: "Добавить упражнение", exact: true }).click();
+  await expect(page.getByRole("button", { name: `Редактировать: ${name}` })).toBeVisible();
 }
 for (const [width, count] of [
   [320, 1],
@@ -57,6 +58,25 @@ for (const [width, count] of [
     await addExercise(page);
     await noOverflow(page);
     await page.getByRole("link", { name: "Тренировка", exact: true }).click();
+    const daySelect = page.getByRole("combobox", { name: "Тренировочный день" });
+    await expect(daySelect).toContainText(
+      "Силовой день с произвольным длинным названием · 1 упражнение",
+    );
+    await daySelect.focus();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("option")).toHaveCount(count);
+    await expect(page.getByRole("option").first()).toContainText(
+      "Силовой день с произвольным длинным названием",
+    );
+    await noOverflow(page);
+    await page.keyboard.press("Escape");
+    if (count > 1) {
+      await daySelect.click();
+      await page.getByRole("option").nth(1).click();
+      await expect(page.getByText("В этом дне нет активных упражнений.")).toBeVisible();
+      await daySelect.click();
+      await page.getByRole("option").first().click();
+    }
     await page.getByLabel("Рабочий вес, кг").fill("52,5");
     for (let set = 1; set <= 3; set++)
       await page.getByLabel(`Подход ${set}`, { exact: true }).fill("8");
@@ -79,10 +99,8 @@ for (const [width, count] of [
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`progress-${width}.png`), fullPage: true });
     await page.getByRole("link", { name: "Программа", exact: true }).click();
-    await page
-      .getByRole("form", { name: /Упражнение: Жим/ })
-      .getByRole("button", { name: "В архив", exact: true })
-      .click();
+    await page.getByRole("button", { name: "В архив: Жим с длинным названием упражнения" }).click();
+    await page.getByRole("button", { name: "Изменить дни" }).click();
     if (count === 1) {
       await page.getByLabel("Название нового дня").fill("Дополнительный");
       await page.getByRole("button", { name: "Добавить день", exact: true }).click();
@@ -91,6 +109,7 @@ for (const [width, count] of [
       .getByRole("form", { name: /День: Силовой/ })
       .getByRole("button", { name: "В архив", exact: true })
       .click();
+    await page.getByRole("button", { name: "Готово", exact: true }).click();
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
     await expect(page.getByText("Записи за период (1)")).toBeVisible();
     expect(backend.rows["workout_entries"]).toHaveLength(1);

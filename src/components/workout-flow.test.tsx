@@ -19,6 +19,8 @@ const A = "11111111-1111-4111-8111-111111111111",
 const EX = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   EX2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const DAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const DAY2 = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const DAY_B = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const exercise = (id: string, user_id = A): Row => ({
   id,
   user_id,
@@ -59,6 +61,10 @@ function mount(children: ReactNode = <WorkoutPage />, userId = A) {
 async function ready() {
   await screen.findByText(/Прошлый раз/);
 }
+async function chooseTrainingDay(name: RegExp | string) {
+  fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
+  fireEvent.click(await screen.findByRole("option", { name }));
+}
 const save = () => fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 beforeEach(() => {
   resetFake();
@@ -76,6 +82,133 @@ afterEach(() => {
   qc.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("shows active days with exercise counts and filters exercises after selection", async () => {
+  fake.state.rows.program_days.push({
+    id: DAY2,
+    user_id: A,
+    name: "День восстановления",
+    position: 1,
+    archived_at: null,
+  });
+  fake.state.rows.program_days.push({
+    id: "archived-day",
+    user_id: A,
+    name: "Архивный день",
+    position: 2,
+    archived_at: "2026-10-01",
+  });
+  fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
+  mount();
+  await ready();
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "Силовой · 1 упражнение",
+  );
+  fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
+  expect(await screen.findByRole("option", { name: "Силовой · 1 упражнение" })).toBeVisible();
+  expect(screen.getByRole("option", { name: "День восстановления · 1 упражнение" })).toBeVisible();
+  expect(screen.queryByRole("option", { name: /Архивный день/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("option", { name: "День восстановления · 1 упражнение" }));
+  await ready();
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "День восстановления · 1 упражнение",
+  );
+});
+
+it("remembers the selected day separately for users A and B", async () => {
+  const dayB2 = "11111111-2222-4333-8444-555555555555";
+  fake.state.rows.program_days.push({
+    id: DAY2,
+    user_id: A,
+    name: "День A2",
+    position: 1,
+    archived_at: null,
+  });
+  fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
+  fake.state.rows.program_days.push(
+    { id: DAY_B, user_id: B, name: "День B1", position: 0, archived_at: null },
+    { id: dayB2, user_id: B, name: "День B2", position: 1, archived_at: null },
+  );
+  fake.state.rows.program_exercises.push(
+    { ...exercise("b-ex-1", B), id: "b-ex-1", day_id: DAY_B },
+    { ...exercise("b-ex-2", B), id: "b-ex-2", day_id: dayB2 },
+  );
+  const view = mount();
+  await ready();
+  await chooseTrainingDay("День A2 · 1 упражнение");
+  const keyA = `workout:selection:v1:${A}`;
+  const keyB = `workout:selection:v1:${B}`;
+  expect(JSON.parse(localStorage.getItem(keyA) ?? "null")).toMatchObject({ dayId: DAY2 });
+
+  act(() => authEvent("SIGNED_IN", B));
+  view.rerender(tree(<WorkoutPage />, B));
+  await screen.findByRole("combobox", { name: "Тренировочный день" });
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("День B1");
+  await chooseTrainingDay("День B2 · 1 упражнение");
+  expect(JSON.parse(localStorage.getItem(keyB) ?? "null")).toMatchObject({ dayId: dayB2 });
+
+  act(() => authEvent("SIGNED_IN", A));
+  view.rerender(tree(<WorkoutPage />, A));
+  await ready();
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("День A2");
+  expect(JSON.parse(localStorage.getItem(keyA) ?? "null")).toMatchObject({ dayId: DAY2 });
+  expect(JSON.parse(localStorage.getItem(keyB) ?? "null")).toMatchObject({ dayId: dayB2 });
+});
+
+it("falls back to the first active day when the stored day has been archived", async () => {
+  fake.state.rows.program_days.push({
+    id: DAY2,
+    user_id: A,
+    name: "Архивирован после выбора",
+    position: 1,
+    archived_at: "2026-10-13",
+  });
+  fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
+  localStorage.setItem(
+    `workout:selection:v1:${A}`,
+    JSON.stringify({ dayId: DAY2, exerciseId: EX2 }),
+  );
+  mount();
+  await ready();
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("Силовой");
+  expect(JSON.parse(localStorage.getItem(`workout:selection:v1:${A}`) ?? "null")).toEqual({
+    dayId: DAY,
+    exerciseId: "",
+  });
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+});
+
+it("shows a create-day empty state and wraps long custom names in the list", async () => {
+  fake.state.rows.program_days[0]!["archived_at"] = "2026-10-13";
+  mount();
+  expect(await screen.findByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "Нет активных дней",
+  );
+  expect(screen.getByText("Добавьте или восстановите день")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toBeDisabled();
+
+  cleanup();
+  qc.clear();
+  fake.state.rows.program_days = [
+    {
+      id: DAY,
+      user_id: A,
+      name: "Очень длинное пользовательское название силового дня для проверки переноса текста",
+      position: 0,
+      archived_at: null,
+    },
+  ];
+  mount();
+  await ready();
+  fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
+  const longName = await screen.findByRole("option", {
+    name: /Очень длинное пользовательское название силового дня для проверки переноса текста/,
+  });
+  expect(longName).toBeVisible();
+  expect(longName).toHaveClass("whitespace-normal");
 });
 
 it("rejects empty weight without sending or losing input", async () => {

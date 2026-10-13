@@ -1,10 +1,31 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { daysQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { WorkoutForm } from "@/components/workout-form";
 import { Loading, LoadError } from "@/components/query-feedback";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+function exerciseCount(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  const noun =
+    lastTwo >= 11 && lastTwo <= 14
+      ? "упражнений"
+      : last === 1
+        ? "упражнение"
+        : last >= 2 && last <= 4
+          ? "упражнения"
+          : "упражнений";
+  return `${count} ${noun}`;
+}
 
 export function WorkoutPage() {
   const { userId } = useUserSession();
@@ -28,6 +49,46 @@ export function WorkoutPage() {
     }
     return { dayId: "", exerciseId: "" };
   });
+  const days = useMemo(
+    () => daysResult.data?.filter((day) => !day.archived_at) ?? [],
+    [daysResult.data],
+  );
+  const activeExercises = useMemo(
+    () => programResult.data?.filter((exercise) => !exercise.archived_at) ?? [],
+    [programResult.data],
+  );
+  const day = days.find((item) => item.id === selection.dayId) ?? days[0];
+  const exercises = activeExercises.filter((exercise) => exercise.day_id === day?.id);
+  const current =
+    exercises.find((exercise) => exercise.id === selection.exerciseId) ?? exercises[0];
+
+  useEffect(() => {
+    if (!daysResult.isSuccess || !programResult.isSuccess) return;
+    const dayId = days.some((item) => item.id === selection.dayId)
+      ? selection.dayId
+      : (days[0]?.id ?? "");
+    const exerciseId = activeExercises.some(
+      (exercise) => exercise.day_id === dayId && exercise.id === selection.exerciseId,
+    )
+      ? selection.exerciseId
+      : "";
+    if (dayId === selection.dayId && exerciseId === selection.exerciseId) return;
+    const next = { dayId, exerciseId };
+    setSelection(next);
+    try {
+      localStorage.setItem(selectionKey, JSON.stringify(next));
+    } catch {
+      /* Selection remains available for this page view if storage is unavailable. */
+    }
+  }, [
+    activeExercises,
+    days,
+    daysResult.isSuccess,
+    programResult.isSuccess,
+    selection,
+    selectionKey,
+  ]);
+
   function select(dayId: string, exerciseId: string) {
     setSelection({ dayId, exerciseId });
     try {
@@ -49,27 +110,50 @@ export function WorkoutPage() {
     );
   if (programResult.isPending || daysResult.isPending)
     return <Loading>Загрузка программы…</Loading>;
-  const days = daysResult.data.filter((day) => !day.archived_at);
-  const day = days.find((item) => item.id === selection.dayId) ?? days[0];
-  const exercises = programResult.data.filter(
-    (exercise) => exercise.day_id === day?.id && !exercise.archived_at,
-  );
-  const current =
-    exercises.find((exercise) => exercise.id === selection.exerciseId) ?? exercises[0];
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">Тренировка</h1>
-      <div className="-mx-5 flex gap-1.5 overflow-x-auto px-5 pb-1">
-        {days.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            onClick={() => select(item.id, "")}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${day?.id === item.id ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"}`}
+      <div className="min-w-0 space-y-2">
+        <label id="training-day-label" className="block text-sm font-medium">
+          Тренировочный день
+        </label>
+        <Select
+          value={day?.id ?? ""}
+          onValueChange={(dayId) => select(dayId, "")}
+          disabled={!days.length}
+        >
+          <SelectTrigger
+            aria-label="Тренировочный день"
+            aria-labelledby="training-day-label"
+            className="h-12 min-w-0 bg-card text-foreground"
           >
-            {item.name}
-          </button>
-        ))}
+            <SelectValue placeholder="Нет активных дней" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            side="bottom"
+            align="start"
+            collisionPadding={8}
+            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+          >
+            {days.map((item) => {
+              const count = activeExercises.filter(
+                (exercise) => exercise.day_id === item.id,
+              ).length;
+              return (
+                <SelectItem
+                  key={item.id}
+                  value={item.id}
+                  className="h-auto min-h-10 whitespace-normal py-2"
+                >
+                  <span className="block min-w-0 whitespace-normal break-words leading-snug">
+                    {item.name} · {exerciseCount(count)}
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
       </div>
       {!day && (
         <p>
