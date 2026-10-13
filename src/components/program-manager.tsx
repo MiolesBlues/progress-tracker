@@ -194,10 +194,6 @@ export function ProgramManager() {
     );
   }
   const editingEx = exercises.find((ex) => ex.id === editing);
-  const editingList = editingEx
-    ? exercises.filter((ex) => ex.day_id === editingEx.day_id && !ex.archived_at)
-    : [];
-  const editingIndex = editingEx ? editingList.findIndex((ex) => ex.id === editingEx.id) : -1;
 
   return (
     <div className="space-y-6">
@@ -392,24 +388,6 @@ export function ProgramManager() {
                 return ok;
               }}
               save={(patch) => updateExercise(editingEx.id, patch)}
-              move={(direction) => {
-                const editingDayId = editingEx.day_id;
-                if (editingDayId === null) return Promise.resolve(false);
-                return run(() =>
-                  supabase
-                    .rpc("reorder_program_exercises", {
-                      _day_id: editingDayId,
-                      _ids: movedIds(editingList, editingIndex, direction),
-                    })
-                    .abortSignal(signal),
-                );
-              }}
-              canUp={editingEx.day_id !== null && editingIndex > 0}
-              canDown={
-                editingEx.day_id !== null &&
-                editingIndex >= 0 &&
-                editingIndex < editingList.length - 1
-              }
               nextPosition={(target) =>
                 nextPosition(exercises.filter((item) => item.day_id === target))
               }
@@ -515,9 +493,6 @@ type ExerciseEditorProps = {
   busy: boolean;
   run: Run;
   save: (patch: TablesUpdate<"program_exercises">) => PromiseLike<Result>;
-  move: (direction: -1 | 1) => Promise<boolean>;
-  canUp: boolean;
-  canDown: boolean;
   nextPosition: (dayId: string) => number;
 };
 function ExerciseEditor({
@@ -526,9 +501,6 @@ function ExerciseEditor({
   busy,
   run,
   save,
-  move,
-  canUp,
-  canDown,
   nextPosition: positionFor,
 }: ExerciseEditorProps) {
   const [name, setName] = useState(ex.name);
@@ -611,41 +583,9 @@ function ExerciseEditor({
           />
         </label>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex justify-end">
         <Button type="submit" disabled={busy || !name.trim()}>
           Сохранить
-        </Button>
-        {!ex.archived_at && (
-          <>
-            <Button
-              type="button"
-              variant="secondary"
-              aria-label="Упражнение выше"
-              disabled={busy || !canUp}
-              onClick={() => void move(-1)}
-            >
-              ↑
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              aria-label="Упражнение ниже"
-              disabled={busy || !canDown}
-              onClick={() => void move(1)}
-            >
-              ↓
-            </Button>
-          </>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() =>
-            void run(() => save({ archived_at: ex.archived_at ? null : new Date().toISOString() }))
-          }
-        >
-          {ex.archived_at ? "Восстановить упражнение" : "В архив"}
         </Button>
       </div>
     </form>

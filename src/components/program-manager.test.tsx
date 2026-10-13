@@ -93,7 +93,7 @@ it("adds a named day after registration, renames, reorders, archives and restore
   ).toBe(true);
 });
 
-it("creates and edits an exercise, moves it by day UUID, reorders and archives it", async () => {
+it("creates and edits an exercise, then archives it from the compact row", async () => {
   fake.state.rows.program_days!.push(day("Второй", 1));
   mount();
   await screen.findByLabelText("Название нового упражнения");
@@ -104,6 +104,11 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
   const form =
     (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Жим" })),
     await screen.findByRole("form", { name: "Упражнение: Жим" }));
+  expect(within(form).getAllByRole("button")).toHaveLength(1);
+  expect(within(form).getByRole("button", { name: "Сохранить" })).toHaveClass("bg-primary");
+  expect(within(form).queryByRole("button", { name: "Упражнение выше" })).not.toBeInTheDocument();
+  expect(within(form).queryByRole("button", { name: "Упражнение ниже" })).not.toBeInTheDocument();
+  expect(within(form).queryByRole("button", { name: "В архив" })).not.toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText("Название упражнения"), {
     target: { value: "Жим сидя" },
   });
@@ -123,8 +128,12 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
       target_reps: "6–8",
     }),
   );
+  await waitFor(() => expect(screen.queryByRole("form", { name: "Упражнение: Жим" })).toBeNull());
   await waitFor(() => expect(screen.getByLabelText("День для упражнений")).toBeEnabled());
   fireEvent.change(screen.getByLabelText("День для упражнений"), { target: { value: "Второй" } });
+  expect(
+    await screen.findByRole("button", { name: "Редактировать: Жим сидя" }),
+  ).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Название нового упражнения"), {
     target: { value: "Тяга" },
   });
@@ -132,20 +141,12 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
   const second =
     (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Тяга" })),
     await screen.findByRole("form", { name: "Упражнение: Тяга" }));
-  await waitFor(() =>
-    expect(within(second).getByRole("button", { name: "Упражнение выше" })).toBeEnabled(),
-  );
-  fireEvent.click(within(second).getByRole("button", { name: "Упражнение выше" }));
-  await waitFor(() =>
-    expect(fake.state.rpc).toHaveBeenCalledWith("reorder_program_exercises", {
-      _day_id: "Второй",
-      _ids: ["new-2", "new-1"],
-    }),
-  );
-  await waitFor(() =>
-    expect(within(second).getByRole("button", { name: "В архив" })).toBeEnabled(),
-  );
-  fireEvent.click(within(second).getByRole("button", { name: "В архив" }));
+  expect(within(second).getAllByRole("button")).toHaveLength(1);
+  expect(within(second).getByRole("button", { name: "Сохранить" })).toHaveClass("bg-primary");
+  expect(within(second).queryByRole("button", { name: "В архив" })).not.toBeInTheDocument();
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("form", { name: "Упражнение: Тяга" })).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "В архив: Тяга" }));
   await waitFor(() =>
     expect(
       fake.state.rows.program_exercises!.find((row) => row.id === "new-2")?.archived_at,
