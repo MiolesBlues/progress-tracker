@@ -8,9 +8,17 @@ import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { SortableList } from "@/components/Sortable";
-import { Archive, ArchiveRestore, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Pencil } from "lucide-react";
 
 type Result = { error: { message: string; code?: string } | null };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
@@ -29,6 +37,7 @@ export function ProgramManager() {
   const [newExercise, setNewExercise] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [managingDays, setManagingDays] = useState(false);
   const [error, setError] = useState("");
   const selectedDay = days.find((day) => day.id === selected) ?? active[0] ?? days[0];
   const dayId = selectedDay?.id ?? "";
@@ -193,18 +202,36 @@ export function ProgramManager() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-extrabold">Программа</h1>
-      {error && (
+      {error && !managingDays && (
         <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
           {error}
         </p>
       )}
-      <section aria-label="Тренировочные дни" className="space-y-3">
-        <h2 className="font-bold">
-          Тренировочные дни · {active.length} из {MAX_DAYS}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Архив скрывает день из новых тренировок. Упражнения и история сохраняются.
-        </p>
+      <Sheet open={managingDays} onOpenChange={setManagingDays}>
+        <section aria-label="Тренировочные дни" className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+          <div className="min-w-0">
+            <h2 className="font-bold">Тренировочные дни</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{active.length} из {MAX_DAYS}</p>
+          </div>
+          <SheetTrigger asChild>
+            <Button variant="secondary" className="h-11 shrink-0">
+              <Pencil className="h-4 w-4" />
+              Изменить дни
+            </Button>
+          </SheetTrigger>
+        </section>
+        <SheetContent side="bottom" className="flex h-dvh flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:ml-auto sm:h-[90dvh] sm:max-w-xl sm:rounded-t-lg [&>button]:hidden">
+          <SheetHeader className="safe-top shrink-0 border-b px-4 pb-4 text-left sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <SheetTitle>Тренировочные дни</SheetTitle>
+              <SheetClose asChild>
+                <Button className="h-11 shrink-0" disabled={busy}>Готово</Button>
+              </SheetClose>
+            </div>
+            <SheetDescription>{active.length} из {MAX_DAYS} активных дней</SheetDescription>
+          </SheetHeader>
+          <div className="safe-bottom min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pt-4 sm:px-6">
+            {error && <p role="alert" className="break-words rounded-lg border border-destructive p-3 text-sm">{error}</p>}
         {active.map((day, index) => (
           <DayEditor
             key={day.id}
@@ -225,19 +252,19 @@ export function ProgramManager() {
             }
           />
         ))}
-        <form onSubmit={addDay} className="flex gap-2">
+        <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
           <Input
             aria-label="Название нового дня"
             value={newDay}
             onChange={(event) => setNewDay(event.target.value)}
             maxLength={60}
             placeholder="Новый день"
-            className="h-12 min-w-0"
+            className="h-12 min-w-0 flex-1 basis-40"
             disabled={busy || active.length >= MAX_DAYS}
           />
           <Button
             type="submit"
-            className="h-12"
+            className="h-12 shrink-0"
             disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
           >
             Добавить день
@@ -267,7 +294,9 @@ export function ProgramManager() {
               ))}
           </details>
         )}
-      </section>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <section aria-label="Упражнения" className="space-y-3">
         <h2 className="font-bold">Упражнения</h2>
@@ -363,16 +392,18 @@ export function ProgramManager() {
                 return ok;
               }}
               save={(patch) => updateExercise(editingEx.id, patch)}
-              move={(direction) =>
-                run(() =>
+              move={(direction) => {
+                const editingDayId = editingEx.day_id;
+                if (editingDayId === null) return Promise.resolve(false);
+                return run(() =>
                   supabase
                     .rpc("reorder_program_exercises", {
-                      _day_id: editingEx.day_id!,
+                      _day_id: editingDayId,
                       _ids: movedIds(editingList, editingIndex, direction),
                     })
                     .abortSignal(signal),
-                )
-              }
+                );
+              }}
               canUp={editingEx.day_id !== null && editingIndex > 0}
               canDown={
                 editingEx.day_id !== null &&
@@ -416,7 +447,7 @@ function DayEditor({
   return (
     <form
       aria-label={`День: ${day.name}`}
-      className="space-y-2 rounded-xl bg-card p-3"
+      className="space-y-2 rounded-lg bg-card p-3"
       onSubmit={(event) => {
         event.preventDefault();
         void run(() => save({ name: programName(name, 60) }));
@@ -438,21 +469,25 @@ function DayEditor({
           <>
             <Button
               type="button"
+              size="icon"
               variant="secondary"
               aria-label="День выше"
+              title="День выше"
               disabled={busy || !canUp}
               onClick={() => void move(-1)}
             >
-              ↑
+              <ArrowUp className="h-4 w-4" />
             </Button>
             <Button
               type="button"
+              size="icon"
               variant="secondary"
               aria-label="День ниже"
+              title="День ниже"
               disabled={busy || !canDown}
               onClick={() => void move(1)}
             >
-              ↓
+              <ArrowDown className="h-4 w-4" />
             </Button>
           </>
         )}
