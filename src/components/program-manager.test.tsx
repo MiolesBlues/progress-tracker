@@ -101,7 +101,9 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
     target: { value: "Жим" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
-  const form = await screen.findByRole("form", { name: "Упражнение: Жим" });
+  const form =
+    (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Жим" })),
+    await screen.findByRole("form", { name: "Упражнение: Жим" }));
   fireEvent.change(within(form).getByLabelText("Название упражнения"), {
     target: { value: "Жим сидя" },
   });
@@ -127,7 +129,9 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
     target: { value: "Тяга" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
-  const second = await screen.findByRole("form", { name: "Упражнение: Тяга" });
+  const second =
+    (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Тяга" })),
+    await screen.findByRole("form", { name: "Упражнение: Тяга" }));
   await waitFor(() =>
     expect(within(second).getByRole("button", { name: "Упражнение выше" })).toBeEnabled(),
   );
@@ -153,7 +157,11 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
 it("shows NULL day_id without automatic backfill and assigns a day only on explicit save", async () => {
   fake.state.rows.program_exercises = [exercise("Старое упражнение", null)];
   mount();
-  const form = await screen.findByRole("form", { name: "Упражнение: Старое упражнение" });
+  const form =
+    (fireEvent.click(
+      await screen.findByRole("button", { name: "Редактировать: Старое упражнение" }),
+    ),
+    await screen.findByRole("form", { name: "Упражнение: Старое упражнение" }));
   expect(screen.getByRole("region", { name: "Упражнения без дня" })).toBeInTheDocument();
   expect(within(form).getByLabelText("Тренировочный день")).toHaveValue("");
   expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
@@ -198,7 +206,9 @@ it("keeps the input and displays a failed save instead of claiming success", asy
 it("rejects invalid exercise targets without writing", async () => {
   fake.state.rows.program_exercises = [exercise("Жим", "Первый")];
   mount();
-  const form = await screen.findByRole("form", { name: "Упражнение: Жим" });
+  const form =
+    (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Жим" })),
+    await screen.findByRole("form", { name: "Упражнение: Жим" }));
   fireEvent.change(within(form).getByLabelText("Подходы"), { target: { value: "3abc" } });
   fireEvent.click(within(form).getByRole("button", { name: "Сохранить" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Число подходов");
