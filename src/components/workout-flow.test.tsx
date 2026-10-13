@@ -59,7 +59,7 @@ function mount(children: ReactNode = <WorkoutPage />, userId = A) {
   return view;
 }
 async function ready() {
-  await screen.findByText(/Прошлый раз/);
+  await screen.findByText("План 4×6–8");
 }
 async function chooseTrainingDay(name: RegExp | string) {
   fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
@@ -102,6 +102,7 @@ it("shows active days with exercise counts and filters exercises after selection
   fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
   mount();
   await ready();
+  expect(screen.getByText("Было 50 кг × 8/8/7/6")).toBeVisible();
   expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
     "Силовой · 1 упражнение",
   );
@@ -268,7 +269,8 @@ it("late last-entry only fills untouched fields, and subsequent refetch cannot o
   await act(async () => {
     resolve({ data: last(), error: null });
   });
-  await screen.findByText("Предыдущих записей пока нет.");
+  expect(await screen.findByText("План 4×6–8")).toBeVisible();
+  expect(screen.getByText("Истории нет")).toBeVisible();
   expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
   expect(screen.getByLabelText("Подход 1")).toHaveValue("11");
   expect(screen.getByLabelText("Заметки")).toHaveValue("Не потерять");
@@ -276,6 +278,16 @@ it("late last-entry only fills untouched fields, and subsequent refetch cannot o
   expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-10");
   act(() => qc.setQueryData(["user", A, "last-entry", EX, "2026-10-10"], last(EX, 90)));
   expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
+});
+it("shows no invented plan values when an exercise has no targets", async () => {
+  fake.state.rows.program_exercises[0]!["target_sets"] = null;
+  fake.state.rows.program_exercises[0]!["target_reps"] = null;
+  fake.state.rows.workout_entries = [];
+  mount();
+  expect(await screen.findByText("Истории нет")).toBeVisible();
+  const summary = screen.getByText("Истории нет").parentElement;
+  expect(summary).not.toHaveTextContent("План");
+  expect(summary).not.toHaveTextContent("—");
 });
 it("a reply for previously selected exercise cannot change the current exercise", async () => {
   let resolve!: (response: { data: Row; error: null }) => void;

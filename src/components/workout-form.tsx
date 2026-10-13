@@ -163,6 +163,15 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
   }
   const fields = draft.fields;
   const locked = saving || !!draft.operation || saved || blocked;
+  const plan =
+    exercise.target_sets !== null && exercise.target_reps
+      ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
+      : exercise.target_sets !== null
+        ? `${exercise.target_sets} подх.`
+        : exercise.target_reps
+          ? `${exercise.target_reps.replace(/-/g, "–")} повт.`
+          : "";
+  const previous = lastResult.data;
 
   return (
     <form onSubmit={save} className="space-y-5" aria-label="Запись тренировки">
@@ -202,13 +211,18 @@ export function WorkoutForm({ exercise, dayId }: { exercise: Exercise; dayId: st
           загрузку или заполнить форму вручную.
         </LoadError>
       )}
-      {lastResult.isSuccess && !lastResult.data && (
-        <p className="text-xs text-muted-foreground">Предыдущих записей пока нет.</p>
-      )}
-      {lastResult.isSuccess && lastResult.data && (
-        <p className="text-xs text-muted-foreground">
-          Прошлый раз {lastResult.data.performed_on}: {Number(lastResult.data.weight)} кг ×{" "}
-          {lastResult.data.reps.join(" / ")}
+      {lastResult.isSuccess && (
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-snug text-muted-foreground">
+          {plan && <span>План {plan}</span>}
+          {plan && <span aria-hidden="true">·</span>}
+          {previous ? (
+            <span>
+              Было {previous.weight !== null && `${Number(previous.weight)} кг × `}
+              {previous.reps.join("/")}
+            </span>
+          ) : (
+            <span>Истории нет</span>
+          )}
         </p>
       )}
       {error && (

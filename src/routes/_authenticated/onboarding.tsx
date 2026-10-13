@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/lib/session";
 import { userKeys } from "@/lib/queries";
-import { DAY_NAME_PRESETS, MAX_DAYS, UPPER_LOWER_NAMES, defaultDayNames } from "@/lib/workout";
+import { MAX_DAYS, UPPER_LOWER_NAMES, defaultDayNames } from "@/lib/workout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -127,27 +127,23 @@ function Onboarding() {
       {step === 3 && (
         <>
           <h1 className="text-3xl font-extrabold tracking-tight">Названия дней</h1>
+          <p className="-mt-4 text-xs text-muted-foreground">
+            Например: Push, Pull, Legs, Upper, Lower, Full Body
+          </p>
           <div className="space-y-3">
             {names.map((n, i) => (
               <div key={i} className="space-y-1.5 rounded-2xl bg-card p-3">
+                <label htmlFor={`day-name-${i}`} className="block text-xs text-muted-foreground">
+                  Название дня
+                </label>
                 <Input
+                  id={`day-name-${i}`}
                   aria-label={`День ${i + 1}`}
                   value={n}
                   maxLength={60}
                   className="h-11 font-semibold"
                   onChange={(e) => setNames(names.map((x, j) => (j === i ? e.target.value : x)))}
                 />
-                <div className="flex gap-1 overflow-x-auto pb-1">
-                  {DAY_NAME_PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setNames(names.map((x, j) => (j === i ? p : x)))}
-                      className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
               </div>
             ))}
           </div>

@@ -188,10 +188,6 @@ export function WorkoutPage() {
               ))}
             </select>
           </label>
-          <p className="text-xs text-muted-foreground">
-            План: {current.target_sets ?? "—"} × {current.target_reps ?? "—"}. Фактические подходы
-            укажите ниже.
-          </p>
           <WorkoutForm
             key={`${userId}:${current.id}:${day.id}`}
             exercise={current}

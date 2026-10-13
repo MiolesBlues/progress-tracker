@@ -15,6 +15,13 @@ async function register(page: Page, email: string, count: number) {
   await page.getByRole("button", { name: "Далее", exact: true }).click();
   await noOverflow(page);
   await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await expect(
+    page.getByText("Например: Push, Pull, Legs, Upper, Lower, Full Body", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^(Push|Pull|Legs|Upper|Lower|Full Body)$/ }),
+  ).toHaveCount(0);
+  await noOverflow(page);
   await page
     .getByLabel("День 1", { exact: true })
     .fill("Силовой день с произвольным длинным названием");
@@ -58,6 +65,9 @@ for (const [width, count] of [
     await addExercise(page);
     await noOverflow(page);
     await page.getByRole("link", { name: "Тренировка", exact: true }).click();
+    await expect(page.getByText("План 3 подх.")).toBeVisible();
+    await expect(page.getByText("Истории нет")).toBeVisible();
+    await noOverflow(page);
     const daySelect = page.getByRole("combobox", { name: "Тренировочный день" });
     await expect(daySelect).toContainText(
       "Силовой день с произвольным длинным названием · 1 упражнение",
@@ -106,8 +116,8 @@ for (const [width, count] of [
       await page.getByRole("button", { name: "Добавить день", exact: true }).click();
     }
     await page
-      .getByRole("form", { name: /День: Силовой/ })
-      .getByRole("button", { name: "В архив", exact: true })
+      .getByRole("group", { name: /День: Силовой/ })
+      .getByRole("button", { name: /Архивировать день: Силовой/ })
       .click();
     await page.getByRole("button", { name: "Готово", exact: true }).click();
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
