@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/lib/queries";
@@ -8,6 +8,9 @@ import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { SortableList } from "@/components/Sortable";
+import { Archive, ArchiveRestore, Pencil } from "lucide-react";
 
 type Result = { error: { message: string; code?: string } | null };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
@@ -25,6 +28,7 @@ export function ProgramManager() {
   const [newDay, setNewDay] = useState("");
   const [newExercise, setNewExercise] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState("");
   const selectedDay = days.find((day) => day.id === selected) ?? active[0] ?? days[0];
   const dayId = selectedDay?.id ?? "";
@@ -130,31 +134,61 @@ export function ProgramManager() {
       </div>
     );
 
-  function exerciseRow(ex: Exercise, index: number, ordered: Exercise[]) {
+  function summary(ex: Exercise) {
+    if (ex.target_sets && ex.target_reps)
+      return `${ex.target_sets} × ${ex.target_reps.replace("-", "–")}`;
+    if (ex.target_sets) return `${ex.target_sets} подх.`;
+    if (ex.target_reps) return `${ex.target_reps.replace("-", "–")} повт.`;
+    return "Цель не задана";
+  }
+  function compactRow(ex: Exercise, handle?: ReactNode) {
     return (
-      <ExerciseEditor
-        key={ex.id}
-        exercise={ex}
-        days={days}
-        busy={busy}
-        run={run}
-        save={(patch) => updateExercise(ex.id, patch)}
-        move={(direction) =>
-          run(() =>
-            supabase
-              .rpc("reorder_program_exercises", {
-                _day_id: dayId,
-                _ids: movedIds(ordered, index, direction),
-              })
-              .abortSignal(signal),
-          )
-        }
-        canUp={ex.day_id !== null && !ex.archived_at && index > 0}
-        canDown={ex.day_id !== null && !ex.archived_at && index < ordered.length - 1}
-        nextPosition={(target) => nextPosition(exercises.filter((item) => item.day_id === target))}
-      />
+      <div className="flex min-h-14 min-w-0 items-center gap-1 rounded-xl bg-card px-2 py-2">
+        {handle}
+        <div className="min-w-0 flex-1 px-1">
+          <p className="truncate font-semibold">{ex.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{summary(ex)}</p>
+        </div>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label={`Редактировать: ${ex.name}`}
+          disabled={busy}
+          onClick={() => setEditing(ex.id)}
+          className="shrink-0"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label={ex.archived_at ? `Восстановить: ${ex.name}` : `В архив: ${ex.name}`}
+          disabled={busy}
+          onClick={() =>
+            void run(() =>
+              updateExercise(ex.id, {
+                archived_at: ex.archived_at ? null : new Date().toISOString(),
+              }),
+            )
+          }
+          className="shrink-0 text-muted-foreground"
+        >
+          {ex.archived_at ? (
+            <ArchiveRestore className="h-4 w-4" />
+          ) : (
+            <Archive className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
     );
   }
+  const editingEx = exercises.find((ex) => ex.id === editing);
+  const editingList = editingEx
+    ? exercises.filter((ex) => ex.day_id === editingEx.day_id && !ex.archived_at)
+    : [];
+  const editingIndex = editingEx ? editingList.findIndex((ex) => ex.id === editingEx.id) : -1;
 
   return (
     <div className="space-y-6">
@@ -258,7 +292,17 @@ export function ProgramManager() {
             активный день.
           </p>
         )}
-        {currentExercises.map((ex, index) => exerciseRow(ex, index, currentExercises))}
+        <SortableList
+          items={currentExercises}
+          onReorder={(ids) =>
+            void run(() =>
+              supabase
+                .rpc("reorder_program_exercises", { _day_id: dayId, _ids: ids })
+                .abortSignal(signal),
+            )
+          }
+          render={(ex, handle) => compactRow(ex, handle)}
+        />
         {!currentExercises.length && (
           <p className="text-sm text-muted-foreground">Упражнений пока нет.</p>
         )}
@@ -273,8 +317,8 @@ export function ProgramManager() {
               className="h-12 min-w-0"
               disabled={busy}
             />
-            <Button type="submit" className="h-12" disabled={busy || !newExercise.trim()}>
-              Добавить
+            <Button type="submit" className="h-12 shrink-0" disabled={busy || !newExercise.trim()}>
+              Добавить упражнение
             </Button>
           </form>
         )}
@@ -283,7 +327,9 @@ export function ProgramManager() {
             <summary className="cursor-pointer py-2 font-bold">Архив упражнений</summary>
             {exercises
               .filter((ex) => ex.day_id === dayId && ex.archived_at)
-              .map((ex) => exerciseRow(ex, 0, []))}
+              .map((ex) => (
+                <div key={ex.id}>{compactRow(ex)}</div>
+              ))}
           </details>
         )}
       </section>
@@ -295,9 +341,51 @@ export function ProgramManager() {
             Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История
             останется без изменений.
           </p>
-          {unassigned.map((ex) => exerciseRow(ex, 0, []))}
+          {unassigned.map((ex) => (
+            <div key={ex.id}>{compactRow(ex)}</div>
+          ))}
         </section>
       )}
+      <Sheet open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
+        <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>Редактирование упражнения</SheetTitle>
+          </SheetHeader>
+          {editingEx && (
+            <ExerciseEditor
+              key={editingEx.id + editingEx.day_id}
+              exercise={editingEx}
+              days={days}
+              busy={busy}
+              run={async (action) => {
+                const ok = await run(action);
+                if (ok) setEditing(null);
+                return ok;
+              }}
+              save={(patch) => updateExercise(editingEx.id, patch)}
+              move={(direction) =>
+                run(() =>
+                  supabase
+                    .rpc("reorder_program_exercises", {
+                      _day_id: editingEx.day_id!,
+                      _ids: movedIds(editingList, editingIndex, direction),
+                    })
+                    .abortSignal(signal),
+                )
+              }
+              canUp={editingEx.day_id !== null && editingIndex > 0}
+              canDown={
+                editingEx.day_id !== null &&
+                editingIndex >= 0 &&
+                editingIndex < editingList.length - 1
+              }
+              nextPosition={(target) =>
+                nextPosition(exercises.filter((item) => item.day_id === target))
+              }
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -424,11 +512,7 @@ function ExerciseEditor({
     });
   }
   return (
-    <form
-      aria-label={`Упражнение: ${ex.name}`}
-      onSubmit={submit}
-      className="space-y-3 rounded-xl bg-card p-3"
-    >
+    <form aria-label={`Упражнение: ${ex.name}`} onSubmit={submit} className="space-y-3 pt-2">
       <label className="block space-y-1 text-xs">
         Название упражнения
         <Input
