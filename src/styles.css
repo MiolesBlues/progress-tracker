@@ -62,17 +62,32 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html { -webkit-tap-highlight-color: transparent; }
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  input, select, textarea { font-size: 16px; } /* prevent iOS zoom */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  } /* prevent iOS zoom */
 }
 
-@utility safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
-@utility safe-top { padding-top: calc(env(safe-area-inset-top) + 0.75rem); }
-@utility num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+@utility safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+}
+@utility safe-top {
+  padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+}
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

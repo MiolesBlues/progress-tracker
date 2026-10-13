@@ -7,9 +7,15 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Workout Tracker — дневник силовых тренировок" },
-      { name: "description", content: "Записывайте подходы, вес и RIR по программе Upper/Lower и следите за прогрессом." },
+      {
+        name: "description",
+        content: "Записывайте подходы, вес и RIR по программе Upper/Lower и следите за прогрессом.",
+      },
       { property: "og:title", content: "Workout Tracker — дневник силовых тренировок" },
-      { property: "og:description", content: "Программа Upper/Lower, запись подходов и графики прогресса." },
+      {
+        property: "og:description",
+        content: "Программа Upper/Lower, запись подходов и графики прогресса.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -30,14 +36,18 @@ function Index() {
       <div className="pt-16">
         <img src="/apple-touch-icon.png" alt="" width={56} height={56} className="rounded-2xl" />
         <h1 className="mt-8 text-4xl font-extrabold leading-tight tracking-tight">
-          Каждый подход —<br /><span className="text-primary">в цифрах.</span>
+          Каждый подход —<br />
+          <span className="text-primary">в цифрах.</span>
         </h1>
         <p className="mt-4 text-muted-foreground">
-          Программа Upper 1 / Lower 1 / Upper 2 / Lower 2, быстрая запись подходов и честный прогресс неделя к неделе.
+          Программа Upper 1 / Lower 1 / Upper 2 / Lower 2, быстрая запись подходов и честный
+          прогресс неделя к неделе.
         </p>
       </div>
       <div className="safe-bottom space-y-3">
-        <Button asChild size="lg" className="h-14 w-full text-base font-bold"><Link to="/auth">Начать</Link></Button>
+        <Button asChild size="lg" className="h-14 w-full text-base font-bold">
+          <Link to="/auth">Начать</Link>
+        </Button>
       </div>
     </main>
   );

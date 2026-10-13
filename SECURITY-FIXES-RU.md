@@ -17,14 +17,14 @@
 
 ## Проверки
 
-| Команда | Результат |
-| --- | --- |
-| `npm.cmd run typecheck` | PASS, 0 ошибок |
-| `npm.cmd test` | PASS, 35/35: 11 существующих и 24 новых |
-| `npm.cmd run test:db` | PASS, 5/5 интеграционных SQL-сценариев в PGlite/PostgreSQL, только в памяти |
-| `npm.cmd run build` | PASS, клиент, SSR и Cloudflare/Nitro production-артефакт в `.output` |
+| Команда                         | Результат                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `npm.cmd run typecheck`         | PASS, 0 ошибок                                                                              |
+| `npm.cmd test`                  | PASS, 35/35: 11 существующих и 24 новых                                                     |
+| `npm.cmd run test:db`           | PASS, 5/5 интеграционных SQL-сценариев в PGlite/PostgreSQL, только в памяти                 |
+| `npm.cmd run build`             | PASS, клиент, SSR и Cloudflare/Nitro production-артефакт в `.output`                        |
 | ESLint изменённых TS/TSX-файлов | 0 ошибок; 2 предупреждения Fast Refresh из-за совместного экспорта auth hooks и компонентов |
-| `git diff --check` | PASS |
+| `git diff --check`              | PASS                                                                                        |
 
 Тесты изоляции покрывают A → B, ожидание проверки нового пользователя маршрутом, `SIGNED_OUT`, повторный `SIGNED_IN`, `USER_UPDATED`, `TOKEN_REFRESHED` того же пользователя, отмену запросов, поздний ответ A после B → A и поздний ответ сохранения A при уже открытой форме B.
 
