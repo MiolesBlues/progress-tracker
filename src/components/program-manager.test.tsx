@@ -100,7 +100,7 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
   fireEvent.change(screen.getByLabelText("Название нового упражнения"), {
     target: { value: "Жим" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить упражнение" }));
   const form =
     (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Жим" })),
     await screen.findByRole("form", { name: "Упражнение: Жим" }));
@@ -128,7 +128,7 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
   fireEvent.change(screen.getByLabelText("Название нового упражнения"), {
     target: { value: "Тяга" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+  fireEvent.click(screen.getByRole("button", { name: "Добавить упражнение" }));
   const second =
     (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Тяга" })),
     await screen.findByRole("form", { name: "Упражнение: Тяга" }));
@@ -157,12 +157,12 @@ it("creates and edits an exercise, moves it by day UUID, reorders and archives i
 it("shows NULL day_id without automatic backfill and assigns a day only on explicit save", async () => {
   fake.state.rows.program_exercises = [exercise("Старое упражнение", null)];
   mount();
+  expect(await screen.findByRole("region", { name: "Упражнения без дня" })).toBeInTheDocument();
   const form =
     (fireEvent.click(
       await screen.findByRole("button", { name: "Редактировать: Старое упражнение" }),
     ),
     await screen.findByRole("form", { name: "Упражнение: Старое упражнение" }));
-  expect(screen.getByRole("region", { name: "Упражнения без дня" })).toBeInTheDocument();
   expect(within(form).getByLabelText("Тренировочный день")).toHaveValue("");
   expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
   fireEvent.change(within(form).getByLabelText("Тренировочный день"), {
