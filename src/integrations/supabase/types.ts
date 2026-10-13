@@ -160,6 +160,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      save_workout_entry: {
+        Args: {
+          _id: string;
+          _exercise_id: string;
+          _day_id: string;
+          _performed_on: string;
+          _weight: number;
+          _reps: number[];
+          _rir: number | null;
+          _notes: string | null;
+        };
+        Returns: string;
+      };
       reorder_program_days: {
         Args: { _ids: string[] };
         Returns: undefined;

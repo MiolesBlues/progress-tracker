@@ -1,5 +1,17 @@
 export const MAX_DAYS = 7;
-export const DAY_NAME_PRESETS = ["День A", "День B", "День C", "Full Body", "Push", "Pull", "Legs", "Upper 1", "Lower 1", "Upper 2", "Lower 2"];
+export const DAY_NAME_PRESETS = [
+  "День A",
+  "День B",
+  "День C",
+  "Full Body",
+  "Push",
+  "Pull",
+  "Legs",
+  "Upper 1",
+  "Lower 1",
+  "Upper 2",
+  "Lower 2",
+];
 export const UPPER_LOWER_NAMES = ["Upper 1", "Lower 1", "Upper 2", "Lower 2"];
 
 /** Onboarding is shown only to accounts that have never had any day (archived days count). */
@@ -7,7 +19,10 @@ export const needsOnboarding = (days: unknown[]) => days.length === 0;
 
 /** Default names for a fresh program of `count` days: День A, День B, … */
 export const defaultDayNames = (count: number) =>
-  Array.from({ length: Math.min(Math.max(count, 1), MAX_DAYS) }, (_, i) => `День ${String.fromCharCode(65 + i)}`);
+  Array.from(
+    { length: Math.min(Math.max(count, 1), MAX_DAYS) },
+    (_, i) => `День ${String.fromCharCode(65 + i)}`,
+  );
 
 export type Metric = "weight" | "reps" | "volume";
 export const METRICS: { id: Metric; label: string; unit: string }[] = [
@@ -61,7 +76,8 @@ export function weekComparison(entries: EntryLike[], m: Metric, today: Date) {
   const [cs, ce] = weekRange(today);
   const prevDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
   const [ps, pe] = weekRange(prevDay);
-  const inRange = (s: string, e: string) => entries.filter((x) => x.performed_on >= s && x.performed_on <= e);
+  const inRange = (s: string, e: string) =>
+    entries.filter((x) => x.performed_on >= s && x.performed_on <= e);
   const current = aggregate(inRange(cs, ce), m);
   const previous = aggregate(inRange(ps, pe), m);
   const delta = current !== null && previous !== null ? current - previous : null;
@@ -78,11 +94,15 @@ export function dailySeries(entries: EntryLike[], m: Metric) {
 
 /** Prefill for the log form: last logged session wins, else the program's starting weight/example reps. */
 export function prefillFor(
-  ex: { working_weight: number | null; example_reps: number[] | null; target_sets: number | null } | undefined,
+  ex:
+    | { working_weight: number | null; example_reps: number[] | null; target_sets: number | null }
+    | undefined,
   last: { weight: number | string; reps: number[] } | null | undefined,
 ): { weight: string; reps: string[] } {
   if (last) return { weight: String(Number(last.weight)), reps: last.reps.map(String) };
   const sets = ex?.target_sets ?? ex?.example_reps?.length ?? 3;
-  const reps = ex?.example_reps?.length ? ex.example_reps.map(String) : Array.from({ length: sets }, () => "");
+  const reps = Array.from({ length: sets }, (_, index) =>
+    ex?.example_reps?.[index] === undefined ? "" : String(ex.example_reps[index]),
+  );
   return { weight: ex?.working_weight == null ? "" : String(ex.working_weight), reps };
 }

@@ -1,5 +1,6 @@
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { Day, Exercise } from "@/lib/queries";
+import { decimal, MAX_WEIGHT } from "@/lib/workout-input";
 
 export function programName(value: string, max: number) {
   const name = value.trim();
@@ -17,7 +18,7 @@ export function exercisePatch(
   const sets = values.sets.trim() ? Number(values.sets) : null;
   if (sets !== null && (!Number.isInteger(sets) || sets < 1 || sets > 20))
     throw new Error("Число подходов: от 1 до 20");
-  const weight = values.weight.trim() ? Number(values.weight.replace(",", ".")) : null;
+  const weight = values.weight.trim() ? decimal(values.weight, "Вес", MAX_WEIGHT, 2) : null;
   if (weight !== null && (!Number.isFinite(weight) || weight < 0))
     throw new Error("Вес должен быть неотрицательным числом");
   const reps = values.reps.trim();

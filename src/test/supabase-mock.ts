@@ -28,6 +28,16 @@ const fake = vi.hoisted(() => {
     }[],
     authChange: null as ((event: string, session: { user: { id: string } } | null) => void) | null,
     nextError: null as string | null,
+    readErrors: {} as Record<string, string>,
+    delaySelect: null as { table: string; filters: Row; promise: Promise<Response> } | null,
+    saveRpc: vi.fn(
+      async (
+        args: Record<string, unknown>,
+      ): Promise<{ data: string | null; error: { code: string; message: string } | null }> => ({
+        data: String(args["_id"]),
+        error: null,
+      }),
+    ),
     delayMutation: null as Promise<void> | null,
     sequence: 0,
     rpc: vi.fn(async (name: string, args: { _ids: string[]; _day_id?: string }) => {
@@ -48,6 +58,17 @@ const fake = vi.hoisted(() => {
     let signal: AbortSignal | undefined;
     async function execute(): Promise<Response> {
       state.calls.push({ table, operation, values, filters, ...(signal ? { signal } : {}) });
+      if (operation === "select" && state.readErrors[table])
+        return { data: null, error: { message: state.readErrors[table]! } };
+      if (
+        operation === "select" &&
+        state.delaySelect?.table === table &&
+        Object.entries(state.delaySelect.filters).every(([key, value]) => filters[key] === value)
+      ) {
+        const delayed = state.delaySelect.promise;
+        state.delaySelect = null;
+        return delayed;
+      }
       if (state.nextError) {
         const message = state.nextError;
         state.nextError = null;
@@ -129,8 +150,9 @@ export { fake };
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: fake.from,
-    rpc: (name: string, args: { _ids: string[] }) => ({
-      abortSignal: () => fake.state.rpc(name, args),
+    rpc: (name: string, args: { _ids: string[] } & Record<string, unknown>) => ({
+      abortSignal: () =>
+        name === "save_workout_entry" ? fake.state.saveRpc(args) : fake.state.rpc(name, args),
     }),
     auth: {
       onAuthStateChange: (callback: typeof fake.state.authChange) => {
@@ -148,6 +170,13 @@ export function resetFake() {
   for (const key of Object.keys(fake.state.rows)) fake.state.rows[key] = [];
   fake.state.calls.length = 0;
   fake.state.nextError = null;
+  fake.state.readErrors = {};
+  fake.state.delaySelect = null;
+  fake.state.saveRpc.mockReset();
+  fake.state.saveRpc.mockImplementation(async (args) => ({
+    data: String(args["_id"]),
+    error: null,
+  }));
   fake.state.delayMutation = null;
   fake.state.sequence = 0;
   fake.state.rpc.mockClear();
