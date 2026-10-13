@@ -46,6 +46,11 @@ const fake = vi.hoisted(() => {
     sequence: 0,
     maxRows: Infinity,
     rpc: vi.fn(async (name: string, args: { _ids: string[]; _day_id?: string }) => {
+      if (state.nextError) {
+        const message = state.nextError;
+        state.nextError = null;
+        return { error: { message } };
+      }
       const table = name === "reorder_program_days" ? "program_days" : "program_exercises";
       args._ids.forEach((id, position) => {
         const row = state.rows[table]!.find((item) => item.id === id);

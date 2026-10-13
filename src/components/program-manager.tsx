@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/lib/queries";
-import { exercisePatch, movedIds, nextPosition, programName } from "@/lib/program";
+import { exercisePatch, nextPosition, programName } from "@/lib/program";
 import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SortableList } from "@/components/Sortable";
-import { Archive, ArchiveRestore, ArrowDown, ArrowUp, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, Pencil, X } from "lucide-react";
 
 type Result = { error: { message: string; code?: string } | null };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
@@ -247,26 +247,27 @@ export function ProgramManager() {
                 {error}
               </p>
             )}
-            {active.map((day, index) => (
-              <DayEditor
-                key={day.id}
-                day={day}
-                busy={busy}
-                run={run}
-                save={(patch) => updateDay(day.id, patch)}
-                canArchive={active.length > 1}
-                canRestore={false}
-                canUp={index > 0}
-                canDown={index < active.length - 1}
-                move={(direction) =>
-                  run(() =>
-                    supabase
-                      .rpc("reorder_program_days", { _ids: movedIds(active, index, direction) })
-                      .abortSignal(signal),
-                  )
-                }
-              />
-            ))}
+            <SortableList
+              items={active}
+              handleLabel={(day) => `Переместить день ${day.name}`}
+              draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
+              onReorder={(ids) =>
+                void run(() =>
+                  supabase.rpc("reorder_program_days", { _ids: ids }).abortSignal(signal),
+                )
+              }
+              render={(day, handle) => (
+                <DayEditor
+                  day={day}
+                  handle={handle}
+                  busy={busy}
+                  run={run}
+                  save={(patch) => updateDay(day.id, patch)}
+                  canArchive={active.length > 1}
+                  canRestore={false}
+                />
+              )}
+            />
             <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
               <Input
                 aria-label="Название нового дня"
@@ -302,9 +303,6 @@ export function ProgramManager() {
                       save={(patch) => updateDay(day.id, patch)}
                       canArchive={false}
                       canRestore={active.length < MAX_DAYS}
-                      canUp={false}
-                      canDown={false}
-                      move={async () => false}
                     />
                   ))}
               </details>
@@ -420,89 +418,97 @@ export function ProgramManager() {
 
 type DayEditorProps = {
   day: Day;
+  handle?: ReactNode;
   busy: boolean;
   run: Run;
   save: (patch: { name?: string; archived_at?: string | null }) => PromiseLike<Result>;
   canArchive: boolean;
   canRestore: boolean;
-  canUp: boolean;
-  canDown: boolean;
-  move: (direction: -1 | 1) => Promise<boolean>;
 };
-function DayEditor({
-  day,
-  busy,
-  run,
-  save,
-  canArchive,
-  canRestore,
-  canUp,
-  canDown,
-  move,
-}: DayEditorProps) {
+function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: DayEditorProps) {
   const [name, setName] = useState(day.name);
+  const [editing, setEditing] = useState(false);
+  async function rename(event: FormEvent) {
+    event.preventDefault();
+    if (await run(() => save({ name: programName(name, 60) }))) setEditing(false);
+  }
+  const archiveLabel = day.archived_at ? "Восстановить день" : "Архивировать день";
+  const archiveDisabled = busy || (day.archived_at ? !canRestore : !canArchive);
   return (
-    <form
-      aria-label={`День: ${day.name}`}
-      className="space-y-2 rounded-lg bg-card p-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void run(() => save({ name: programName(name, 60) }));
-      }}
-    >
-      <Input
-        aria-label="Название дня"
-        value={name}
-        maxLength={60}
-        disabled={busy}
-        onChange={(event) => setName(event.target.value)}
-        className="h-12"
-      />
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="secondary" disabled={busy || !name.trim()}>
-          Переименовать
-        </Button>
-        {!day.archived_at && (
-          <>
-            <Button
-              type="button"
-              size="icon"
-              variant="secondary"
-              aria-label="День выше"
-              title="День выше"
-              disabled={busy || !canUp}
-              onClick={() => void move(-1)}
-            >
-              <ArrowUp className="h-4 w-4" />
+    <div role="group" aria-label={`День: ${day.name}`} className="rounded-lg bg-card px-2 py-1.5">
+      <div className="flex min-w-0 items-center gap-1">
+        {handle}
+        {editing ? (
+          <form onSubmit={rename} className="flex min-w-0 flex-1 items-center gap-2">
+            <Input
+              aria-label="Название дня"
+              value={name}
+              maxLength={60}
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+              className="h-9 min-w-0 flex-1"
+              autoFocus
+            />
+            <Button type="submit" className="h-9 shrink-0" disabled={busy || !name.trim()}>
+              Сохранить
             </Button>
             <Button
               type="button"
               size="icon"
-              variant="secondary"
-              aria-label="День ниже"
-              title="День ниже"
-              disabled={busy || !canDown}
-              onClick={() => void move(1)}
+              variant="ghost"
+              className="h-9 w-9 shrink-0"
+              aria-label="Отменить переименование"
+              disabled={busy}
+              onClick={() => {
+                setName(day.name);
+                setEditing(false);
+              }}
             >
-              <ArrowDown className="h-4 w-4" />
+              <X className="h-4 w-4" />
+            </Button>
+          </form>
+        ) : (
+          <>
+            <span className="min-w-0 flex-1 break-words py-1 text-sm font-medium">{day.name}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              aria-label={`Переименовать день: ${day.name}`}
+              disabled={busy}
+              onClick={() => {
+                setName(day.name);
+                setEditing(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
             </Button>
           </>
         )}
         <Button
           type="button"
-          variant="outline"
-          disabled={busy || (day.archived_at ? !canRestore : !canArchive)}
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          aria-label={`${archiveLabel}: ${day.name}`}
+          title={archiveLabel}
+          disabled={archiveDisabled}
           onClick={() =>
             void run(() => save({ archived_at: day.archived_at ? null : new Date().toISOString() }))
           }
         >
-          {day.archived_at ? "Восстановить день" : "В архив"}
+          {day.archived_at ? (
+            <ArchiveRestore className="h-4 w-4" />
+          ) : (
+            <Archive className="h-4 w-4" />
+          )}
         </Button>
       </div>
       {!day.archived_at && !canArchive && (
         <p className="text-xs text-muted-foreground">Нужен хотя бы один активный день.</p>
       )}
-    </form>
+    </div>
   );
 }
 

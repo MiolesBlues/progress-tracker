@@ -24,10 +24,14 @@ export function SortableList<T extends { id: string }>({
   items,
   onReorder,
   render,
+  handleLabel,
+  draggingClassName,
 }: {
   items: T[];
   onReorder: (ids: string[]) => void;
   render: (item: T, handle: ReactNode) => ReactNode;
+  handleLabel?: (item: T) => string;
+  draggingClassName?: string;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -44,7 +48,12 @@ export function SortableList<T extends { id: string }>({
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         <ul className="space-y-2">
           {items.map((it) => (
-            <Item key={it.id} id={it.id}>
+            <Item
+              key={it.id}
+              id={it.id}
+              handleLabel={handleLabel?.(it) ?? "Перетащить"}
+              {...(draggingClassName ? { draggingClassName } : {})}
+            >
               {(h) => render(it, h)}
             </Item>
           ))}
@@ -54,7 +63,17 @@ export function SortableList<T extends { id: string }>({
   );
 }
 
-function Item({ id, children }: { id: string; children: (handle: ReactNode) => ReactNode }) {
+function Item({
+  id,
+  children,
+  handleLabel,
+  draggingClassName,
+}: {
+  id: string;
+  children: (handle: ReactNode) => ReactNode;
+  handleLabel: string;
+  draggingClassName?: string;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
   });
@@ -63,7 +82,7 @@ function Item({ id, children }: { id: string; children: (handle: ReactNode) => R
       type="button"
       {...attributes}
       {...listeners}
-      aria-label="Перетащить"
+      aria-label={handleLabel}
       className="touch-none cursor-grab p-1.5 text-muted-foreground"
     >
       <GripVertical className="h-5 w-5" />
@@ -73,7 +92,7 @@ function Item({ id, children }: { id: string; children: (handle: ReactNode) => R
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={isDragging ? "relative z-10 opacity-80" : ""}
+      className={isDragging ? `relative z-10 ${draggingClassName ?? "opacity-80"}` : undefined}
     >
       {children(handle)}
     </li>

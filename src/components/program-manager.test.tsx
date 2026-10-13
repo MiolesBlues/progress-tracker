@@ -40,6 +40,30 @@ function mount() {
 async function openDayManagement() {
   fireEvent.click(await screen.findByRole("button", { name: "Изменить дни" }));
 }
+function mockSortableRects() {
+  return vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function getRect(this: HTMLElement) {
+      const item = this.closest("li");
+      const index = item ? Array.from(item.parentElement?.children ?? []).indexOf(item) : -1;
+      const top = index < 0 ? 0 : index * 64;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        right: 320,
+        bottom: top + 56,
+        width: 320,
+        height: index < 0 ? 500 : 56,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+}
+async function startKeyboardDrag(handle: HTMLElement) {
+  fireEvent.keyDown(handle, { key: "Space", code: "Space", keyCode: 32 });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+}
 beforeEach(() => {
   resetFake();
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -50,39 +74,34 @@ afterEach(() => {
   qc.clear();
 });
 
-it("adds a named day after registration, renames, reorders, archives and restores it", async () => {
+it("adds a named day after registration, renames, archives and restores it", async () => {
   mount();
   await openDayManagement();
-  const first = await screen.findByRole("form", { name: "День: Первый" });
-  expect(within(first).getByRole("button", { name: "В архив" })).toBeDisabled();
+  const first = await screen.findByRole("group", { name: "День: Первый" });
+  expect(within(first).queryByLabelText("Название дня")).not.toBeInTheDocument();
+  expect(within(first).getByRole("button", { name: "Архивировать день: Первый" })).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Название нового дня"), {
     target: { value: "  Ноги и корпус  " },
   });
   fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
-  const second = await screen.findByRole("form", { name: "День: Ноги и корпус" });
+  const second = await screen.findByRole("group", { name: "День: Ноги и корпус" });
+  fireEvent.click(
+    within(second).getByRole("button", { name: "Переименовать день: Ноги и корпус" }),
+  );
   fireEvent.change(within(second).getByLabelText("Название дня"), {
     target: { value: "Силовой день" },
   });
-  fireEvent.click(within(second).getByRole("button", { name: "Переименовать" }));
-  const renamed = await screen.findByRole("form", { name: "День: Силовой день" });
-  await waitFor(() =>
-    expect(within(renamed).getByRole("button", { name: "День выше" })).toBeEnabled(),
-  );
-  fireEvent.click(within(renamed).getByRole("button", { name: "День выше" }));
-  await waitFor(() =>
-    expect(fake.state.rpc).toHaveBeenCalledWith("reorder_program_days", {
-      _ids: ["new-1", "Первый"],
-    }),
-  );
-  await waitFor(() =>
-    expect(within(renamed).getByRole("button", { name: "В архив" })).toBeEnabled(),
-  );
-  fireEvent.click(within(renamed).getByRole("button", { name: "В архив" }));
+  fireEvent.click(within(second).getByRole("button", { name: "Сохранить" }));
+  const renamed = await screen.findByRole("group", { name: "День: Силовой день" });
+  expect(screen.queryByRole("button", { name: "День выше" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "День ниже" })).not.toBeInTheDocument();
+  fireEvent.click(within(renamed).getByRole("button", { name: "Архивировать день: Силовой день" }));
   await screen.findByText("Архив дней");
   fireEvent.click(screen.getByText("Архив дней"));
-  const restore = await screen.findByRole("button", { name: "Восстановить день" });
-  await waitFor(() => expect(restore).toBeEnabled());
-  fireEvent.click(restore);
+  const archived = await screen.findByRole("group", { name: "День: Силовой день" });
+  fireEvent.click(
+    within(archived).getByRole("button", { name: "Восстановить день: Силовой день" }),
+  );
   await waitFor(() =>
     expect(fake.state.rows.program_days!.find((row) => row.id === "new-1")?.archived_at).toBeNull(),
   );
@@ -95,6 +114,53 @@ it("adds a named day after registration, renames, reorders, archives and restore
       .filter((call) => call.operation === "update")
       .every((call) => call.filters.user_id === "A"),
   ).toBe(true);
+});
+
+it("reorders the first day to the last with the keyboard handle and keeps the saved position", async () => {
+  fake.state.rows.program_days = [day("День A"), day("День B", 1), day("День C", 2)];
+  mount();
+  await openDayManagement();
+
+  const rectSpy = mockSortableRects();
+  const handle = screen.getByRole("button", { name: "Переместить день День A" });
+  await startKeyboardDrag(handle);
+  fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+  fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+  fireEvent.keyDown(handle, { key: "Space", code: "Space", keyCode: 32 });
+
+  try {
+    await waitFor(() =>
+      expect(fake.state.rpc).toHaveBeenCalledWith("reorder_program_days", {
+        _ids: ["День B", "День C", "День A"],
+      }),
+    );
+    await waitFor(() => {
+      expect(fake.state.rows.program_days!.map((row) => row.position)).toEqual([2, 0, 1]);
+    });
+    expect(screen.getByRole("group", { name: "День: День A" })).toBeInTheDocument();
+  } finally {
+    rectSpy.mockRestore();
+  }
+});
+
+it("keeps the previous day order and displays an error when the reorder RPC fails", async () => {
+  fake.state.rows.program_days = [day("День A"), day("День B", 1)];
+  mount();
+  await openDayManagement();
+  const rectSpy = mockSortableRects();
+  const handle = screen.getByRole("button", { name: "Переместить день День A" });
+
+  await startKeyboardDrag(handle);
+  fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+  fake.state.nextError = "Нет соединения";
+  fireEvent.keyDown(handle, { key: "Space", code: "Space", keyCode: 32 });
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось сохранить изменения");
+  expect(fake.state.rpc).toHaveBeenCalledWith("reorder_program_days", {
+    _ids: ["День B", "День A"],
+  });
+  expect(fake.state.rows.program_days!.map((row) => row.position)).toEqual([0, 1]);
+  rectSpy.mockRestore();
 });
 
 it("creates and edits an exercise, then archives it from the compact row", async () => {
@@ -193,7 +259,7 @@ it("limits active days to seven, including restore", async () => {
   await screen.findByText("Можно иметь не более 7 активных дней.");
   expect(screen.getByRole("button", { name: "Добавить день" })).toBeDisabled();
   fireEvent.click(screen.getByText("Архив дней"));
-  expect(screen.getByRole("button", { name: "Восстановить день" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Восстановить день: Архивный" })).toBeDisabled();
 });
 
 it("keeps the input and displays a failed save instead of claiming success", async () => {
@@ -255,7 +321,7 @@ it("a late mutation reply from A cannot update B's form or repopulate A's cache"
   view.rerender(app("B"));
   await waitFor(() => expect(screen.getByLabelText("День для упражнений")).toHaveValue("День B"));
   await openDayManagement();
-  await screen.findByRole("form", { name: "День: День B" });
+  await screen.findByRole("group", { name: "День: День B" });
   fireEvent.change(screen.getByLabelText("Название нового дня"), {
     target: { value: "Черновик B" },
   });
