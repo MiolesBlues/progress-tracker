@@ -6,6 +6,7 @@ import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/li
 import { exercisePatch, nextPosition, programName } from "@/lib/program";
 import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -34,7 +35,11 @@ export function ProgramManager() {
   const active = days.filter((day) => !day.archived_at);
   const [selected, setSelected] = useState("");
   const [newDay, setNewDay] = useState("");
-  const [newExercise, setNewExercise] = useState("");
+  const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseSets, setNewExerciseSets] = useState("3");
+  const [newExerciseReps, setNewExerciseReps] = useState("");
+  const [newExerciseDayId, setNewExerciseDayId] = useState("");
+  const [addingExercise, setAddingExercise] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [managingDays, setManagingDays] = useState(false);
@@ -90,22 +95,69 @@ export function ProgramManager() {
   }
   async function addExercise(event: FormEvent) {
     event.preventDefault();
-    if (!selectedDay || selectedDay.archived_at) return;
-    if (
-      await run(() =>
-        supabase
-          .from("program_exercises")
-          .insert({
-            user_id: userId,
-            day_id: dayId,
-            name: programName(newExercise, 100),
-            position: nextPosition(exercises.filter((ex) => ex.day_id === dayId)),
-            target_sets: 3,
-          })
-          .abortSignal(signal),
-      )
-    )
-      setNewExercise("");
+    if (busy) return;
+    if (!newExerciseDayId) {
+      setError("Выберите активный тренировочный день перед добавлением упражнения.");
+      return;
+    }
+    const targetDay = days.find((day) => day.id === newExerciseDayId);
+    if (!targetDay || targetDay.archived_at) {
+      setError("Выбранный тренировочный день больше недоступен. Выберите активный день заново.");
+      return;
+    }
+    if (!newExerciseSets.trim() || !newExerciseReps.trim()) {
+      setError("Укажите число подходов и целевой диапазон повторений.");
+      return;
+    }
+    let values: ReturnType<typeof exercisePatch>;
+    try {
+      values = exercisePatch(
+        {
+          name: newExerciseName,
+          dayId: newExerciseDayId,
+          sets: newExerciseSets,
+          reps: newExerciseReps,
+          weight: "",
+        },
+        days,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Проверьте данные упражнения.");
+      return;
+    }
+    const targetSets = Number(newExerciseSets);
+    const targetReps = values.target_reps ?? null;
+    const name = programName(values.name ?? "", 100);
+    const ok = await run(async () => {
+      const dayLookup = supabase
+        .from("program_days")
+        .select("id, archived_at")
+        .eq("id", newExerciseDayId)
+        .eq("user_id", userId)
+        .abortSignal(signal);
+      const { data: latestDay, error: dayError } = await dayLookup.maybeSingle();
+      if (dayError) return { error: dayError };
+      if (!latestDay || latestDay.archived_at)
+        throw new Error("Выбранный тренировочный день больше недоступен. Упражнение не создано.");
+      return supabase
+        .from("program_exercises")
+        .insert({
+          user_id: userId,
+          day_id: newExerciseDayId,
+          name,
+          position: nextPosition(exercises.filter((ex) => ex.day_id === newExerciseDayId)),
+          target_sets: targetSets,
+          target_reps: targetReps,
+        })
+        .abortSignal(signal);
+    });
+    if (!ok) return;
+    setAddingExercise(false);
+    setNewExerciseName("");
+    setNewExerciseSets("3");
+    setNewExerciseReps("");
+    setNewExerciseDayId("");
+    toast.success("Упражнение добавлено");
   }
   const updateDay = (id: string, patch: { name?: string; archived_at?: string | null }) =>
     supabase
@@ -198,7 +250,7 @@ export function ProgramManager() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-extrabold">Программа</h1>
-      {error && !managingDays && (
+      {error && !managingDays && !addingExercise && (
         <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
           {error}
         </p>
@@ -317,7 +369,7 @@ export function ProgramManager() {
           aria-label="День для упражнений"
           className={selectCls}
           value={dayId}
-          disabled={busy || !days.length}
+          disabled={busy || !days.length || addingExercise}
           onChange={(event) => setSelected(event.target.value)}
         >
           {!days.length && <option value="">Добавьте день</option>}
@@ -349,20 +401,18 @@ export function ProgramManager() {
           <p className="text-sm text-muted-foreground">Упражнений пока нет.</p>
         )}
         {selectedDay && !selectedDay.archived_at && (
-          <form onSubmit={addExercise} className="flex gap-2">
-            <Input
-              aria-label="Название нового упражнения"
-              value={newExercise}
-              onChange={(event) => setNewExercise(event.target.value)}
-              maxLength={100}
-              placeholder="Новое упражнение"
-              className="h-12 min-w-0"
-              disabled={busy}
-            />
-            <Button type="submit" className="h-12 shrink-0" disabled={busy || !newExercise.trim()}>
-              Добавить упражнение
-            </Button>
-          </form>
+          <Button
+            type="button"
+            className="h-12 w-full"
+            disabled={busy || addingExercise}
+            onClick={() => {
+              setError("");
+              setNewExerciseDayId(dayId);
+              setAddingExercise(true);
+            }}
+          >
+            Добавить упражнение
+          </Button>
         )}
         {exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
           <details className="space-y-3">
@@ -410,6 +460,85 @@ export function ProgramManager() {
               }
             />
           )}
+        </SheetContent>
+      </Sheet>
+      <Sheet
+        open={addingExercise}
+        onOpenChange={(open) => {
+          if (!busy) setAddingExercise(open);
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:mx-auto sm:max-w-md"
+        >
+          <SheetHeader>
+            <SheetTitle>Добавить упражнение</SheetTitle>
+            <SheetDescription>
+              Упражнение будет добавлено в выбранный тренировочный день.
+            </SheetDescription>
+          </SheetHeader>
+          <form aria-label="Новое упражнение" onSubmit={addExercise} className="space-y-4 pt-3">
+            {error && (
+              <p
+                role="alert"
+                className="break-words rounded-xl border border-destructive p-3 text-sm"
+              >
+                {error}
+              </p>
+            )}
+            <label className="block space-y-1 text-sm">
+              Название упражнения
+              <Input
+                aria-label="Название упражнения"
+                value={newExerciseName}
+                onChange={(event) => setNewExerciseName(event.target.value)}
+                maxLength={100}
+                required
+                autoFocus
+                disabled={busy}
+                className="h-12"
+              />
+            </label>
+            <label className="block space-y-1 text-sm">
+              Количество подходов
+              <Input
+                aria-label="Количество подходов"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={20}
+                step={1}
+                value={newExerciseSets}
+                onChange={(event) => setNewExerciseSets(event.target.value)}
+                required
+                disabled={busy}
+                className="h-12"
+              />
+            </label>
+            <label className="block space-y-1 text-sm">
+              Целевой диапазон повторений
+              <Input
+                aria-label="Целевой диапазон повторений"
+                value={newExerciseReps}
+                onChange={(event) => setNewExerciseReps(event.target.value)}
+                placeholder="8–12"
+                maxLength={30}
+                required
+                disabled={busy}
+                className="h-12"
+              />
+            </label>
+            <Button
+              type="submit"
+              className="h-12 w-full"
+              disabled={
+                busy || !newExerciseName.trim() || !newExerciseSets || !newExerciseReps.trim()
+              }
+            >
+              Сохранить
+            </Button>
+          </form>
         </SheetContent>
       </Sheet>
     </div>
@@ -532,13 +661,13 @@ function ExerciseEditor({
   const [dayId, setDayId] = useState(ex.day_id ?? "");
   const [sets, setSets] = useState(String(ex.target_sets ?? ""));
   const [reps, setReps] = useState(ex.target_reps ?? "");
-  const [weight, setWeight] = useState(String(ex.working_weight ?? ""));
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(() => {
       if (dayId !== ex.day_id && dayId && days.find((day) => day.id === dayId)?.archived_at)
         throw new Error("Перенос возможен только в активный день");
-      const patch = exercisePatch({ name, dayId, sets, reps, weight }, days);
+      const patch = exercisePatch({ name, dayId, sets, reps, weight: "" }, days);
+      delete patch.working_weight;
       if (patch.day_id !== ex.day_id && patch.day_id) patch.position = positionFor(patch.day_id);
       return save(patch);
     });
@@ -574,18 +703,7 @@ function ExerciseEditor({
             ))}
         </select>
       </label>
-      <div className="grid grid-cols-3 gap-2">
-        <label className="space-y-1 text-xs">
-          Вес, кг
-          <Input
-            inputMode="decimal"
-            value={weight}
-            onChange={(event) => setWeight(event.target.value)}
-            disabled={busy}
-            className="h-12"
-            placeholder="—"
-          />
-        </label>
+      <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1 text-xs">
           Подходы
           <Input

@@ -10,12 +10,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { daysQuery } from "@/lib/queries";
 import { needsOnboarding } from "@/lib/workout";
-import { Dumbbell, ListChecks, LineChart, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { AccountBoundary, useUserSession } from "@/lib/session";
 import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { signOutSafely } from "@/lib/auth-actions";
+import { navigationTabs } from "@/lib/navigation";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -33,12 +34,6 @@ export const Route = createFileRoute("/_authenticated")({
   },
   component: Layout,
 });
-
-const tabs = [
-  { to: "/workout", label: "Тренировка", Icon: Dumbbell },
-  { to: "/program", label: "Программа", Icon: ListChecks },
-  { to: "/progress", label: "Прогресс", Icon: LineChart },
-] as const;
 
 function Layout() {
   const { userId } = Route.useRouteContext();
@@ -96,8 +91,8 @@ function SessionLayout() {
         )}
       </main>
       <nav className="safe-bottom fixed inset-x-0 bottom-0 border-t bg-background/90 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-md grid-cols-3">
-          {tabs.map(({ to, label, Icon }) => (
+        <div className="mx-auto grid max-w-md grid-cols-4">
+          {navigationTabs.map(({ to, label, Icon }) => (
             <Link
               key={to}
               to={to}

@@ -163,14 +163,42 @@ it("keeps the previous day order and displays an error when the reorder RPC fail
   rectSpy.mockRestore();
 });
 
-it("creates and edits an exercise, then archives it from the compact row", async () => {
+it("creates an exercise for the selected day and edits it without changing its working weight", async () => {
   fake.state.rows.program_days!.push(day("Второй", 1));
   mount();
-  await screen.findByLabelText("Название нового упражнения");
-  fireEvent.change(screen.getByLabelText("Название нового упражнения"), {
-    target: { value: "Жим" },
+  fireEvent.change(await screen.findByLabelText("День для упражнений"), {
+    target: { value: "Второй" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Добавить упражнение" }));
+  const createForm = await screen.findByRole("form", { name: "Новое упражнение" });
+  expect(screen.getByLabelText("День для упражнений")).toBeDisabled();
+  expect(within(createForm).getByLabelText("Название упражнения")).toBeInTheDocument();
+  expect(within(createForm).getByLabelText("Количество подходов")).toBeInTheDocument();
+  expect(within(createForm).getByLabelText("Целевой диапазон повторений")).toBeInTheDocument();
+  expect(within(createForm).queryByLabelText("Вес, кг")).not.toBeInTheDocument();
+  expect(within(createForm).queryByLabelText("Тренировочный день")).not.toBeInTheDocument();
+  fireEvent.change(within(createForm).getByLabelText("Название упражнения"), {
+    target: { value: "Жим" },
+  });
+  fireEvent.change(within(createForm).getByLabelText("Целевой диапазон повторений"), {
+    target: { value: "8–12" },
+  });
+  fireEvent.click(within(createForm).getByRole("button", { name: "Сохранить" }));
+  await waitFor(() =>
+    expect(fake.state.rows.program_exercises![0]).toMatchObject({
+      name: "Жим",
+      day_id: "Второй",
+      target_sets: 3,
+      target_reps: "8–12",
+    }),
+  );
+  expect(fake.state.calls.find((call) => call.operation === "insert")?.values).not.toHaveProperty(
+    "working_weight",
+  );
+  fake.state.rows.program_exercises![0]!["working_weight"] = 50;
+  await waitFor(() => expect(screen.queryByRole("form", { name: "Новое упражнение" })).toBeNull());
+  fireEvent.change(screen.getByLabelText("День для упражнений"), { target: { value: "Первый" } });
+  fireEvent.change(screen.getByLabelText("День для упражнений"), { target: { value: "Второй" } });
   const form =
     (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Жим" })),
     await screen.findByRole("form", { name: "Упражнение: Жим" }));
@@ -185,7 +213,7 @@ it("creates and edits an exercise, then archives it from the compact row", async
   fireEvent.change(within(form).getByLabelText("Тренировочный день"), {
     target: { value: "Второй" },
   });
-  fireEvent.change(within(form).getByLabelText("Вес, кг"), { target: { value: "52,5" } });
+  expect(within(form).queryByLabelText("Вес, кг")).not.toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText("Подходы"), { target: { value: "4" } });
   fireEvent.change(within(form).getByLabelText("Повторения"), { target: { value: "6–8" } });
   fireEvent.click(within(form).getByRole("button", { name: "Сохранить" }));
@@ -193,36 +221,46 @@ it("creates and edits an exercise, then archives it from the compact row", async
     expect(fake.state.rows.program_exercises![0]).toMatchObject({
       name: "Жим сидя",
       day_id: "Второй",
-      working_weight: 52.5,
       target_sets: 4,
       target_reps: "6–8",
     }),
   );
+  expect(fake.state.rows.program_exercises![0]?.["working_weight"]).toBe(50);
   await waitFor(() => expect(screen.queryByRole("form", { name: "Упражнение: Жим" })).toBeNull());
   await waitFor(() => expect(screen.getByLabelText("День для упражнений")).toBeEnabled());
   fireEvent.change(screen.getByLabelText("День для упражнений"), { target: { value: "Второй" } });
   expect(
     await screen.findByRole("button", { name: "Редактировать: Жим сидя" }),
   ).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Название нового упражнения"), {
-    target: { value: "Тяга" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Добавить упражнение" }));
-  const second =
-    (fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Тяга" })),
-    await screen.findByRole("form", { name: "Упражнение: Тяга" }));
-  expect(within(second).getAllByRole("button")).toHaveLength(1);
-  expect(within(second).getByRole("button", { name: "Сохранить" })).toHaveClass("bg-primary");
-  expect(within(second).queryByRole("button", { name: "В архив" })).not.toBeInTheDocument();
-  fireEvent.keyDown(document.body, { key: "Escape" });
-  await waitFor(() => expect(screen.queryByRole("form", { name: "Упражнение: Тяга" })).toBeNull());
-  fireEvent.click(screen.getByRole("button", { name: "В архив: Тяга" }));
+  fireEvent.click(screen.getByRole("button", { name: "В архив: Жим сидя" }));
   await waitFor(() =>
     expect(
-      fake.state.rows.program_exercises!.find((row) => row.id === "new-2")?.archived_at,
+      fake.state.rows.program_exercises!.find((row) => row.id === "new-1")?.archived_at,
     ).toEqual(expect.any(String)),
   );
+  expect(
+    fake.state.calls
+      .filter((call) => call.operation === "update")
+      .every((call) => !("working_weight" in call.values)),
+  ).toBe(true);
   expect(fake.state.calls.some((call) => "day" in call.values)).toBe(false);
+});
+
+it("keeps the creation form open when the captured day is archived before save", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Добавить упражнение" }));
+  const form = await screen.findByRole("form", { name: "Новое упражнение" });
+  fireEvent.change(within(form).getByLabelText("Название упражнения"), {
+    target: { value: "Тяга" },
+  });
+  fireEvent.change(within(form).getByLabelText("Целевой диапазон повторений"), {
+    target: { value: "8–10" },
+  });
+  fake.state.rows.program_days![0]!["archived_at"] = "2026-10-14T12:00:00Z";
+  fireEvent.click(within(form).getByRole("button", { name: "Сохранить" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("больше недоступен");
+  expect(screen.getByLabelText("Название упражнения")).toHaveValue("Тяга");
+  expect(fake.state.calls.some((call) => call.operation === "insert")).toBe(false);
 });
 
 it("shows NULL day_id without automatic backfill and assigns a day only on explicit save", async () => {
