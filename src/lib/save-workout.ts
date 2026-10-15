@@ -24,7 +24,7 @@ export async function saveWorkout(id: string, payload: WorkoutPayload, signal: A
     })
     .abortSignal(signal)
     .then(
-      (result) => result,
+      (result: { data: unknown; error: { message: string; code?: string } | null }) => result,
       () => {
         throw new SaveWorkoutError(
           "Результат сохранения не подтверждён. Повторите попытку: повтор не создаст вторую запись.",
