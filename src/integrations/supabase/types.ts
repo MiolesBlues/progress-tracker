@@ -166,27 +166,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      reorder_program_days: {
-        Args: { _ids: string[] }
-        Returns: undefined
-      }
-      reorder_program_exercises: {
-        Args: { _day_id: string; _ids: string[] }
-        Returns: undefined
-      }
-      save_workout_entry: {
-        Args: {
-          _day_id: string
-          _exercise_id: string
-          _id: string
-          _notes?: string | null
-          _performed_on: string
-          _reps: number[]
-          _rir?: number | null
-          _weight: number
-        }
-        Returns: string
-      }
       setup_program: {
         Args: { _names: string[]; _template?: string }
         Returns: undefined
