@@ -17,6 +17,10 @@ it("uses the requested English label for an entry without day information", () =
   expect(translate("en", "Без назначенного дня")).toBe("Unassigned day");
 });
 
+it("localizes the empty archived-exercises state", () => {
+  expect(translate("en", "Архивированных упражнений нет")).toBe("No archived exercises");
+});
+
 function Probe() {
   const { t, setLanguage } = useI18n();
   return (

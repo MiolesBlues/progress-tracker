@@ -98,6 +98,7 @@ export const english = {
   "Упражнений пока нет.": "No exercises yet.",
   "Добавить упражнение": "Add exercise",
   "Архив упражнений": "Archived exercises",
+  "Архивированных упражнений нет": "No archived exercises",
   "Упражнения без дня": "Exercises without a day",
   "Без назначенного дня · {count}": "Unassigned day · {count}",
   "Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История останется без изменений.":

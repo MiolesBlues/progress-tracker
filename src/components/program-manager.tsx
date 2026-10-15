@@ -63,11 +63,13 @@ export function ProgramManager() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [managingDays, setManagingDays] = useState(false);
+  const [archiveExpandedByUser, setArchiveExpandedByUser] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [exerciseError, setExerciseError] = useState("");
   const running = useRef(false);
   const selectedDay = active.find((day) => day.id === selected) ?? active[0];
   const dayId = selectedDay?.id ?? "";
+  const archiveExpanded = archiveExpandedByUser[userId] ?? false;
   const currentExercises = exercises.filter((ex) => ex.day_id === dayId && !ex.archived_at);
   const unassigned = exercises.filter((ex) => ex.day_id === null);
 
@@ -583,15 +585,36 @@ export function ProgramManager() {
             {t("Добавить упражнение")}
           </Button>
         )}
-        {exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
-          <details className="space-y-3">
-            <summary className="cursor-pointer py-2 font-bold">{t("Архив упражнений")}</summary>
-            {exercises
-              .filter((ex) => ex.day_id === dayId && ex.archived_at)
-              .map((ex) => (
-                <div key={ex.id}>{compactRow(ex)}</div>
-              ))}
-          </details>
+        {selectedDay && (
+          <section className="space-y-3">
+            <button
+              type="button"
+              aria-expanded={archiveExpanded}
+              className="w-full cursor-pointer py-2 text-left font-bold"
+              onClick={() =>
+                setArchiveExpandedByUser((openByUser) => ({
+                  ...openByUser,
+                  [userId]: !archiveExpanded,
+                }))
+              }
+            >
+              {t("Архив упражнений")}
+            </button>
+            {archiveExpanded && (
+              <div className="space-y-3">
+                {exercises
+                  .filter((ex) => ex.day_id === dayId && ex.archived_at)
+                  .map((ex) => (
+                    <div key={ex.id}>{compactRow(ex)}</div>
+                  ))}
+                {!exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
+                  <p className="text-sm text-muted-foreground">
+                    {t("Архивированных упражнений нет")}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
         )}
       </section>
 

@@ -465,6 +465,122 @@ it("B05 shows an empty state and preserves archive exercise management", async (
   expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
 });
 
+it("keeps the exercise archive open across days and restores each day's own archive", async () => {
+  fake.state.rows.program_days!.push(day("Ноги", 1));
+  fake.state.rows.program_exercises = [
+    { ...exercise("Архивный жим", "Первый"), archived_at: "2026-10-01" },
+    { ...exercise("Архивный присед", "Ноги"), archived_at: "2026-10-02" },
+  ];
+  mount();
+
+  const archiveToggle = await screen.findByRole("button", { name: "Архив упражнений" });
+  fireEvent.click(archiveToggle);
+  expect(archiveToggle).toHaveAttribute("aria-expanded", "true");
+  expect(await screen.findByRole("button", { name: "Редактировать: Архивный жим" })).toBeVisible();
+
+  await chooseProgramDay("Ноги");
+  expect(screen.getByRole("button", { name: "Архив упражнений" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  expect(
+    await screen.findByRole("button", { name: "Редактировать: Архивный присед" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Редактировать: Архивный жим" })).toBeNull();
+
+  await chooseProgramDay("Первый");
+  expect(await screen.findByRole("button", { name: "Редактировать: Архивный жим" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Редактировать: Архивный присед" })).toBeNull();
+});
+
+it("keeps the archive toggle open and shows an empty state for a day without archived exercises", async () => {
+  fake.state.rows.program_days!.push(day("Ноги", 1));
+  fake.state.rows.program_exercises = [
+    { ...exercise("Архивный жим", "Первый"), archived_at: "2026-10-01" },
+  ];
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архив упражнений" }));
+  await screen.findByRole("button", { name: "Редактировать: Архивный жим" });
+
+  await chooseProgramDay("Ноги");
+  expect(screen.getByRole("button", { name: "Архив упражнений" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  expect(await screen.findByText("Архивированных упражнений нет")).toBeVisible();
+});
+
+it("keeps an explicitly closed archive closed when changing days", async () => {
+  fake.state.rows.program_days!.push(day("Ноги", 1));
+  fake.state.rows.program_exercises = [
+    { ...exercise("Архивный жим", "Первый"), archived_at: "2026-10-01" },
+  ];
+  mount();
+  const archiveToggle = await screen.findByRole("button", { name: "Архив упражнений" });
+  fireEvent.click(archiveToggle);
+  expect(archiveToggle).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(archiveToggle);
+  expect(archiveToggle).toHaveAttribute("aria-expanded", "false");
+
+  await chooseProgramDay("Ноги");
+  expect(screen.getByRole("button", { name: "Архив упражнений" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  expect(screen.queryByText("Архивированных упражнений нет")).toBeNull();
+});
+
+it("updates the open archive after restoring and archiving an exercise", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Архивный жим", "Первый"), archived_at: "2026-10-01" },
+  ];
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архив упражнений" }));
+  const restore = await screen.findByRole("button", { name: "Восстановить: Архивный жим" });
+  fireEvent.click(restore);
+  expect(await screen.findByText("Архивированных упражнений нет")).toBeVisible();
+  const archive = await screen.findByRole("button", { name: "В архив: Архивный жим" });
+  fireEvent.click(archive);
+  expect(await screen.findByRole("button", { name: "Восстановить: Архивный жим" })).toBeVisible();
+});
+
+it("isolates archive visibility and exercises when switching accounts", async () => {
+  fake.state.rows.program_days = [day("День A"), { ...day("День B"), user_id: "B" }];
+  fake.state.rows.program_exercises = [
+    { ...exercise("Архив A", "День A"), archived_at: "2026-10-01" },
+    { ...exercise("Архив B", "День B"), user_id: "B", archived_at: "2026-10-01" },
+  ];
+  const app = (userId: string) => (
+    <QueryClientProvider client={qc}>
+      <SessionProvider onIdentityChange={vi.fn()}>
+        <AccountBoundary verifiedUserId={userId}>
+          <ProgramManager />
+        </AccountBoundary>
+      </SessionProvider>
+    </QueryClientProvider>
+  );
+  const view = render(app("A"));
+  act(() => authEvent("SIGNED_IN", "A"));
+  fireEvent.click(await screen.findByRole("button", { name: "Архив упражнений" }));
+  expect(await screen.findByRole("button", { name: "Редактировать: Архив A" })).toBeVisible();
+
+  act(() => authEvent("SIGNED_IN", "B"));
+  view.rerender(app("B"));
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "День для упражнений" })).toHaveTextContent(
+      "День B",
+    ),
+  );
+  expect(screen.getByRole("button", { name: "Архив упражнений" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  expect(screen.queryByRole("button", { name: "Редактировать: Архив A" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Архив упражнений" }));
+  expect(await screen.findByRole("button", { name: "Редактировать: Архив B" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Редактировать: Архив A" })).toBeNull();
+});
+
 it("B06 displays validation and network errors inside the editor, preserving input", async () => {
   fake.state.rows.program_exercises = [exercise("Жим", "Первый")];
   mount();
