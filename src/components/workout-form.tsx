@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
@@ -8,6 +8,8 @@ import { prefillFor } from "@/lib/workout";
 import { MAX_SETS, validateWorkout, type WorkoutFields } from "@/lib/workout-input";
 import {
   newDraft,
+  hasDraftInput,
+  draftKey,
   readDraft,
   removeSavedDraft,
   writeDraft,
@@ -48,13 +50,21 @@ export function WorkoutForm({
   };
   const [initial] = useState(() => {
     try {
+      const latest = readDraft(userId, exercise.id);
+      const matching = readDraft(userId, exercise.id, initialDate);
       return {
-        draft: readDraft(userId, exercise.id) ?? newDraft(userId, exercise.id, defaults()),
+        draft:
+          matching && hasDraftInput(matching)
+            ? matching
+            : newDraft(userId, exercise.id, defaults()),
+        other:
+          latest && latest.fields.date !== initialDate && hasDraftInput(latest) ? latest : null,
         error: "",
       };
     } catch {
       return {
         draft: newDraft(userId, exercise.id, defaults()),
+        other: null,
         error: "Не удалось прочитать черновик. Сохранённые данные не изменены.",
       };
     }
@@ -67,20 +77,18 @@ export function WorkoutForm({
   const [saving, setSaving] = useState(false);
   const submitting = useRef(false);
   const mounted = useRef(true);
-  const appliedLastKey = useRef("");
-  const lastEntryKey = JSON.stringify([userId, exercise.id, draft.fields.date]);
-  const lastResult = useQuery(lastEntryQuery(userId, exercise.id, draft.fields.date));
+  const historyDate = draft.fields.date;
+  const lastResult = useQuery(lastEntryQuery(userId, exercise.id, historyDate));
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
-  useEffect(() => onDateChange(draft.fields.date), [draft.fields.date, onDateChange]);
-
-  function commit(next: WorkoutDraft) {
+  const commit = useCallback((next: WorkoutDraft, persist = true) => {
     draftRef.current = next;
     setDraft(next);
+    if (!persist) return;
     try {
       writeDraft(next);
       setStorageError("");
@@ -89,34 +97,70 @@ export function WorkoutForm({
         "Черновик не сохранён на устройстве. Проверьте доступ к хранилищу и повторите сохранение.",
       );
     }
-  }
+  }, []);
   useEffect(() => {
-    if (appliedLastKey.current === lastEntryKey || !lastResult.isSuccess || blocked) return;
-    appliedLastKey.current = lastEntryKey;
+    if (
+      !lastResult.isFetchedAfterMount ||
+      !lastResult.isSuccess ||
+      lastResult.isFetching ||
+      blocked ||
+      signal.aborted
+    )
+      return;
     const current = draftRef.current;
-    if (current.operation) return;
+    if (current.operation || current.fields.date !== historyDate) return;
     const prefill = prefillFor(exercise, lastResult.data);
     const rir = lastResult.data?.rir;
-    commit({
-      ...current,
-      fields: {
-        ...current.fields,
-        weight: current.dirty.weight ? current.fields.weight : prefill.weight,
-        reps: current.dirty.reps ? current.fields.reps : prefill.reps,
-        rir: current.dirty.rir ? current.fields.rir : rir == null ? "" : String(Number(rir)),
+    commit(
+      {
+        ...current,
+        fields: {
+          ...current.fields,
+          weight: current.dirty.weight ? current.fields.weight : prefill.weight,
+          reps: current.dirty.reps ? current.fields.reps : prefill.reps,
+          rir: current.dirty.rir ? current.fields.rir : rir == null ? "" : String(Number(rir)),
+        },
       },
-    });
-    // A response only applies to its user/exercise/date key and never replaces edited fields.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastEntryKey, lastResult.isSuccess, lastResult.data, blocked]);
+      hasDraftInput(current),
+    );
+  }, [
+    lastResult.isFetchedAfterMount,
+    lastResult.isSuccess,
+    lastResult.isFetching,
+    lastResult.data,
+    exercise,
+    historyDate,
+    blocked,
+    signal,
+    commit,
+  ]);
 
   function change<K extends keyof WorkoutFields>(key: K, value: WorkoutFields[K]) {
     if (draftRef.current.operation || blocked) return;
+    const current = draftRef.current;
+    const fields = { ...current.fields, [key]: value };
+    if (key === "date") {
+      try {
+        const restored = readDraft(userId, exercise.id, fields.date);
+        if (restored && hasDraftInput(restored)) {
+          commit(restored);
+          onDateChange(fields.date);
+          return;
+        }
+      } catch {
+        setStorageError(
+          "Не удалось прочитать черновик выбранной даты. Сохранённые данные не изменены.",
+        );
+        return;
+      }
+    }
     commit({
-      ...draftRef.current,
-      fields: { ...draftRef.current.fields, [key]: value },
-      dirty: { ...draftRef.current.dirty, [key]: true },
+      // A different date is a different operation; the previous date's draft is retained.
+      ...(key === "date" ? newDraft(userId, exercise.id, fields) : current),
+      fields,
+      dirty: { ...current.dirty, [key]: true },
     });
+    if (key === "date") onDateChange(fields.date);
   }
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -143,13 +187,16 @@ export function WorkoutForm({
       setDraft(pending);
       await saveWorkout(operation.id, operation.payload, signal);
       try {
-        removeSavedDraft(userId, exercise.id, operation.id);
+        removeSavedDraft(userId, exercise.id, operation.id, operation.payload.performed_on);
       } catch {
         if (mounted.current && isCurrent())
           setStorageError(
             "Запись сохранена, но локальный черновик удалить не удалось. Повтор той же операции безопасен.",
           );
       }
+      if (!isCurrent()) return;
+      // Cancel a pre-save read before invalidating: its late response must not re-seed stale history.
+      await qc.cancelQueries({ queryKey: userKeys.lastEntry(userId, exercise.id) });
       if (!isCurrent()) return;
       toast.success("Ваша тренировка сохранена", {
         id: "workout-saved",
@@ -159,7 +206,7 @@ export function WorkoutForm({
       });
       void qc.invalidateQueries({ queryKey: userKeys.entries(userId, exercise.id) });
       void qc.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exercise.id) });
-      if (mounted.current) {
+      if (mounted.current && draftRef.current.id === operation.id) {
         const advanced = onSaved(exercise.id, dayId, operation.payload.performed_on);
         if (!advanced && mounted.current) {
           commit(
@@ -206,6 +253,21 @@ export function WorkoutForm({
           {storageError}
         </p>
       )}
+      {initial.other && initial.other.fields.date !== draft.fields.date && (
+        <div role="status" className="space-y-2 text-sm text-muted-foreground">
+          <p>Есть незавершённый черновик за {initial.other.fields.date}. Текущая дата сохранена.</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={() => {
+              if (initial.other) change("date", initial.other.fields.date);
+            }}
+          >
+            Открыть черновик за {initial.other.fields.date}
+          </Button>
+        </div>
+      )}
       {blocked && (
         <Button
           type="button"
@@ -219,6 +281,8 @@ export function WorkoutForm({
               return;
             const fresh = newDraft(userId, exercise.id, defaults());
             try {
+              localStorage.removeItem(draftKey(userId, exercise.id));
+              localStorage.removeItem(draftKey(userId, exercise.id, initialDate));
               writeDraft(fresh);
               setBlocked(false);
               commit(fresh);
@@ -230,14 +294,16 @@ export function WorkoutForm({
           Начать новый черновик
         </Button>
       )}
-      {lastResult.isPending && <Loading>Загрузка предыдущей тренировки…</Loading>}
+      {(lastResult.isPending || (!lastResult.isFetchedAfterMount && lastResult.isFetching)) && (
+        <Loading>Загрузка предыдущей тренировки…</Loading>
+      )}
       {lastResult.isError && (
         <LoadError onRetry={() => void lastResult.refetch()}>
           Не удалось загрузить предыдущую тренировку. Введённые значения сохранены; можно повторить
           загрузку или заполнить форму вручную.
         </LoadError>
       )}
-      {lastResult.isSuccess && (
+      {lastResult.isSuccess && lastResult.isFetchedAfterMount && !lastResult.isFetching && (
         <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-snug text-muted-foreground">
           {plan && <span>План {plan}</span>}
           {plan && <span aria-hidden="true">·</span>}

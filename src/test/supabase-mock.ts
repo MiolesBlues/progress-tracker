@@ -31,6 +31,7 @@ const fake = vi.hoisted(() => {
       signal?: AbortSignal;
     }[],
     authChange: null as ((event: string, session: { user: { id: string } } | null) => void) | null,
+    userId: null as string | null,
     nextError: null as string | null,
     readErrors: {} as Record<string, string>,
     delaySelect: null as { table: string; filters: Row; promise: Promise<Response> } | null,
@@ -206,19 +207,34 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 export function authEvent(event: string, userId: string | null) {
+  fake.state.userId = userId;
   fake.state.authChange?.(event, userId ? { user: { id: userId } } : null);
 }
 export function resetFake() {
+  fake.state.userId = null;
   for (const key of Object.keys(fake.state.rows)) fake.state.rows[key] = [];
   fake.state.calls.length = 0;
   fake.state.nextError = null;
   fake.state.readErrors = {};
   fake.state.delaySelect = null;
   fake.state.saveRpc.mockReset();
-  fake.state.saveRpc.mockImplementation(async (args) => ({
-    data: String(args["_id"]),
-    error: null,
-  }));
+  fake.state.saveRpc.mockImplementation(async (args) => {
+    const id = String(args["_id"]);
+    if (!fake.state.rows.workout_entries.some((row) => row.id === id)) {
+      fake.state.rows.workout_entries.push({
+        id,
+        user_id: fake.state.userId ?? "",
+        exercise_id: args["_exercise_id"],
+        performed_on: args["_performed_on"],
+        created_at: new Date().toISOString(),
+        weight: args["_weight"],
+        reps: args["_reps"],
+        rir: args["_rir"],
+        notes: args["_notes"],
+      });
+    }
+    return { data: id, error: null };
+  });
   fake.state.delayMutation = null;
   fake.state.sequence = 0;
   fake.state.maxRows = Infinity;

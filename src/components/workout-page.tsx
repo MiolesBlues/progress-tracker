@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { daysQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { toISO } from "@/lib/workout";
+import { isWorkoutDate } from "@/lib/workout-input";
 import { WorkoutForm } from "@/components/workout-form";
 import { Loading, LoadError } from "@/components/query-feedback";
 import {
@@ -50,7 +51,16 @@ export function WorkoutPage() {
     }
     return { dayId: "", exerciseId: "" };
   });
-  const [workoutDate, setWorkoutDate] = useState(() => toISO(new Date()));
+  const dateKey = `workout:date:v1:${userId}`;
+  const [workoutDate, setWorkoutDate] = useState(() => {
+    try {
+      const saved = localStorage.getItem(dateKey);
+      if (saved && isWorkoutDate(saved)) return saved;
+    } catch {
+      /* Date persistence is optional; exercise drafts remain separate. */
+    }
+    return toISO(new Date());
+  });
   const [completedDay, setCompletedDay] = useState<{ dayId: string; date: string } | null>(null);
   const [savedExercises, setSavedExercises] = useState<Record<string, string[]>>({});
   const days = useMemo(
@@ -104,7 +114,6 @@ export function WorkoutPage() {
     }
   }
   function afterSaved(exerciseId: string, dayId: string, date: string) {
-    setWorkoutDate(date);
     const selectedExerciseId = selection.exerciseId || exercises[0]?.id;
     if (selection.dayId !== dayId || selectedExerciseId !== exerciseId) return false;
     const sessionKey = `${dayId}:${date}`;
@@ -130,6 +139,14 @@ export function WorkoutPage() {
     if (exercises.every((exercise) => completedIds.has(exercise.id)))
       setCompletedDay({ dayId, date });
     return false;
+  }
+  function changeDate(date: string) {
+    setWorkoutDate(date);
+    try {
+      if (isWorkoutDate(date)) localStorage.setItem(dateKey, date);
+    } catch {
+      /* The current session keeps its date even if optional persistence is unavailable. */
+    }
   }
   if (programResult.isError || daysResult.isError)
     return (
@@ -232,7 +249,7 @@ export function WorkoutPage() {
             exercise={current}
             dayId={day.id}
             initialDate={workoutDate}
-            onDateChange={setWorkoutDate}
+            onDateChange={changeDate}
             onSaved={afterSaved}
           />
         </>

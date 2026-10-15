@@ -19,6 +19,16 @@ export type WorkoutPayload = {
   notes: string | null;
 };
 
+export function isWorkoutDate(value: string): boolean {
+  const date = new Date(`${value}T12:00:00Z`);
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number(value.slice(0, 4)) >= 1 &&
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  );
+}
+
 export function decimal(value: string, label: string, max: number, places: number): number {
   const text = value.trim();
   if (!text) throw new Error(`Заполните поле «${label}». Пустое значение не равно нулю.`);
@@ -56,14 +66,7 @@ export function validateWorkout(
     return number;
   });
   const rir = fields.rir.trim() ? decimal(fields.rir, "RIR", 10, 1) : null;
-  const date = new Date(`${fields.date}T12:00:00Z`);
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(fields.date) ||
-    Number(fields.date.slice(0, 4)) < 1 ||
-    !Number.isFinite(date.getTime()) ||
-    date.toISOString().slice(0, 10) !== fields.date
-  )
-    throw new Error("Укажите существующую дату тренировки.");
+  if (!isWorkoutDate(fields.date)) throw new Error("Укажите существующую дату тренировки.");
   if (fields.notes.length > 1000) throw new Error("Заметка: не более 1000 символов.");
   return {
     exercise_id: exerciseId,

@@ -8,7 +8,9 @@ import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { WorkoutPage } from "@/components/workout-page";
 import { ProgramManager } from "@/components/program-manager";
 import { ProgressPage } from "@/components/progress-page";
-import { draftKey, readDraft } from "@/lib/workout-draft";
+import { draftKey, newDraft, readDraft, writeDraft } from "@/lib/workout-draft";
+import { userKeys } from "@/lib/queries";
+import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
 
 vi.mock("@tanstack/react-router", async (original) => ({
@@ -277,6 +279,16 @@ it("refreshes the suggested weight for the selected date and ignores future hist
   await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30"));
   fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
   await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50"));
+});
+it("preserves the native date input and its focus while changing session dates", async () => {
+  mount();
+  await ready();
+  const input = screen.getByLabelText("Дата");
+  input.focus();
+  fireEvent.change(input, { target: { value: "2026-10-13" } });
+  await ready();
+  expect(screen.getByLabelText("Дата")).toBe(input);
+  expect(input).toHaveFocus();
 });
 it.each([
   ["0", 0],
@@ -784,4 +796,212 @@ it("a late save for A does not clear B's persisted draft", async () => {
   expect(readDraft(B, exB)?.fields.notes).toBe("Черновик B");
   expect(screen.getByLabelText("Заметки")).toHaveValue("Черновик B");
   expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
+});
+
+it("verifies cached last-entry again and applies the newer response to a pristine form", async () => {
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await screen.findByText("Загрузка предыдущей тренировки…");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30");
+  await act(async () => {
+    resolve({ data: { ...last(EX, 55), reps: [9, 9, 8], rir: 2 }, error: null });
+  });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("55"));
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(3);
+  expect(screen.getByLabelText("Подход 3")).toHaveValue("8");
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
+  // Background refreshes of the same key also update untouched fields.
+  fake.state.rows.workout_entries[0]!["weight"] = 57.5;
+  await act(async () => {
+    await qc.invalidateQueries({ queryKey: userKeys.lastEntry(A, EX) });
+  });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("57.5"));
+});
+
+it("a fresh cached-key response cannot replace fields edited while it was loading", async () => {
+  mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "72,5" } });
+  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
+  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "3" } });
+  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Мой ввод" } });
+  await act(async () => {
+    resolve({ data: { ...last(EX, 55), reps: [9, 9, 8], rir: 2 }, error: null });
+  });
+  await ready();
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
+  expect(screen.getByLabelText("Подход 4")).toHaveValue("7");
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("3");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Мой ввод");
+});
+
+it("cancels pre-save history and reopening uses the newly confirmed fourth rep", async () => {
+  mount();
+  await ready();
+  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  act(() => {
+    void qc.invalidateQueries({ queryKey: userKeys.lastEntry(A, EX) });
+  });
+  await waitFor(() => expect(fake.state.delaySelect).toBeNull());
+  const staleRequest = fake.state.calls.filter((call) => call.table === "workout_entries").at(-1)!;
+  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
+  submit();
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(staleRequest.signal?.aborted).toBe(true);
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await waitFor(() => expect(screen.getByLabelText("Подход 4")).toHaveValue("7"));
+  await act(async () => {
+    resolve({ data: last(EX, 99), error: null });
+  });
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50");
+  expect(screen.getByLabelText("Подход 4")).toHaveValue("7");
+  expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the session date on auto-advance past a pristine draft of another date", async () => {
+  writeDraft(
+    newDraft(A, EX2, { date: "2026-10-01", weight: "99", reps: ["1"], rir: "9", notes: "" }),
+  );
+  const view = mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
+  await ready();
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await ready();
+  fake.state.rows.workout_entries[1]!["weight"] = 65;
+  fake.state.rows.workout_entries[1]!["reps"] = [10, 9];
+  fake.state.rows.workout_entries[1]!["rir"] = 3;
+  submit();
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("65"));
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
+  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(2);
+  expect(screen.getByLabelText("Подход 2")).toHaveValue("9");
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("3");
+  expect(screen.queryByRole("button", { name: /Открыть черновик/ })).not.toBeInTheDocument();
+  view.unmount();
+  mount();
+  await ready();
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
+});
+
+it.each([false, true])(
+  "restores an older edited draft explicitly, preserving both dates and pending=%s",
+  async (pending) => {
+    const old = newDraft(A, EX2, {
+      date: "2026-10-01",
+      weight: "22,5",
+      reps: ["5", "4"],
+      rir: "3",
+      notes: "Старый ввод",
+    });
+    old.dirty = { date: true, weight: true, reps: true, rir: true, notes: true };
+    if (pending) old.operation = { id: old.id, payload: validateWorkout(old.fields, EX2, DAY) };
+    writeDraft(old);
+    mount();
+    await ready();
+    fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
+    await ready();
+    submit();
+    await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+    await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
+    expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
+    fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Новый ввод" } });
+    const current = readDraft(A, EX2)!;
+    expect(current.id).not.toBe(old.id);
+    expect(readDraft(A, EX2, "2026-10-01")).toEqual(old);
+    fireEvent.click(screen.getByRole("button", { name: "Открыть черновик за 2026-10-01" }));
+    expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-01");
+    expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("22,5");
+    expect(screen.getByLabelText("Подход 2")).toHaveValue("4");
+    expect(screen.getByLabelText("Заметки")).toHaveValue("Старый ввод");
+    if (pending) {
+      expect(screen.getByLabelText("Рабочий вес, кг")).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
+      await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
+      expect(fake.state.saveRpc.mock.calls[1]![0]).toMatchObject({
+        _id: old.id,
+        _performed_on: "2026-10-01",
+        _weight: 22.5,
+        _reps: [5, 4],
+      });
+    } else {
+      fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
+      expect(screen.getByLabelText("Заметки")).toHaveValue("Новый ввод");
+      expect(readDraft(A, EX2)?.id).toBe(current.id);
+    }
+    expect(readDraft(A, EX2, "2026-10-15")?.fields.notes).toBe("Новый ввод");
+  },
+);
+
+it("rapidly switching A's exercises and then accounts ignores a late cached-key response", async () => {
+  fake.state.rows.program_days.push({
+    id: DAY_B,
+    user_id: B,
+    name: "День B",
+    position: 0,
+    archived_at: null,
+  });
+  fake.state.rows.program_exercises.push({ ...exercise(EX, B), day_id: DAY_B });
+  fake.state.rows.workout_entries.push({ ...last(EX, 80, B), reps: [12, 11], rir: 4 });
+  const view = mount();
+  await ready();
+  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
+  await ready();
+  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { user_id: A, exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
+  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
+  await waitFor(() => expect(fake.state.delaySelect).toBeNull());
+  act(() => authEvent("SIGNED_IN", B));
+  view.rerender(tree(<WorkoutPage />, B));
+  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80"));
+  const dateB = (screen.getByLabelText("Дата") as HTMLInputElement).value;
+  expect(dateB).not.toBe("2026-10-13");
+  fireEvent.change(screen.getByLabelText("Подход 2"), { target: { value: "13" } });
+  await act(async () => {
+    resolve({ data: last(EX, 99, A), error: null });
+  });
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80");
+  expect(screen.getByLabelText("Подход 2")).toHaveValue("13");
+  expect(screen.getByLabelText("Дата")).toHaveValue(dateB);
+  expect(qc.getQueriesData({ queryKey: userKeys.all(A) })).toHaveLength(0);
 });

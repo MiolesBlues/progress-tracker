@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { loadAllPages } from "./pagination";
 import { toISO } from "./workout";
 import type { HistoryEntry } from "./analytics";
-import { MAX_SETS, MAX_WEIGHT, MAX_REPS } from "./workout-input";
+import { MAX_SETS, MAX_WEIGHT, MAX_REPS, isWorkoutDate } from "./workout-input";
 
 export type Day = { id: string; name: string; position: number; archived_at: string | null };
 
@@ -137,7 +137,10 @@ export const lastEntryQuery = (
 ) =>
   queryOptions({
     queryKey: [...userKeys.lastEntry(userId, exerciseId), onOrBefore],
-    enabled: !!exerciseId,
+    enabled: !!exerciseId && isWorkoutDate(onOrBefore),
+    // A form selection must verify history even if its cached preview was previously successful.
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
