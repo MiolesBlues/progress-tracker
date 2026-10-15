@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
 import { useI18n } from "@/lib/i18n";
-import { SettingsDialog } from "@/components/settings-dialog";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,9 +39,6 @@ function Index() {
 
   return (
     <main className="safe-top mx-auto flex min-h-dvh max-w-md flex-col justify-between px-6 pb-10">
-      <div className="absolute right-5 top-[calc(env(safe-area-inset-top)+0.5rem)]">
-        <SettingsDialog disabled={!ready} />
-      </div>
       <div className="pt-16">
         <img src="/apple-touch-icon.png" alt="" width={56} height={56} className="rounded-2xl" />
         <h1 className="mt-8 text-4xl font-extrabold leading-tight tracking-tight">

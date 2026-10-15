@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
 import { useI18n, translateKnown, rememberSignupLanguage } from "@/lib/i18n";
-import { SettingsDialog } from "@/components/settings-dialog";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -122,9 +121,6 @@ function AuthPage() {
 
   return (
     <main className="safe-top mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col justify-center px-6 py-8">
-      <div className="absolute right-5 top-[calc(env(safe-area-inset-top)+0.5rem)]">
-        <SettingsDialog disabled={!ready} />
-      </div>
       <h1 className="text-3xl font-extrabold tracking-tight">
         {mode === "in" ? t("С возвращением!") : t("Создать аккаунт")}
       </h1>
