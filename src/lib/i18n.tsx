@@ -99,7 +99,7 @@ export const english = {
   "Добавить упражнение": "Add exercise",
   "Архив упражнений": "Archived exercises",
   "Упражнения без дня": "Exercises without a day",
-  "Без назначенного дня · {count}": "No assigned day · {count}",
+  "Без назначенного дня · {count}": "Unassigned day · {count}",
   "Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История останется без изменений.":
     "These exercises have no assigned day. Choose a day and save. Their history will stay unchanged.",
   "Редактирование упражнения": "Edit exercise",
@@ -245,7 +245,7 @@ export const english = {
   "Страницы записей": "Entry pages",
   "Страница {page} из {pages}": "Page {page} of {pages}",
   "Нет активных дней": "No active days",
-  "Без назначенного дня": "No assigned day",
+  "Без назначенного дня": "Unassigned day",
   "Без названия дня": "Unnamed day",
   " (архив)": " (archived)",
   "Страница не найдена.": "Page not found.",

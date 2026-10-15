@@ -5,6 +5,7 @@ import { fake, resetFake } from "@/test/supabase-mock";
 import { toISO } from "@/lib/workout";
 import { EntriesPage } from "./entries-page";
 import { navigationTabs } from "@/lib/navigation";
+import { userKeys, type Day } from "@/lib/queries";
 
 vi.mock("@/lib/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/session")>()),
@@ -32,6 +33,7 @@ function entry(id: string, date: string, weight: number, reps: number[]) {
     reps,
     rir: 2,
     notes: id === "today" ? "Хорошее самочувствие" : null,
+    day_id: "day-1",
     day_name: "Верх тела",
   };
 }
@@ -74,7 +76,12 @@ beforeEach(() => {
     entry("week", dateDaysAgo(5), 45, [8, 8]),
     entry("month", dateDaysAgo(20), 40, [10]),
     entry("old", dateDaysAgo(45), 35, [12]),
-    { ...entry("squat-entry", dateDaysAgo(0), 80, [5]), exercise_id: "squat", day_name: "Ноги" },
+    {
+      ...entry("squat-entry", dateDaysAgo(0), 80, [5]),
+      exercise_id: "squat",
+      day_id: "day-2",
+      day_name: "Ноги",
+    },
   ];
 });
 afterEach(() => {
@@ -102,6 +109,111 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "day-2" } });
   await waitFor(() => expect(screen.getByLabelText("Упражнение записей")).toHaveValue("squat"));
   expect(await screen.findByText("80 кг · 5")).toBeInTheDocument();
+});
+
+it("uses the current day name immediately after rename without changing historical snapshots", async () => {
+  fake.state.rows.program_days![0]!["name"] = "Upper 1";
+  fake.state.rows.workout_entries = [
+    { ...entry("old-1", dateDaysAgo(0), 50, [8]), day_name: "Upper 1" },
+    { ...entry("old-2", dateDaysAgo(5), 45, [7]), day_name: "Upper 1" },
+  ];
+  const persisted = structuredClone(fake.state.rows.workout_entries);
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Upper 1`)).toBeVisible();
+  fake.state.rows.program_days![0]!["name"] = "Push";
+  act(() =>
+    qc.setQueryData<Day[]>(userKeys.days("A"), (old) =>
+      old?.map((day) => (day.id === "day-1" ? { ...day, name: "Push" } : day)),
+    ),
+  );
+  expect(await screen.findByRole("option", { name: "Push" })).toHaveValue("day-1");
+  fireEvent.click(within(diary).getByRole("button", { name: "Всё время" }));
+  expect(within(diary).getAllByText(/ · Push$/)).toHaveLength(2);
+  expect(within(diary).queryByText(/ · Upper 1$/)).toBeNull();
+  expect(fake.state.rows.workout_entries!.map((row) => row["day_name"])).toEqual([
+    "Upper 1",
+    "Upper 1",
+  ]);
+  expect(fake.state.rows.workout_entries).toEqual(persisted);
+  expect(screen.getAllByRole("option", { name: "Push" })).toHaveLength(1);
+});
+
+it("shows a renamed day for an archived exercise when archive visibility is enabled", async () => {
+  localStorage.setItem("app:archive-settings:v1:A", "2");
+  fake.state.rows.program_days![0]!["name"] = "Push";
+  fake.state.rows.program_exercises![0]!.archived_at = "2026-10-01";
+  fake.state.rows.workout_entries = [
+    { ...entry("archived", dateDaysAgo(0), 50, [8]), day_name: "Upper 1" },
+  ];
+  mount();
+  expect(await screen.findByRole("option", { name: "Жим лёжа (архив)" })).toBeInTheDocument();
+  expect(await screen.findByText(`${displayedDate(dateDaysAgo(0))} · Push`)).toBeInTheDocument();
+  expect(fake.state.rows.workout_entries![0]!["day_name"]).toBe("Upper 1");
+});
+
+it("uses each entry's historical day UUID after an exercise moves", async () => {
+  fake.state.rows.program_days![0]!["name"] = "Push";
+  fake.state.rows.program_exercises![0]!.day_id = "day-2";
+  fake.state.rows.workout_entries = [
+    { ...entry("before-move", dateDaysAgo(0), 50, [8]), day_name: "Upper 1" },
+    { ...entry("after-move", dateDaysAgo(0), 52, [7]), day_id: "day-2", day_name: "Ноги" },
+  ];
+  mount();
+  fireEvent.change(await screen.findByLabelText("День записей"), {
+    target: { value: "day-2" },
+  });
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Push`)).toBeInTheDocument();
+  expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Ноги`)).toBeInTheDocument();
+  expect(fake.state.rows.workout_entries!.map((row) => row["day_id"])).toEqual(["day-1", "day-2"]);
+});
+
+it("uses a deleted day's snapshot and localizes a fully unassigned entry", async () => {
+  localStorage.setItem("app:archive-settings:v1:A", "2");
+  fake.state.rows.program_days = [];
+  fake.state.rows.program_exercises![0]!.day_id = null;
+  fake.state.rows.workout_entries = [
+    {
+      ...entry("deleted-day", dateDaysAgo(0), 50, [8]),
+      day_id: "deleted-day-id",
+      day_name: "Upper 1",
+    },
+    { ...entry("unknown-day", dateDaysAgo(0), 45, [7]), day_id: null, day_name: null },
+  ];
+  mount();
+  fireEvent.change(await screen.findByLabelText("День записей"), {
+    target: { value: "unassigned" },
+  });
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Upper 1`)).toBeVisible();
+  expect(
+    within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Без назначенного дня`),
+  ).toBeVisible();
+});
+
+it("keeps different day UUIDs separate even when their names match", async () => {
+  fake.state.rows.program_days![0]!["name"] = "Push";
+  fake.state.rows.program_days![1]!["name"] = "Push";
+  fake.state.rows.workout_entries = [
+    { ...entry("first-day", dateDaysAgo(0), 50, [8]), day_name: "Old first" },
+    {
+      ...entry("second-day", dateDaysAgo(0), 80, [5]),
+      exercise_id: "squat",
+      day_id: "day-2",
+      day_name: "Old second",
+    },
+  ];
+  mount();
+  const daySelector = await screen.findByLabelText("День записей");
+  expect(
+    screen.getAllByRole("option", { name: "Push" }).map((option) => option.getAttribute("value")),
+  ).toEqual(["day-1", "day-2"]);
+  expect(await screen.findByText("50 кг · 8")).toBeInTheDocument();
+  expect(screen.queryByText("80 кг · 5")).toBeNull();
+  fireEvent.change(daySelector, { target: { value: "day-2" } });
+  expect(await screen.findByText("80 кг · 5")).toBeInTheDocument();
+  expect(screen.queryByText("50 кг · 8")).toBeNull();
 });
 
 it("hides archived choices by default and does not show another exercise after hiding one", async () => {

@@ -253,8 +253,8 @@ export function ProgramManager() {
     setNewExerciseDayId("");
     toast.success(t("Упражнение добавлено"));
   }
-  const updateDay = (id: string, patch: { name?: string; archived_at?: string | null }) =>
-    supabase
+  const updateDay = async (id: string, patch: { name?: string; archived_at?: string | null }) => {
+    const result = await supabase
       .from("program_days")
       .update(patch)
       .eq("id", id)
@@ -262,6 +262,12 @@ export function ProgramManager() {
       .select("id")
       .abortSignal(signal)
       .single();
+    if (!result.error && result.data && isCurrent())
+      qc.setQueryData<Day[]>(userKeys.days(userId), (old) =>
+        old?.map((day) => (day.id === id ? { ...day, ...patch } : day)),
+      );
+    return result;
+  };
   const updateExercise = (id: string, patch: TablesUpdate<"program_exercises">) =>
     supabase
       .from("program_exercises")

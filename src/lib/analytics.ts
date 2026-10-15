@@ -6,6 +6,7 @@ export interface HistoryEntry extends EntryLike {
   exercise_id: string;
   created_at: string;
   rir: number | null;
+  day_id: string | null;
   day_name: string | null;
   notes: string | null;
 }

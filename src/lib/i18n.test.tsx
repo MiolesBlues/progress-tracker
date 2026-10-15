@@ -13,6 +13,10 @@ import {
   useI18n,
 } from "./i18n";
 
+it("uses the requested English label for an entry without day information", () => {
+  expect(translate("en", "Без назначенного дня")).toBe("Unassigned day");
+});
+
 function Probe() {
   const { t, setLanguage } = useI18n();
   return (

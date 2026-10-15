@@ -42,6 +42,7 @@ export function EntriesPage() {
   if (daysResult.isPending || programResult.isPending)
     return <Loading>{t("Загрузка программы…")}</Loading>;
 
+  const dayNames = new Map(daysResult.data.map((day) => [day.id, day.name]));
   const days = showArchive ? daysResult.data : daysResult.data.filter((day) => !day.archived_at);
   const activeDayIds = new Set(days.map((day) => day.id));
   const exercises = showArchive
@@ -125,6 +126,7 @@ export function EntriesPage() {
                   key={`${userId}:${exerciseId}`}
                   userId={userId}
                   exerciseId={exerciseId}
+                  dayNames={dayNames}
                 />
               ) : (
                 <p>{t("Выберите упражнение")}</p>
@@ -137,7 +139,15 @@ export function EntriesPage() {
   );
 }
 
-function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: string }) {
+function ExerciseEntries({
+  userId,
+  exerciseId,
+  dayNames,
+}: {
+  userId: string;
+  exerciseId: string;
+  dayNames: Map<string, string>;
+}) {
   const { t, number, date, language } = useI18n();
   const today = toISO(new Date());
   const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
@@ -224,7 +234,10 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
           {records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE).map((entry) => (
             <li key={entry.id} className="min-w-0 space-y-1 rounded-xl bg-card p-4 text-sm">
               <p className="break-words font-semibold">
-                {date(entry.performed_on)} · {entry.day_name ?? t("Без названия дня")}
+                {date(entry.performed_on)} ·{" "}
+                {(entry.day_id ? dayNames.get(entry.day_id) : undefined) ||
+                  entry.day_name?.trim() ||
+                  t("Без назначенного дня")}
               </p>
               <p className="num break-all text-base font-bold">
                 {number(entry.weight, 2)} {t("кг")} · {entry.reps.join(" / ")}

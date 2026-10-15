@@ -92,7 +92,7 @@ export const entriesQuery = (
           supabase
             .from("workout_entries")
             .select(
-              "id, user_id, exercise_id, performed_on, created_at, weight, reps, rir, notes, day_name",
+              "id, user_id, exercise_id, performed_on, created_at, weight, reps, rir, notes, day_id, day_name",
               { count: "exact" },
             )
             .eq("user_id", userId)

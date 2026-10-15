@@ -100,6 +100,11 @@ it("adds a named day after registration, renames, archives and restores it", asy
   });
   fireEvent.click(within(second).getByRole("button", { name: "Сохранить" }));
   const renamed = await screen.findByRole("group", { name: "День: Силовой день" });
+  expect(
+    qc
+      .getQueryData<Array<{ id: string; name: string }>>(userKeys.days("A"))
+      ?.find((row) => row.id === "new-1")?.name,
+  ).toBe("Силовой день");
   expect(screen.queryByRole("button", { name: "День выше" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "День ниже" })).not.toBeInTheDocument();
   fireEvent.click(within(renamed).getByRole("button", { name: "Архивировать день: Силовой день" }));

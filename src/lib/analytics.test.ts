@@ -7,6 +7,7 @@ import {
   type HistoryEntry,
 } from "./analytics";
 const row = (id: string, date: string, props: Partial<HistoryEntry> = {}): HistoryEntry => ({
+  day_id: null,
   id,
   performed_on: date,
   created_at: `${date}T10:00:00Z`,
