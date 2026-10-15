@@ -8,6 +8,7 @@ import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -32,6 +33,10 @@ function AuthPage() {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [confirmationAttempted, setConfirmationAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const [authError, setAuthError] = useState("");
@@ -56,6 +61,10 @@ function AuthPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!ready || pending.current) return;
+    if (mode === "up") {
+      setConfirmationAttempted(true);
+      if (!confirmPassword || password !== confirmPassword) return;
+    }
     pending.current = true;
     setBusy(true);
     setAuthError("");
@@ -80,6 +89,15 @@ function AuthPage() {
     }
   }
 
+  const confirmationError =
+    mode !== "up"
+      ? ""
+      : !confirmPassword && confirmationAttempted
+        ? "Подтвердите пароль"
+        : confirmPassword && password !== confirmPassword
+          ? "Пароли не совпадают"
+          : "";
+
   async function google() {
     if (!ready || pending.current) return;
     pending.current = true;
@@ -99,18 +117,22 @@ function AuthPage() {
   }
 
   return (
-    <main className="safe-top mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 pb-10">
+    <main className="safe-top mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col justify-center px-6 py-8">
       <h1 className="text-3xl font-extrabold tracking-tight">
-        {mode === "in" ? "Вход" : "Регистрация"}
+        {mode === "in" ? "С возвращением!" : "Создать аккаунт"}
       </h1>
-      <p className="mt-2 text-sm text-muted-foreground">Ваши тренировки видны только вам.</p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {mode === "in"
+          ? "Ваши тренировки видны только вам."
+          : "Начните отслеживать свои тренировки"}
+      </p>
       {authError && (
         <p role="alert" className="mt-4 text-sm text-destructive">
           {authError}
         </p>
       )}
       <form onSubmit={submit} className="mt-8 space-y-4">
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
@@ -120,25 +142,90 @@ function AuthPage() {
             disabled={!ready || busy}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-12"
+            className="box-border h-12 w-full min-w-0 max-w-full"
           />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Label htmlFor="pw">Пароль</Label>
-          <Input
-            id="pw"
-            type="password"
-            minLength={6}
-            required
-            disabled={!ready || busy}
-            autoComplete={mode === "in" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-12"
-          />
+          <div className="relative min-w-0">
+            <Input
+              id="pw"
+              type={showPassword ? "text" : "password"}
+              minLength={6}
+              required
+              disabled={!ready || busy}
+              autoComplete={mode === "in" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="box-border h-12 w-full min-w-0 max-w-full pr-12"
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              aria-pressed={showPassword}
+              disabled={!ready || busy}
+              onClick={() => setShowPassword((visible) => !visible)}
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground"
+            >
+              {showPassword ? (
+                <EyeOff aria-hidden="true" size={18} />
+              ) : (
+                <Eye aria-hidden="true" size={18} />
+              )}
+            </button>
+          </div>
         </div>
+        {mode === "up" && (
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="confirm-pw">Подтвердите пароль</Label>
+            <div className="relative min-w-0">
+              <Input
+                id="confirm-pw"
+                type={showConfirmPassword ? "text" : "password"}
+                minLength={6}
+                required
+                disabled={!ready || busy}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                aria-invalid={Boolean(confirmationError)}
+                aria-describedby={confirmationError ? "confirm-pw-error" : undefined}
+                className="box-border h-12 w-full min-w-0 max-w-full pr-12"
+              />
+              <button
+                type="button"
+                aria-label={
+                  showConfirmPassword
+                    ? "Скрыть подтверждение пароля"
+                    : "Показать подтверждение пароля"
+                }
+                aria-pressed={showConfirmPassword}
+                disabled={!ready || busy}
+                onClick={() => setShowConfirmPassword((visible) => !visible)}
+                className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff aria-hidden="true" size={18} />
+                ) : (
+                  <Eye aria-hidden="true" size={18} />
+                )}
+              </button>
+            </div>
+            {confirmationError && (
+              <p id="confirm-pw-error" role="alert" className="text-sm text-destructive">
+                {confirmationError}
+              </p>
+            )}
+          </div>
+        )}
         <Button type="submit" disabled={!ready || busy} className="h-12 w-full text-base font-bold">
-          {mode === "in" ? "Войти" : "Создать аккаунт"}
+          {busy
+            ? mode === "in"
+              ? "Входим…"
+              : "Регистрируемся…"
+            : mode === "in"
+              ? "Войти"
+              : "Зарегистрироваться"}
         </Button>
       </form>
       <Button
@@ -151,7 +238,11 @@ function AuthPage() {
       </Button>
       <button
         disabled={!ready || busy}
-        onClick={() => setMode(mode === "in" ? "up" : "in")}
+        onClick={() => {
+          setMode(mode === "in" ? "up" : "in");
+          setConfirmationAttempted(false);
+          setAuthError("");
+        }}
         className="mt-6 text-sm text-muted-foreground"
       >
         {mode === "in" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
