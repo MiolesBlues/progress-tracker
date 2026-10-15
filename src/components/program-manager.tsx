@@ -1,3 +1,4 @@
+import { pendingRpc } from "@/lib/pending-rpc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -432,7 +433,7 @@ export function ProgramManager() {
               draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
               onReorder={(ids) =>
                 void run(() =>
-                  supabase.rpc("reorder_program_days", { _ids: ids }).abortSignal(signal),
+                  pendingRpc("reorder_program_days", { _ids: ids }).abortSignal(signal),
                 )
               }
               render={(day, handle) => (
@@ -561,8 +562,7 @@ export function ProgramManager() {
           handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
           onReorder={(ids) =>
             void run(() =>
-              supabase
-                .rpc("reorder_program_exercises", { _day_id: dayId, _ids: ids })
+              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids })
                 .abortSignal(signal),
             )
           }

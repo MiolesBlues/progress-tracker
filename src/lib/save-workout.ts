@@ -1,3 +1,4 @@
+import { pendingRpc } from "@/lib/pending-rpc";
 import { supabase } from "@/integrations/supabase/client";
 import type { WorkoutPayload } from "@/lib/workout-input";
 
@@ -11,8 +12,7 @@ export class SaveWorkoutError extends Error {
 }
 
 export async function saveWorkout(id: string, payload: WorkoutPayload, signal: AbortSignal) {
-  const { data, error } = await supabase
-    .rpc("save_workout_entry", {
+  const { data, error } = await pendingRpc("save_workout_entry", {
       _id: id,
       _exercise_id: payload.exercise_id,
       _day_id: payload.day_id,
@@ -24,7 +24,7 @@ export async function saveWorkout(id: string, payload: WorkoutPayload, signal: A
     })
     .abortSignal(signal)
     .then(
-      (result) => result,
+      (result: { data: unknown; error: { message: string; code?: string } | null }) => result,
       () => {
         throw new SaveWorkoutError(
           "Результат сохранения не подтверждён. Повторите попытку: повтор не создаст вторую запись.",
