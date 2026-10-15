@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/lib/queries";
@@ -20,6 +20,13 @@ import {
 } from "@/components/ui/sheet";
 import { SortableList } from "@/components/Sortable";
 import { Archive, ArchiveRestore, Pencil, X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Result = { error: { message: string; code?: string } | null };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
@@ -33,7 +40,14 @@ export function ProgramManager() {
   const days = daysResult.data ?? [];
   const exercises = programResult.data ?? [];
   const active = days.filter((day) => !day.archived_at);
-  const [selected, setSelected] = useState("");
+  const selectionKey = `program:day:v1:${userId}`;
+  const [selected, setSelected] = useState(() => {
+    try {
+      return localStorage.getItem(selectionKey) ?? "";
+    } catch {
+      return "";
+    }
+  });
   const [newDay, setNewDay] = useState("");
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseSets, setNewExerciseSets] = useState("3");
@@ -44,15 +58,36 @@ export function ProgramManager() {
   const [editing, setEditing] = useState<string | null>(null);
   const [managingDays, setManagingDays] = useState(false);
   const [error, setError] = useState("");
-  const selectedDay = days.find((day) => day.id === selected) ?? active[0] ?? days[0];
+  const [exerciseError, setExerciseError] = useState("");
+  const running = useRef(false);
+  const selectedDay = active.find((day) => day.id === selected) ?? active[0];
   const dayId = selectedDay?.id ?? "";
   const currentExercises = exercises.filter((ex) => ex.day_id === dayId && !ex.archived_at);
   const unassigned = exercises.filter((ex) => ex.day_id === null);
 
-  const run: Run = async (action) => {
-    if (busy || !isCurrent()) return false;
+  function selectDay(id: string) {
+    setSelected(id);
+    try {
+      localStorage.setItem(selectionKey, id);
+    } catch {
+      /* The selection still works for this visit if storage is unavailable. */
+    }
+  }
+  useEffect(() => {
+    if (!daysResult.isSuccess || selected === dayId) return;
+    setSelected(dayId);
+    try {
+      localStorage.setItem(selectionKey, dayId);
+    } catch {
+      /* Optional preference; no workout or draft data is changed. */
+    }
+  }, [daysResult.isSuccess, dayId, selected, selectionKey]);
+
+  const run = async (action: Parameters<Run>[0], onError = setError): Promise<boolean> => {
+    if (running.current || !isCurrent()) return false;
+    running.current = true;
     setBusy(true);
-    setError("");
+    onError("");
     try {
       const result = await action();
       if (!isCurrent()) return false;
@@ -73,9 +108,10 @@ export function ProgramManager() {
       return isCurrent();
     } catch (err) {
       if (isCurrent())
-        setError(err instanceof Error ? err.message : "Не удалось сохранить изменения");
+        onError(err instanceof Error ? err.message : "Не удалось сохранить изменения");
       return false;
     } finally {
+      running.current = false;
       if (isCurrent()) setBusy(false);
     }
   };
@@ -216,7 +252,11 @@ export function ProgramManager() {
           variant="ghost"
           aria-label={`Редактировать: ${ex.name}`}
           disabled={busy}
-          onClick={() => setEditing(ex.id)}
+          onClick={() => {
+            setExerciseError("");
+            setManagingDays(false);
+            setEditing(ex.id);
+          }}
           className="shrink-0"
         >
           <Pencil className="h-4 w-4" />
@@ -255,7 +295,13 @@ export function ProgramManager() {
           {error}
         </p>
       )}
-      <Sheet open={managingDays} onOpenChange={setManagingDays}>
+      <Sheet
+        open={managingDays}
+        onOpenChange={(open) => {
+          setError("");
+          setManagingDays(open);
+        }}
+      >
         <section
           aria-label="Тренировочные дни"
           className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
@@ -301,6 +347,7 @@ export function ProgramManager() {
             )}
             <SortableList
               items={active}
+              disabled={busy}
               handleLabel={(day) => `Переместить день ${day.name}`}
               draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
               onReorder={(ids) =>
@@ -347,15 +394,28 @@ export function ProgramManager() {
                 {days
                   .filter((day) => day.archived_at)
                   .map((day) => (
-                    <DayEditor
-                      key={day.id}
-                      day={day}
-                      busy={busy}
-                      run={run}
-                      save={(patch) => updateDay(day.id, patch)}
-                      canArchive={false}
-                      canRestore={active.length < MAX_DAYS}
-                    />
+                    <div key={day.id}>
+                      <DayEditor
+                        day={day}
+                        busy={busy}
+                        run={run}
+                        save={(patch) => updateDay(day.id, patch)}
+                        canArchive={false}
+                        canRestore={active.length < MAX_DAYS}
+                      />
+                      {exercises.some((ex) => ex.day_id === day.id) && (
+                        <details className="space-y-2 pt-2">
+                          <summary className="cursor-pointer py-2 text-sm">
+                            Упражнения архивного дня
+                          </summary>
+                          {exercises
+                            .filter((ex) => ex.day_id === day.id)
+                            .map((ex) => (
+                              <div key={ex.id}>{compactRow(ex)}</div>
+                            ))}
+                        </details>
+                      )}
+                    </div>
                   ))}
               </details>
             )}
@@ -365,29 +425,41 @@ export function ProgramManager() {
 
       <section aria-label="Упражнения" className="space-y-3">
         <h2 className="font-bold">Упражнения</h2>
-        <select
-          aria-label="День для упражнений"
-          className={selectCls}
+        <Select
           value={dayId}
-          disabled={busy || !days.length || addingExercise}
-          onChange={(event) => setSelected(event.target.value)}
+          disabled={busy || !active.length || addingExercise}
+          onValueChange={selectDay}
         >
-          {!days.length && <option value="">Добавьте день</option>}
-          {days.map((day) => (
-            <option key={day.id} value={day.id}>
-              {day.name}
-              {day.archived_at ? " (архив)" : ""}
-            </option>
-          ))}
-        </select>
-        {selectedDay?.archived_at && (
+          <SelectTrigger
+            aria-label="День для упражнений"
+            className="h-12 w-full min-w-0 bg-card text-left [&>span]:min-w-0 [&>span]:truncate"
+          >
+            <SelectValue placeholder="Нет активных дней" />
+          </SelectTrigger>
+          <SelectContent
+            position="popper"
+            align="start"
+            collisionPadding={8}
+            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+          >
+            {active.map((day) => (
+              <SelectItem key={day.id} value={day.id} className="min-h-10 whitespace-normal py-2">
+                <span className="block min-w-0 break-words leading-snug">
+                  {day.name} ·{" "}
+                  {exercises.filter((ex) => ex.day_id === day.id && !ex.archived_at).length} упр.
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!active.length && (
           <p className="text-sm text-muted-foreground">
-            День в архиве. Восстановите его для новых тренировок или перенесите упражнения в
-            активный день.
+            Нет активных дней. Создайте или восстановите день через «Изменить дни».
           </p>
         )}
         <SortableList
           items={currentExercises}
+          disabled={busy}
           onReorder={(ids) =>
             void run(() =>
               supabase
@@ -449,8 +521,9 @@ export function ProgramManager() {
               exercise={editingEx}
               days={days}
               busy={busy}
+              error={exerciseError}
               run={async (action) => {
-                const ok = await run(action);
+                const ok = await run(action, setExerciseError);
                 if (ok) setEditing(null);
                 return ok;
               }}
@@ -645,6 +718,7 @@ type ExerciseEditorProps = {
   exercise: Exercise;
   days: Day[];
   busy: boolean;
+  error: string;
   run: Run;
   save: (patch: TablesUpdate<"program_exercises">) => PromiseLike<Result>;
   nextPosition: (dayId: string) => number;
@@ -653,6 +727,7 @@ function ExerciseEditor({
   exercise: ex,
   days,
   busy,
+  error,
   run,
   save,
   nextPosition: positionFor,
@@ -674,10 +749,20 @@ function ExerciseEditor({
   }
   return (
     <form aria-label={`Упражнение: ${ex.name}`} onSubmit={submit} className="space-y-3 pt-2">
+      {error && (
+        <p
+          id="exercise-editor-error"
+          role="alert"
+          className="break-words rounded-xl border border-destructive p-3 text-sm"
+        >
+          {error}
+        </p>
+      )}
       <label className="block space-y-1 text-xs">
         Название упражнения
         <Input
           value={name}
+          aria-describedby={error ? "exercise-editor-error" : undefined}
           onChange={(event) => setName(event.target.value)}
           maxLength={100}
           className="h-12"
@@ -688,6 +773,7 @@ function ExerciseEditor({
         Тренировочный день
         <select
           className={selectCls}
+          aria-describedby={error ? "exercise-editor-error" : undefined}
           value={dayId}
           onChange={(event) => setDayId(event.target.value)}
           disabled={busy}
@@ -708,6 +794,7 @@ function ExerciseEditor({
           Подходы
           <Input
             inputMode="numeric"
+            aria-describedby={error ? "exercise-editor-error" : undefined}
             value={sets}
             onChange={(event) => setSets(event.target.value)}
             disabled={busy}
@@ -719,6 +806,7 @@ function ExerciseEditor({
           Повторения
           <Input
             value={reps}
+            aria-describedby={error ? "exercise-editor-error" : undefined}
             onChange={(event) => setReps(event.target.value)}
             disabled={busy}
             className="h-12"

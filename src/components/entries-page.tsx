@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
 type Sort = "recent" | "weight-desc" | "weight-asc";
+const UNASSIGNED = "unassigned";
+const PAGE_SIZE = 20;
 
 function daysAgo(days: number, today: string) {
   const date = new Date(`${today}T12:00:00`);
@@ -38,10 +40,16 @@ export function EntriesPage() {
 
   const days = daysResult.data;
   const exercises = programResult.data;
-  const dayId = days.some((day) => day.id === chosenDay)
-    ? chosenDay
-    : (days.find((day) => !day.archived_at)?.id ?? days[0]?.id ?? "");
-  const dayExercises = exercises.filter((exercise) => exercise.day_id === dayId);
+  const hasUnassigned = exercises.some((exercise) => exercise.day_id === null);
+  const dayId =
+    days.some((day) => day.id === chosenDay) || (chosenDay === UNASSIGNED && hasUnassigned)
+      ? chosenDay
+      : (days.find((day) => !day.archived_at)?.id ??
+        days[0]?.id ??
+        (hasUnassigned ? UNASSIGNED : ""));
+  const dayExercises = exercises.filter(
+    (exercise) => exercise.day_id === (dayId === UNASSIGNED ? null : dayId),
+  );
   const exerciseId = dayExercises.some((exercise) => exercise.id === chosenExercise)
     ? chosenExercise
     : (dayExercises[0]?.id ?? "");
@@ -49,7 +57,7 @@ export function EntriesPage() {
   return (
     <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">Записи</h1>
-      {!days.length ? (
+      {!days.length && !hasUnassigned ? (
         <p>Сначала добавьте тренировочный день и упражнения в программе.</p>
       ) : (
         <>
@@ -70,6 +78,7 @@ export function EntriesPage() {
                   {day.archived_at ? " (архив)" : ""}
                 </option>
               ))}
+              {hasUnassigned && <option value={UNASSIGNED}>Без назначенного дня</option>}
             </select>
           </label>
           {!dayExercises.length ? (
@@ -110,6 +119,7 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
   const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
   const [period, setPeriod] = useState<Period>(30);
   const [sort, setSort] = useState<Sort>("recent");
+  const [page, setPage] = useState(0);
   if (result.isError)
     return (
       <LoadError onRetry={() => void result.refetch()}>
@@ -132,6 +142,8 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
     if (sort === "weight-asc") return a.weight - b.weight || recentOrder(a, b);
     return recentOrder(a, b);
   });
+  const pages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const pageIndex = Math.min(page, pages - 1);
 
   return (
     <section className="min-w-0 space-y-4" aria-label="Дневник записей упражнения">
@@ -152,7 +164,10 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
               size="sm"
               variant={period === value ? "default" : "secondary"}
               aria-pressed={period === value}
-              onClick={() => setPeriod(value)}
+              onClick={() => {
+                setPeriod(value);
+                setPage(0);
+              }}
             >
               {label}
             </Button>
@@ -165,7 +180,10 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
           aria-label="Сортировка записей"
           className={selectCls}
           value={sort}
-          onChange={(event) => setSort(event.target.value as Sort)}
+          onChange={(event) => {
+            setSort(event.target.value as Sort);
+            setPage(0);
+          }}
         >
           <option value="recent">Сначала новые</option>
           <option value="weight-desc">Вес: по убыванию</option>
@@ -179,7 +197,7 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
         </p>
       ) : (
         <ul className="min-w-0 space-y-3">
-          {records.map((entry) => (
+          {records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE).map((entry) => (
             <li key={entry.id} className="min-w-0 space-y-1 rounded-xl bg-card p-4 text-sm">
               <p className="break-words font-semibold">
                 {entry.performed_on} · {entry.day_name ?? "Без названия дня"}
@@ -196,6 +214,34 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
             </li>
           ))}
         </ul>
+      )}
+      {pages > 1 && (
+        <nav
+          aria-label="Страницы записей"
+          className="flex flex-wrap items-center justify-between gap-2 text-sm"
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11"
+            disabled={pageIndex === 0}
+            onClick={() => setPage(pageIndex - 1)}
+          >
+            Назад
+          </Button>
+          <span aria-live="polite">
+            Страница {pageIndex + 1} из {pages}
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11"
+            disabled={pageIndex + 1 === pages}
+            onClick={() => setPage(pageIndex + 1)}
+          >
+            Далее
+          </Button>
+        </nav>
       )}
     </section>
   );

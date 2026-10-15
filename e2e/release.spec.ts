@@ -4,6 +4,7 @@ import {
   register,
   addExercise,
   chooseDay,
+  chooseProgramDay,
   seedHistory,
   geometry,
   noOverflow,
@@ -80,11 +81,10 @@ for (const [width, count] of [
     await renamed.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(dayDialog.getByLabel("Название дня", { exact: true })).toHaveCount(0);
     await dayDialog.getByRole("button", { name: "Готово", exact: true }).click();
-    const programDay = page.getByRole("combobox", { name: "День для упражнений", exact: true });
     const other = days.find((day) => day.id !== firstDay.id)!;
-    await programDay.selectOption(other.id);
+    await chooseProgramDay(page, String(other["name"]));
     await expect(page.getByText("Упражнений пока нет.", { exact: true })).toBeVisible();
-    await programDay.selectOption(firstDay.id);
+    await chooseProgramDay(page, longDay);
     await addExercise(page);
     await addExercise(page, secondName, 3);
     expect(backend.rows["program_exercises"]!.every((row) => row["day_id"] === firstDay.id)).toBe(
@@ -194,6 +194,13 @@ for (const [width, count] of [
     await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
     await page.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(page.getByText("Записи за период (4)", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "С предыдущей сессией", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "С прошлой календарной неделей", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("50 → 52,5 кг (+5%)", { exact: true })).toBeVisible();
     await expect(
       page.getByLabel("График тренировок", { exact: true }).locator("svg"),
     ).toBeVisible();

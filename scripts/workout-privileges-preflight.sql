@@ -11,8 +11,15 @@ WHERE n.nspname = 'public'
   AND c.relname IN ('program_days', 'program_exercises', 'workout_entries')
 ORDER BY table_name, grantee, privilege_type;
 
-SELECT r.rolname, t.name AS table_name,
-  has_table_privilege(r.oid, format('public.%I', t.name), 'TRUNCATE') AS can_truncate
+SELECT r.rolname, r.rolsuper, r.rolbypassrls, t.name AS table_name,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'TRUNCATE') AS can_truncate,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'REFERENCES') AS can_reference,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'TRIGGER') AS can_trigger,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'MAINTAIN') AS can_maintain,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'DELETE') AS can_delete,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'SELECT') AS can_select,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'INSERT') AS can_insert,
+  has_table_privilege(r.oid, format('public.%I', t.name), 'UPDATE') AS can_update
 FROM pg_roles r
 CROSS JOIN (VALUES ('program_days'), ('program_exercises'), ('workout_entries')) t(name)
 WHERE r.rolname IN ('anon', 'authenticated', 'service_role')

@@ -245,21 +245,23 @@ function AuthPage() {
         }}
         className="group mt-6 inline-flex min-h-11 max-w-full items-center rounded-lg px-3 text-left text-sm text-muted-foreground hover:bg-accent/60 active:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {mode === "in" ? (
-          <>
-            Нет аккаунта?{" "}
-            <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
-              Зарегистрироваться
-            </span>
-          </>
-        ) : (
-          <>
-            Уже есть аккаунт?{" "}
-            <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
-              Войти
-            </span>
-          </>
-        )}
+        <span>
+          {mode === "in" ? (
+            <>
+              Нет аккаунта?{" "}
+              <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
+                Зарегистрироваться
+              </span>
+            </>
+          ) : (
+            <>
+              Уже есть аккаунт?{" "}
+              <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
+                Войти
+              </span>
+            </>
+          )}
+        </span>
       </button>
     </main>
   );

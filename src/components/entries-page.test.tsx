@@ -125,3 +125,62 @@ it("filters diary entries by date and sorts weights in both directions", async (
     expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
   });
 });
+
+it.each([false, true])(
+  "B07 reads archived legacy history without backfill (no days: %s)",
+  async (noDays) => {
+    if (noDays) fake.state.rows.program_days = [];
+    fake.state.rows.program_exercises!.push({
+      id: "legacy",
+      user_id: "A",
+      day_id: null,
+      name: "Старый жим",
+      position: 2,
+      archived_at: "2026-10-01",
+    });
+    fake.state.rows.workout_entries!.push({
+      ...entry("legacy-entry", dateDaysAgo(0), 65, [8, 7]),
+      exercise_id: "legacy",
+      day_id: null,
+      day_name: "Историческое название",
+    });
+    mount();
+    await screen.findByRole("combobox", { name: "День записей" });
+    fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "unassigned" } });
+    expect(await screen.findByText("65 кг · 8 / 7")).toBeInTheDocument();
+    expect(screen.getByText(`${dateDaysAgo(0)} · Историческое название`)).toBeInTheDocument();
+    expect(
+      fake.state.rows.program_exercises!.find((row) => row.id === "legacy")?.day_id,
+    ).toBeNull();
+    expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
+  },
+);
+
+it("B08 limits the DOM to 20 entries while loading every server page and resetting controls", async () => {
+  fake.state.maxRows = 137;
+  fake.state.rows.workout_entries = Array.from({ length: 1200 }, (_, index) => ({
+    ...entry(`entry-${String(index).padStart(4, "0")}`, dateDaysAgo(0), index, [8]),
+    created_at: `${dateDaysAgo(0)}T10:00:${String(index % 60).padStart(2, "0")}Z`,
+  }));
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(diary).getByRole("heading", { name: "Записи · 1200" })).toBeInTheDocument();
+  expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
+  expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
+  expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(9);
+  fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
+  expect(within(diary).getByText("Страница 2 из 60")).toBeInTheDocument();
+  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
+    target: { value: "weight-desc" },
+  });
+  expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
+  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent(/1\s199 кг/);
+  fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
+  fireEvent.click(within(diary).getByRole("button", { name: "Сегодня" }));
+  expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
+  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
+    target: { value: "weight-asc" },
+  });
+  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("0 кг");
+  expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
+});

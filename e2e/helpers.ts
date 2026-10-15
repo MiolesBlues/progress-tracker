@@ -76,6 +76,13 @@ export async function chooseDay(page: Page, name: string) {
   await page.getByRole("combobox", { name: "Тренировочный день", exact: true }).click();
   await page.getByRole("option", { name, exact: true }).click();
 }
+export async function chooseProgramDay(page: Page, name: string) {
+  await page.getByRole("combobox", { name: "День для упражнений", exact: true }).click();
+  const options = page.getByRole("option");
+  const match = options.filter({ hasText: name });
+  await expect(match).toHaveCount(1);
+  await match.click();
+}
 export function seedHistory(backend: Backend) {
   const first = backend.rows["program_exercises"]!.find((row) => row["name"] === firstName)!;
   const second = backend.rows["program_exercises"]!.find((row) => row["name"] === secondName)!;

@@ -26,12 +26,14 @@ export function SortableList<T extends { id: string }>({
   render,
   handleLabel,
   draggingClassName,
+  disabled = false,
 }: {
   items: T[];
   onReorder: (ids: string[]) => void;
   render: (item: T, handle: ReactNode) => ReactNode;
   handleLabel?: (item: T) => string;
   draggingClassName?: string;
+  disabled?: boolean;
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -39,7 +41,7 @@ export function SortableList<T extends { id: string }>({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   function end(e: DragEndEvent) {
-    if (!e.over || e.active.id === e.over.id) return;
+    if (disabled || !e.over || e.active.id === e.over.id) return;
     const ids = items.map((i) => i.id);
     onReorder(arrayMove(ids, ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id))));
   }
@@ -51,6 +53,7 @@ export function SortableList<T extends { id: string }>({
             <Item
               key={it.id}
               id={it.id}
+              disabled={disabled}
               handleLabel={handleLabel?.(it) ?? "Перетащить"}
               {...(draggingClassName ? { draggingClassName } : {})}
             >
@@ -68,14 +71,17 @@ function Item({
   children,
   handleLabel,
   draggingClassName,
+  disabled,
 }: {
   id: string;
   children: (handle: ReactNode) => ReactNode;
   handleLabel: string;
   draggingClassName?: string;
+  disabled: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
+    disabled,
   });
   const handle = (
     <button
@@ -83,7 +89,8 @@ function Item({
       {...attributes}
       {...listeners}
       aria-label={handleLabel}
-      className="touch-none cursor-grab p-1.5 text-muted-foreground"
+      disabled={disabled}
+      className="touch-none cursor-grab p-1.5 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
     >
       <GripVertical className="h-5 w-5" />
     </button>

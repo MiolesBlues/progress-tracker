@@ -16,6 +16,9 @@ export async function mockSupabase(page: Page) {
     offline: false,
     loseSaveResponse: false,
     failReorder: false,
+    failPatch: false,
+    archiveDayOnInsert: false,
+    delayProgramUpdate: null as { id: string; promise: Promise<void> } | null,
     saveCalls: [] as string[],
     signupCalls: [] as Record<string, unknown>[],
     rpcCalls: [] as { name: string; userId: string; args: Record<string, unknown> }[],
@@ -152,6 +155,18 @@ export async function mockSupabase(page: Page) {
       });
     let found = rows[table]!.filter(matches);
     if (request.method() === "POST") {
+      if (table === "program_exercises" && state.archiveDayOnInsert) {
+        state.archiveDayOnInsert = false;
+        const day = rows["program_days"]!.find((row) => row.id === json?.["day_id"]);
+        if (day) day["archived_at"] = createdAt();
+        return respond(
+          {
+            code: "22023",
+            message: "Выбранный тренировочный день больше недоступен. Упражнение не создано.",
+          },
+          400,
+        );
+      }
       const row = {
         id: randomUUID(),
         user_id: id,
@@ -166,7 +181,18 @@ export async function mockSupabase(page: Page) {
       rows[table]!.push(row);
       found = [row];
     }
-    if (request.method() === "PATCH") found.forEach((r) => Object.assign(r, json));
+    if (request.method() === "PATCH") {
+      if (state.failPatch) {
+        state.failPatch = false;
+        return respond({ message: "Network unavailable" }, 503);
+      }
+      const delayed = state.delayProgramUpdate;
+      if (table === "program_days" && delayed && found.some((row) => row.id === delayed.id)) {
+        state.delayProgramUpdate = null;
+        await delayed.promise;
+      }
+      found.forEach((r) => Object.assign(r, json));
+    }
     const orders = (url.searchParams.get("order") ?? "").split(",");
     found.sort((a, b) => {
       for (const order of orders) {

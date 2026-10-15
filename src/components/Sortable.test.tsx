@@ -99,3 +99,43 @@ it("requires an intentional touch hold before entering the dragging state", asyn
     rectSpy.mockRestore();
   }
 });
+
+it("B13 disables pointer, touch and keyboard activation while saving", async () => {
+  const onReorder = vi.fn();
+  const view = render(
+    <SortableList
+      items={items}
+      disabled
+      onReorder={onReorder}
+      render={(item, handle) => (
+        <div>
+          {handle}
+          {item.id}
+        </div>
+      )}
+    />,
+  );
+  const handle = screen.getAllByRole("button", { name: "Перетащить" })[0]!;
+  expect(handle).toBeDisabled();
+  fireEvent.pointerDown(handle, { pointerId: 1, pointerType: "mouse", isPrimary: true, button: 0 });
+  fireEvent.keyDown(handle, { key: "Space", code: "Space" });
+  fireEvent.touchStart(handle, {
+    touches: [{ identifier: 1, target: handle, clientX: 20, clientY: 20 }],
+  });
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 175)));
+  expect(handle).not.toHaveAttribute("aria-pressed", "true");
+  expect(onReorder).not.toHaveBeenCalled();
+  view.rerender(
+    <SortableList
+      items={items}
+      onReorder={onReorder}
+      render={(item, dragHandle) => (
+        <div>
+          {dragHandle}
+          {item.id}
+        </div>
+      )}
+    />,
+  );
+  expect(screen.getAllByRole("button", { name: "Перетащить" })[0]).toBeEnabled();
+});
