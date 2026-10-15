@@ -45,6 +45,19 @@ it("shows password confirmation only in registration mode", () => {
   expect(screen.getByLabelText("Подтвердите пароль")).toBeInTheDocument();
 });
 
+it("highlights only the registration action with the primary theme color", () => {
+  render(<AuthPage />);
+  const registrationButton = screen.getByRole("button", {
+    name: "Нет аккаунта? Зарегистрироваться",
+  });
+  expect(registrationButton).toHaveClass("min-h-11", "focus-visible:ring-2");
+  expect(screen.getByText("Зарегистрироваться", { exact: true })).toHaveClass(
+    "font-semibold",
+    "text-primary",
+  );
+  expect(registrationButton).toHaveTextContent("Нет аккаунта?");
+});
+
 it("signs up with matching passwords without sending the confirmation field", async () => {
   render(<AuthPage />);
   openSignup();
