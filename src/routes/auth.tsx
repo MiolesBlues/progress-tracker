@@ -253,7 +253,12 @@ function AuthPage() {
             </span>
           </>
         ) : (
-          "Уже есть аккаунт? Войти"
+          <>
+            Уже есть аккаунт?{" "}
+            <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
+              Войти
+            </span>
+          </>
         )}
       </button>
     </main>
