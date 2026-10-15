@@ -146,6 +146,9 @@ for (const width of [320, 375, 390, 430]) {
     const historyIds = backend.rows["workout_entries"]!.map((row) => row.id);
     // Fixtures were added outside the UI; reload to fetch that program snapshot.
     await page.reload();
+    await page.getByRole("button", { name: "Настройки", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Показывать архивные дни и упражнения" }).click();
+    await page.getByRole("button", { name: "Закрыть", exact: true }).click();
     await page.getByRole("link", { name: "Записи", exact: true }).click();
     await page.getByLabel("День записей", { exact: true }).selectOption(first!.id);
     await page.getByLabel("Упражнение записей", { exact: true }).selectOption(exercise.id);

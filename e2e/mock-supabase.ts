@@ -125,6 +125,35 @@ export async function mockSupabase(page: Page) {
         }
         return respond(operation);
       }
+      if (url.pathname.endsWith("/delete_archived_program_day")) {
+        const day = rows["program_days"]!.find(
+          (row) => row.id === args["_day_id"] && row.user_id === id,
+        );
+        if (!day) return respond(false);
+        if (!day["archived_at"])
+          return respond({ message: "Only archived days may be deleted" }, 400);
+        rows["program_exercises"]!.forEach((row) => {
+          if (row.user_id === id && row["day_id"] === day.id) row["day_id"] = null;
+        });
+        rows["workout_entries"]!.forEach((row) => {
+          if (row.user_id === id && row["day_id"] === day.id) row["day_id"] = null;
+        });
+        rows["program_days"]!.splice(rows["program_days"]!.indexOf(day), 1);
+        return respond(true);
+      }
+      if (url.pathname.endsWith("/delete_archived_program_exercise")) {
+        const exercise = rows["program_exercises"]!.find(
+          (row) => row.id === args["_exercise_id"] && row.user_id === id,
+        );
+        if (!exercise) return respond(false);
+        if (!exercise["archived_at"])
+          return respond({ message: "Only archived exercises may be deleted" }, 400);
+        rows["workout_entries"] = rows["workout_entries"]!.filter(
+          (row) => !(row.user_id === id && row["exercise_id"] === exercise.id),
+        );
+        rows["program_exercises"]!.splice(rows["program_exercises"]!.indexOf(exercise), 1);
+        return respond(true);
+      }
       if (url.pathname.includes("/reorder_")) {
         if (state.failReorder) {
           state.failReorder = false;

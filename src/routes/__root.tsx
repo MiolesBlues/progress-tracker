@@ -120,7 +120,7 @@ function RootComponent() {
         </LanguageProvider>
       </SessionProvider>
       <Toaster
-        position="top-center"
+        position="bottom-center"
         offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
         mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
       />

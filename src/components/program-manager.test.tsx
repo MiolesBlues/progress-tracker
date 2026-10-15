@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authEvent, fake, resetFake, type Row } from "@/test/supabase-mock";
 import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { ProgramManager } from "@/components/program-manager";
+import { userKeys } from "@/lib/queries";
 
 let qc: QueryClient;
 const day = (id: string, position = 0, archived_at: string | null = null): Row => ({
@@ -512,4 +513,101 @@ it("B13 disables both sortable handles during another mutation, then allows reor
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Переместить день Новое имя" })).toBeEnabled(),
   );
+});
+
+it("deletes only an archived day and preserves linked exercises and historical snapshots", async () => {
+  fake.state.rows.program_days = [day("Активный"), day("Архив", 1, "2026-10-01")];
+  fake.state.rows.program_exercises = [exercise("Жим", "Архив")];
+  fake.state.rows.workout_entries = [
+    {
+      id: "record-1",
+      user_id: "A",
+      exercise_id: "Жим",
+      day_id: "Архив",
+      day_name: "Архив",
+      performed_on: "2026-10-01",
+      weight: 50,
+      reps: [8, 8, 7],
+    },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  mount();
+  await openDayManagement();
+  fireEvent.click(screen.getByText("Архив дней"));
+  const archive = await screen.findByRole("group", { name: "День: Архив" });
+  fireEvent.click(within(archive).getByRole("button", { name: "Удалить день: Архив" }));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(within(dialog).getByText("Связанных упражнений: 1")).toBeInTheDocument();
+  expect(await within(dialog).findByText("Исторических записей: 1")).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Отмена" }));
+  expect(fake.state.rows.program_days).toHaveLength(2);
+  fireEvent.click(within(archive).getByRole("button", { name: "Удалить день: Архив" }));
+  const reopened = await screen.findByRole("alertdialog");
+  await waitFor(() =>
+    expect(within(reopened).getByRole("button", { name: "Удалить день" })).toBeEnabled(),
+  );
+  fireEvent.click(within(reopened).getByRole("button", { name: "Удалить день" }));
+  await waitFor(() => expect(fake.state.rows.program_days).toHaveLength(1));
+  expect(fake.state.rows.program_exercises![0]?.day_id).toBeNull();
+  expect(fake.state.rows.workout_entries![0]).toMatchObject({
+    exercise_id: "Жим",
+    day_id: null,
+    day_name: "Архив",
+    weight: 50,
+    reps: [8, 8, 7],
+  });
+});
+
+it("deletes an archived exercise and only its own history after confirmation", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Старый жим", "Первый"), archived_at: "2026-10-01" },
+    exercise("Другой жим", "Первый"),
+  ];
+  fake.state.rows.workout_entries = [
+    { id: "old", user_id: "A", exercise_id: "Старый жим", day_id: "Первый" },
+    { id: "other", user_id: "A", exercise_id: "Другой жим", day_id: "Первый" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  localStorage.setItem("workout:draft:v1:A:Старый жим", "old draft");
+  localStorage.setItem("workout:draft:v1:A:Другой жим", "other draft");
+  mount();
+  qc.setQueryData(
+    [...userKeys.entries("A", "Старый жим"), "0001-01-01", "9999-12-31"],
+    [{ id: "old" }],
+  );
+  qc.setQueryData(
+    [...userKeys.entries("A", "Другой жим"), "0001-01-01", "9999-12-31"],
+    [{ id: "other" }],
+  );
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Старый жим" }));
+  const dialog = await screen.findByRole("alertdialog");
+  expect(await within(dialog).findByText("Исторических записей: 1")).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  await waitFor(() => expect(fake.state.rows.program_exercises).toHaveLength(1));
+  expect(fake.state.rows.workout_entries!.map((entry) => entry.id)).toEqual(["other"]);
+  expect(localStorage.getItem("workout:draft:v1:A:Старый жим")).toBeNull();
+  expect(localStorage.getItem("workout:draft:v1:A:Другой жим")).toBe("other draft");
+  expect(qc.getQueriesData({ queryKey: userKeys.entries("A", "Старый жим") })).toHaveLength(0);
+  expect(qc.getQueriesData({ queryKey: userKeys.entries("A", "Другой жим") })).toHaveLength(1);
+});
+
+it("keeps archived exercise and confirmation open when deletion fails", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Старый жим", "Первый"), archived_at: "2026-10-01" },
+  ];
+  fake.state.rows.workout_entries = [
+    { id: "old", user_id: "A", exercise_id: "Старый жим", day_id: "Первый" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  mount();
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Старый жим" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 1");
+  fake.state.nextError = "Network unavailable";
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Не удалось удалить");
+  expect(fake.state.rows.program_exercises).toHaveLength(1);
+  expect(fake.state.rows.workout_entries).toHaveLength(1);
 });

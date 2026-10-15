@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fake, resetFake } from "@/test/supabase-mock";
@@ -45,6 +45,7 @@ function mount() {
 
 beforeEach(() => {
   resetFake();
+  localStorage.clear();
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   fake.state.rows.program_days = [
     { id: "day-1", user_id: "A", name: "Верх тела", position: 0, archived_at: null },
@@ -103,6 +104,36 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   expect(await screen.findByText("80 кг · 5")).toBeInTheDocument();
 });
 
+it("hides archived choices by default and does not show another exercise after hiding one", async () => {
+  fake.state.rows.program_exercises!.push({
+    ...fake.state.rows.program_exercises![0]!,
+    id: "archived-press",
+    name: "Архивный жим",
+    archived_at: "2026-10-01",
+  });
+  fake.state.rows.workout_entries!.push({
+    ...entry("archived-entry", dateDaysAgo(0), 90, [3]),
+    exercise_id: "archived-press",
+  });
+  mount();
+  expect(await screen.findByRole("combobox", { name: "Упражнение записей" })).toBeVisible();
+  expect(screen.queryByRole("option", { name: /Архивный жим/ })).toBeNull();
+  act(() => {
+    localStorage.setItem("app:archive-settings:v1:A", "2");
+    window.dispatchEvent(new Event("archive-preferences-changed"));
+  });
+  fireEvent.change(screen.getByLabelText("Упражнение записей"), {
+    target: { value: "archived-press" },
+  });
+  expect(await screen.findByText("90 кг · 3")).toBeInTheDocument();
+  act(() => {
+    localStorage.setItem("app:archive-settings:v1:A", "0");
+    window.dispatchEvent(new Event("archive-preferences-changed"));
+  });
+  expect(screen.getAllByText("Выберите упражнение").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("region", { name: "Дневник записей упражнения" })).toBeNull();
+});
+
 it("filters diary entries by date and sorts weights in both directions", async () => {
   mount();
   const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
@@ -135,6 +166,7 @@ it("filters diary entries by date and sorts weights in both directions", async (
 it.each([false, true])(
   "B07 reads archived legacy history without backfill (no days: %s)",
   async (noDays) => {
+    localStorage.setItem("app:archive-settings:v1:A", "2");
     if (noDays) fake.state.rows.program_days = [];
     fake.state.rows.program_exercises!.push({
       id: "legacy",

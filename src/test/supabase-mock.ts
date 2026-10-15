@@ -46,19 +46,50 @@ const fake = vi.hoisted(() => {
     delayMutation: null as Promise<void> | null,
     sequence: 0,
     maxRows: Infinity,
-    rpc: vi.fn(async (name: string, args: { _ids: string[]; _day_id?: string }) => {
-      if (state.nextError) {
-        const message = state.nextError;
-        state.nextError = null;
-        return { error: { message } };
-      }
-      const table = name === "reorder_program_days" ? "program_days" : "program_exercises";
-      args._ids.forEach((id, position) => {
-        const row = state.rows[table]!.find((item) => item.id === id);
-        if (row) row.position = position;
-      });
-      return { error: null };
-    }),
+    rpc: vi.fn(
+      async (name: string, args: { _ids?: string[]; _day_id?: string; _exercise_id?: string }) => {
+        if (state.nextError) {
+          const message = state.nextError;
+          state.nextError = null;
+          return { error: { message } };
+        }
+        if (name === "delete_archived_program_day") {
+          const day = state.rows.program_days.find(
+            (row) => row.id === args._day_id && row.user_id === state.userId,
+          );
+          if (!day) return { data: false, error: null };
+          if (!day.archived_at)
+            return { data: null, error: { message: "Only archived objects may be deleted" } };
+          state.rows.program_exercises.forEach((row) => {
+            if (row.user_id === state.userId && row.day_id === day.id) row.day_id = null;
+          });
+          state.rows.workout_entries.forEach((row) => {
+            if (row.user_id === state.userId && row.day_id === day.id) row.day_id = null;
+          });
+          state.rows.program_days.splice(state.rows.program_days.indexOf(day), 1);
+          return { data: true, error: null };
+        }
+        if (name === "delete_archived_program_exercise") {
+          const exercise = state.rows.program_exercises.find(
+            (row) => row.id === args._exercise_id && row.user_id === state.userId,
+          );
+          if (!exercise) return { data: false, error: null };
+          if (!exercise.archived_at)
+            return { data: null, error: { message: "Only archived objects may be deleted" } };
+          state.rows.workout_entries = state.rows.workout_entries.filter(
+            (row) => !(row.user_id === state.userId && row["exercise_id"] === exercise.id),
+          );
+          state.rows.program_exercises.splice(state.rows.program_exercises.indexOf(exercise), 1);
+          return { data: true, error: null };
+        }
+        const table = name === "reorder_program_days" ? "program_days" : "program_exercises";
+        args._ids!.forEach((id, position) => {
+          const row = state.rows[table]!.find((item) => item.id === id);
+          if (row) row.position = position;
+        });
+        return { error: null };
+      },
+    ),
   };
   function from(table: string) {
     let operation = "select";
@@ -193,7 +224,7 @@ export { fake };
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: fake.from,
-    rpc: (name: string, args: { _ids: string[] } & Record<string, unknown>) => ({
+    rpc: (name: string, args: { _ids?: string[] } & Record<string, unknown>) => ({
       abortSignal: () =>
         name === "save_workout_entry" ? fake.state.saveRpc(args) : fake.state.rpc(name, args),
     }),

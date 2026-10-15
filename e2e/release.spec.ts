@@ -223,6 +223,9 @@ for (const [width, count] of [
       dayDialog.getByRole("button", { name: `Переместить день ${longDay}`, exact: true }),
     ).toHaveCount(0);
     await dayDialog.getByRole("button", { name: "Готово", exact: true }).click();
+    await page.getByRole("button", { name: "Настройки", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Показывать архивные дни и упражнения" }).click();
+    await page.getByRole("button", { name: "Закрыть", exact: true }).click();
     await page.getByRole("link", { name: "Записи", exact: true }).click();
     await page
       .getByRole("combobox", { name: "День записей", exact: true })

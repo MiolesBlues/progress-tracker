@@ -166,6 +166,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_archived_program_day: {
+        Args: { _day_id: string }
+        Returns: boolean
+      }
+      delete_archived_program_exercise: {
+        Args: { _exercise_id: string }
+        Returns: boolean
+      }
       reorder_program_days: {
         Args: { _ids: string[] }
         Returns: undefined

@@ -57,6 +57,13 @@
       "when": 1792075678000,
       "tag": "20261015144758_restrict_workout_table_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792095900000,
+      "tag": "20261015202500_archived_object_deletion",
+      "breakpoints": true
     }
   ]
 }

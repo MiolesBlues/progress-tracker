@@ -17,6 +17,13 @@ export type WorkoutDraft = {
 };
 export const draftKey = (userId: string, exerciseId: string, date?: string) =>
   `workout:draft:v1:${userId}:${exerciseId}${date === undefined ? "" : `:${date}`}`;
+export function removeExerciseDrafts(userId: string, exerciseId: string) {
+  const base = draftKey(userId, exerciseId);
+  for (let index = localStorage.length - 1; index >= 0; index--) {
+    const key = localStorage.key(index);
+    if (key === base || key?.startsWith(`${base}:`)) localStorage.removeItem(key);
+  }
+}
 export const hasDraftInput = (draft: WorkoutDraft) =>
   !!draft.operation || Object.values(draft.dirty).some(Boolean);
 const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;

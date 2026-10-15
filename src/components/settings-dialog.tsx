@@ -1,6 +1,9 @@
 import { Settings } from "lucide-react";
 import { useI18n, type Language } from "@/lib/i18n";
+import { useArchivePreferences } from "@/lib/archive-preferences";
+import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +21,8 @@ import {
 
 export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
   const { language, setLanguage, t } = useI18n();
+  const { userId } = useSession();
+  const archive = useArchivePreferences(userId);
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -59,6 +64,25 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
             </SelectContent>
           </Select>
         </div>
+        <fieldset className="space-y-3 border-t pt-4" disabled={!archive.available}>
+          <legend className="pb-2 text-sm font-semibold">{t("Управление данными")}</legend>
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <Checkbox
+              checked={archive.deletionEnabled}
+              onCheckedChange={(checked) => archive.setDeletionEnabled(checked === true)}
+              aria-label={t("Разрешить полное удаление")}
+            />
+            <span>{t("Разрешить полное удаление")}</span>
+          </label>
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <Checkbox
+              checked={archive.showArchive}
+              onCheckedChange={(checked) => archive.setShowArchive(checked === true)}
+              aria-label={t("Показывать архивные дни и упражнения")}
+            />
+            <span>{t("Показывать архивные дни и упражнения")}</span>
+          </label>
+        </fieldset>
       </DialogContent>
     </Dialog>
   );

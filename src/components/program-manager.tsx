@@ -7,6 +7,9 @@ import { exercisePatch, nextPosition, programName } from "@/lib/program";
 import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
 import { useI18n, translateKnown } from "@/lib/i18n";
+import { useArchivePreferences } from "@/lib/archive-preferences";
+import { removeExerciseDrafts } from "@/lib/workout-draft";
+import { ArchiveDeleteDialog } from "@/components/archive-delete-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +39,7 @@ const selectCls = "h-12 w-full min-w-0 rounded-md border border-input bg-card px
 export function ProgramManager() {
   const { t, language } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
+  const { deletionEnabled } = useArchivePreferences(userId);
   const qc = useQueryClient();
   const daysResult = useQuery(daysQuery(userId));
   const programResult = useQuery(programQuery(userId));
@@ -119,6 +123,54 @@ export function ProgramManager() {
       if (isCurrent()) setBusy(false);
     }
   };
+
+  async function deleteArchived(kind: "day" | "exercise", id: string): Promise<boolean> {
+    if (running.current || !isCurrent()) return false;
+    running.current = true;
+    setBusy(true);
+    try {
+      const result =
+        kind === "day"
+          ? await supabase.rpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
+          : await supabase
+              .rpc("delete_archived_program_exercise", { _exercise_id: id })
+              .abortSignal(signal);
+      if (!isCurrent()) return false;
+      if (result.error || result.data !== true) throw new Error("Deletion failed");
+      if (kind === "day") {
+        qc.setQueryData<Day[]>(userKeys.days(userId), (old) => old?.filter((day) => day.id !== id));
+        qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
+          old?.map((exercise) =>
+            exercise.day_id === id ? { ...exercise, day_id: null } : exercise,
+          ),
+        );
+        toast.success(t("День удалён, упражнения и история сохранены"));
+      } else {
+        qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
+          old?.filter((exercise) => exercise.id !== id),
+        );
+        await qc.cancelQueries({ queryKey: userKeys.entries(userId, id) });
+        await qc.cancelQueries({ queryKey: userKeys.lastEntry(userId, id) });
+        qc.removeQueries({ queryKey: userKeys.entries(userId, id) });
+        qc.removeQueries({ queryKey: userKeys.lastEntry(userId, id) });
+        setEditing(null);
+        try {
+          removeExerciseDrafts(userId, id);
+        } catch {
+          toast.error(t("Упражнение удалено, но локальный черновик очистить не удалось."));
+        }
+        toast.success(t("Упражнение и его история удалены"));
+      }
+      await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
+      return isCurrent();
+    } catch {
+      if (isCurrent()) await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
+      return false;
+    } finally {
+      running.current = false;
+      if (isCurrent()) setBusy(false);
+    }
+  }
 
   async function addDay(event: FormEvent) {
     event.preventDefault();
@@ -292,6 +344,16 @@ export function ProgramManager() {
             <Archive className="h-4 w-4" />
           )}
         </Button>
+        {deletionEnabled && ex.archived_at && (
+          <ArchiveDeleteDialog
+            kind="exercise"
+            id={ex.id}
+            name={ex.name}
+            userId={userId}
+            disabled={busy}
+            onConfirm={() => deleteArchived("exercise", ex.id)}
+          />
+        )}
       </div>
     );
   }
@@ -374,6 +436,7 @@ export function ProgramManager() {
                   save={(patch) => updateDay(day.id, patch)}
                   canArchive={active.length > 1}
                   canRestore={false}
+                  deleteControl={null}
                 />
               )}
             />
@@ -414,6 +477,19 @@ export function ProgramManager() {
                         save={(patch) => updateDay(day.id, patch)}
                         canArchive={false}
                         canRestore={active.length < MAX_DAYS}
+                        deleteControl={
+                          deletionEnabled ? (
+                            <ArchiveDeleteDialog
+                              kind="day"
+                              id={day.id}
+                              name={day.name}
+                              userId={userId}
+                              exerciseCount={exercises.filter((ex) => ex.day_id === day.id).length}
+                              disabled={busy}
+                              onConfirm={() => deleteArchived("day", day.id)}
+                            />
+                          ) : null
+                        }
                       />
                       {exercises.some((ex) => ex.day_id === day.id) && (
                         <details className="space-y-2 pt-2">
@@ -648,8 +724,18 @@ type DayEditorProps = {
   save: (patch: { name?: string; archived_at?: string | null }) => PromiseLike<Result>;
   canArchive: boolean;
   canRestore: boolean;
+  deleteControl: ReactNode;
 };
-function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: DayEditorProps) {
+function DayEditor({
+  day,
+  handle,
+  busy,
+  run,
+  save,
+  canArchive,
+  canRestore,
+  deleteControl,
+}: DayEditorProps) {
   const { t } = useI18n();
   const [name, setName] = useState(day.name);
   const [editing, setEditing] = useState(false);
@@ -713,6 +799,7 @@ function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: Day
             >
               <Pencil className="h-4 w-4" />
             </Button>
+            {deleteControl}
           </>
         )}
         <Button

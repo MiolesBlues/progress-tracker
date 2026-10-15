@@ -6,6 +6,7 @@ import { toISO } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
 import { useI18n, setsCount } from "@/lib/i18n";
+import { useArchivePreferences } from "@/lib/archive-preferences";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -22,6 +23,7 @@ function daysAgo(days: number, today: string) {
 export function EntriesPage() {
   const { t } = useI18n();
   const { userId } = useUserSession();
+  const { showArchive } = useArchivePreferences(userId);
   const daysResult = useQuery(daysQuery(userId));
   const programResult = useQuery(programQuery(userId));
   const [chosenDay, setChosenDay] = useState("");
@@ -40,21 +42,32 @@ export function EntriesPage() {
   if (daysResult.isPending || programResult.isPending)
     return <Loading>{t("Загрузка программы…")}</Loading>;
 
-  const days = daysResult.data;
-  const exercises = programResult.data;
+  const days = showArchive ? daysResult.data : daysResult.data.filter((day) => !day.archived_at);
+  const activeDayIds = new Set(days.map((day) => day.id));
+  const exercises = showArchive
+    ? programResult.data
+    : programResult.data.filter(
+        (exercise) =>
+          !exercise.archived_at && !!exercise.day_id && activeDayIds.has(exercise.day_id),
+      );
   const hasUnassigned = exercises.some((exercise) => exercise.day_id === null);
-  const dayId =
-    days.some((day) => day.id === chosenDay) || (chosenDay === UNASSIGNED && hasUnassigned)
+  const dayId = chosenDay
+    ? days.some((day) => day.id === chosenDay) || (chosenDay === UNASSIGNED && hasUnassigned)
       ? chosenDay
-      : (days.find((day) => !day.archived_at)?.id ??
-        days[0]?.id ??
-        (hasUnassigned ? UNASSIGNED : ""));
+      : ""
+    : (days.find((day) => !day.archived_at)?.id ??
+      days[0]?.id ??
+      (hasUnassigned ? UNASSIGNED : ""));
   const dayExercises = exercises.filter(
     (exercise) => exercise.day_id === (dayId === UNASSIGNED ? null : dayId),
   );
-  const exerciseId = dayExercises.some((exercise) => exercise.id === chosenExercise)
-    ? chosenExercise
-    : (dayExercises[0]?.id ?? "");
+  const exerciseId = !dayId
+    ? ""
+    : chosenExercise
+      ? dayExercises.some((exercise) => exercise.id === chosenExercise)
+        ? chosenExercise
+        : ""
+      : (dayExercises[0]?.id ?? "");
 
   return (
     <div className="min-w-0 space-y-5">
@@ -74,6 +87,7 @@ export function EntriesPage() {
                 setChosenExercise("");
               }}
             >
+              {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
               {days.map((day) => (
                 <option key={day.id} value={day.id}>
                   {day.name}
@@ -83,7 +97,9 @@ export function EntriesPage() {
               {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
             </select>
           </label>
-          {!dayExercises.length ? (
+          {!dayId ? (
+            <p>{t("Выберите тренировочный день")}</p>
+          ) : !dayExercises.length ? (
             <p>{t("В этом дне пока нет упражнений с записями.")}</p>
           ) : (
             <>
@@ -95,6 +111,7 @@ export function EntriesPage() {
                   value={exerciseId}
                   onChange={(event) => setChosenExercise(event.target.value)}
                 >
+                  {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
                   {dayExercises.map((exercise) => (
                     <option key={exercise.id} value={exercise.id}>
                       {exercise.name}
@@ -103,11 +120,15 @@ export function EntriesPage() {
                   ))}
                 </select>
               </label>
-              <ExerciseEntries
-                key={`${userId}:${exerciseId}`}
-                userId={userId}
-                exerciseId={exerciseId}
-              />
+              {exerciseId ? (
+                <ExerciseEntries
+                  key={`${userId}:${exerciseId}`}
+                  userId={userId}
+                  exerciseId={exerciseId}
+                />
+              ) : (
+                <p>{t("Выберите упражнение")}</p>
+              )}
             </>
           )}
         </>
