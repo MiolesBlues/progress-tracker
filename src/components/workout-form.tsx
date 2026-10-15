@@ -263,26 +263,26 @@ export function WorkoutForm({
         </p>
       )}
       <fieldset disabled={locked} className="space-y-5">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="date">Дата</Label>
             <Input
               id="date"
               type="date"
               value={fields.date}
               onChange={(event) => change("date", event.target.value)}
-              className="h-12"
+              className="box-border h-12 min-w-0 w-full max-w-full appearance-auto px-2 sm:px-3"
               required
             />
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="w">Рабочий вес, кг</Label>
             <Input
               id="w"
               inputMode="decimal"
               value={fields.weight}
               onChange={(event) => change("weight", event.target.value)}
-              className="num h-12 text-lg"
+              className="num box-border h-12 min-w-0 w-full max-w-full text-lg"
               placeholder="Укажите вес"
             />
           </div>
