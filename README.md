@@ -30,11 +30,11 @@ bun run test:db
 bun run test:toolchain
 bun run build
 bun run audit
-bunx playwright install chromium webkit
+bunx --no-install playwright install chromium webkit
 bun run test:e2e
 ```
 
-В PowerShell при запрете `npm.ps1` доступны `npm.cmd run ...` и `npm.cmd exec --yes --package=bun -- bun ...`. SQL-тесты используют PostgreSQL/PGlite в памяти. Playwright исполняет реальный UI с подменённым Auth/HTTP; это проверка интерфейса, а не реальных JWT/RLS. Все проверки включены в [.github/workflows/quality.yml](.github/workflows/quality.yml); workflow не развёртывает приложение и не применяет миграции.
+В PowerShell при запрете `npm.ps1` доступны `npm.cmd run ...` и `npm.cmd exec --yes --package=bun@1.4.3 -- bun ...`. Для установки используйте Bun 1.4.3 и committed lockfile; `npm install` не воспроизводит его. SQL-тесты используют PostgreSQL/PGlite в памяти. Playwright исполняет реальный UI с подменённым Auth/HTTP; это проверка интерфейса, а не реальных JWT/RLS. Все проверки включены в [.github/workflows/quality.yml](.github/workflows/quality.yml); workflow не развёртывает приложение и не применяет миграции.
 
 Форматирование — Prettier, окончания строк LF через `.gitattributes`. Генерируемые файлы и отдельный вложенный проект исключены из форматирования/линтера.
 
@@ -43,6 +43,7 @@ bun run test:e2e
 - [Модель данных и аналитики](docs/PROGRAM-AND-DATABASE-RU.md).
 - [Разбор advisories и обновлений](docs/DEPENDENCIES-RU.md).
 - [E2E-приёмка двух пользователей на staging](docs/E2E-RELEASE-RU.md).
+- [Исправления V2: данные](V2-DATA-INTEGRITY-RU.md), [сборка и E2E](V2-BUILD-AND-E2E-RU.md).
 - [Первый этап A01–A03](SECURITY-FIXES-RU.md), [второй этап](WORKOUT-DATA-INTEGRITY-RU.md).
 
 SQL-файлы `drizzle/migrations/0000…0004` — источник схемы. Перед применением нужны read-only preflight, просмотр старых нарушений, резервная копия и проверенная репетиция. `drizzle-kit push` использовать нельзя: `drizzle/schema.ts` и snapshots не описывают эту схему. Production-миграции требуют отдельного согласования; приложение с новым сохранением требует RPC из 0004 и не использует небезопасный fallback INSERT.

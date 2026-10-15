@@ -10,7 +10,19 @@ export async function mockSupabase(page: Page) {
     program_exercises: [],
     workout_entries: [],
   };
-  const state = { rows, offline: false, loseSaveResponse: false, saveCalls: [] as string[] };
+  const state = {
+    rows,
+    users,
+    offline: false,
+    loseSaveResponse: false,
+    failReorder: false,
+    saveCalls: [] as string[],
+    signupCalls: [] as Record<string, unknown>[],
+    rpcCalls: [] as { name: string; userId: string; args: Record<string, unknown> }[],
+    delayLastRead: null as { exerciseId: string; promise: Promise<void> } | null,
+    sequence: 0,
+  };
+  const createdAt = () => new Date(Date.UTC(2026, 9, 15, 12, 0, 0, ++state.sequence)).toISOString();
   const user = (id: string, email = "test@example.invalid") => ({
     id,
     email,
@@ -56,6 +68,7 @@ export async function mockSupabase(page: Page) {
       });
     if (state.offline) return respond({ message: "Network unavailable" }, 503);
     if (url.pathname.endsWith("/signup") || url.pathname.endsWith("/token")) {
+      if (url.pathname.endsWith("/signup")) state.signupCalls.push(json ?? {});
       const email = String(json?.["email"]);
       id = users.get(email) ?? randomUUID();
       users.set(email, id);
@@ -72,6 +85,7 @@ export async function mockSupabase(page: Page) {
     if (url.pathname.endsWith("/logout")) return respond({});
     if (url.pathname.includes("/rpc/")) {
       const args = json ?? {};
+      state.rpcCalls.push({ name: url.pathname.split("/").at(-1)!, userId: id, args });
       if (url.pathname.endsWith("/setup_program")) {
         (args["_names"] as string[]).forEach((name, position) =>
           rows["program_days"]!.push({
@@ -80,7 +94,7 @@ export async function mockSupabase(page: Page) {
             name,
             position,
             archived_at: null,
-            created_at: new Date().toISOString(),
+            created_at: createdAt(),
           }),
         );
         return respond(null);
@@ -96,7 +110,7 @@ export async function mockSupabase(page: Page) {
             day_id: args["_day_id"],
             day_name: rows["program_days"]!.find((r) => r.id === args["_day_id"])?.["name"],
             performed_on: args["_performed_on"],
-            created_at: new Date().toISOString(),
+            created_at: createdAt(),
             weight: args["_weight"],
             reps: args["_reps"],
             rir: args["_rir"],
@@ -109,6 +123,10 @@ export async function mockSupabase(page: Page) {
         return respond(operation);
       }
       if (url.pathname.includes("/reorder_")) {
+        if (state.failReorder) {
+          state.failReorder = false;
+          return respond({ message: "Не удалось сохранить порядок" }, 503);
+        }
         const table = url.pathname.endsWith("reorder_program_days")
           ? "program_days"
           : "program_exercises";
@@ -142,7 +160,7 @@ export async function mockSupabase(page: Page) {
         example_reps: null,
         target_reps: null,
         target_sets: null,
-        created_at: new Date().toISOString(),
+        created_at: createdAt(),
         ...json,
       };
       rows[table]!.push(row);
@@ -165,6 +183,15 @@ export async function mockSupabase(page: Page) {
       requested = Number(url.searchParams.get("limit") ?? 1000);
     // A deliberately low maxRows catches silent truncation even with a tiny fixture.
     found = found.slice(from, from + Math.min(requested, 2));
+    if (
+      requested === 1 &&
+      url.searchParams.get("exercise_id") === `eq.${state.delayLastRead?.exerciseId}`
+    ) {
+      const gate = state.delayLastRead!;
+      state.delayLastRead = null;
+      found = structuredClone(found);
+      await gate.promise;
+    }
     return respond(
       request.headers()["accept"]?.includes("vnd.pgrst.object") ? (found[0] ?? null) : found,
       200,
