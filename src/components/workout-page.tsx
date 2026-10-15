@@ -7,6 +7,7 @@ import { toISO } from "@/lib/workout";
 import { isWorkoutDate } from "@/lib/workout-input";
 import { WorkoutForm } from "@/components/workout-form";
 import { Loading, LoadError } from "@/components/query-feedback";
+import { useI18n, exerciseCount } from "@/lib/i18n";
 import {
   Select,
   SelectContent,
@@ -15,21 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-function exerciseCount(count: number) {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  const noun =
-    lastTwo >= 11 && lastTwo <= 14
-      ? "упражнений"
-      : last === 1
-        ? "упражнение"
-        : last >= 2 && last <= 4
-          ? "упражнения"
-          : "упражнений";
-  return `${count} ${noun}`;
-}
-
 export function WorkoutPage() {
+  const { t, language } = useI18n();
   const { userId } = useUserSession();
   const programResult = useQuery(programQuery(userId));
   const daysResult = useQuery(daysQuery(userId));
@@ -156,17 +144,17 @@ export function WorkoutPage() {
           void daysResult.refetch();
         }}
       >
-        Не удалось загрузить программу тренировки.
+        {t("Не удалось загрузить программу тренировки.")}
       </LoadError>
     );
   if (programResult.isPending || daysResult.isPending)
-    return <Loading>Загрузка программы…</Loading>;
+    return <Loading>{t("Загрузка программы…")}</Loading>;
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-extrabold tracking-tight">Тренировка</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
       <div className="min-w-0 space-y-2">
         <label id="training-day-label" className="block text-sm font-medium">
-          Тренировочный день
+          {t("Тренировочный день")}
         </label>
         <Select
           value={day?.id ?? ""}
@@ -174,11 +162,11 @@ export function WorkoutPage() {
           disabled={!days.length}
         >
           <SelectTrigger
-            aria-label="Тренировочный день"
+            aria-label={t("Тренировочный день")}
             aria-labelledby="training-day-label"
             className="h-12 min-w-0 bg-card text-foreground"
           >
-            <SelectValue placeholder="Нет активных дней" />
+            <SelectValue placeholder={t("Нет активных дней")} />
           </SelectTrigger>
           <SelectContent
             position="popper"
@@ -198,7 +186,7 @@ export function WorkoutPage() {
                   className="h-auto min-h-10 whitespace-normal py-2"
                 >
                   <span className="block min-w-0 whitespace-normal break-words leading-snug">
-                    {item.name} · {exerciseCount(count)}
+                    {item.name} · {exerciseCount(count, language)}
                   </span>
                 </SelectItem>
               );
@@ -208,26 +196,26 @@ export function WorkoutPage() {
       </div>
       {!day && (
         <p>
-          Нет активных дней.{" "}
+          {t("Нет активных дней.")}{" "}
           <Link to="/program" className="text-primary">
-            Добавьте или восстановите день
+            {t("Добавьте или восстановите день")}
           </Link>
         </p>
       )}
       {day && !current && (
         <p>
-          В этом дне нет активных упражнений.{" "}
+          {t("В этом дне нет активных упражнений.")}{" "}
           <Link to="/program" className="text-primary">
-            Добавьте упражнение
+            {t("Добавьте упражнение")}
           </Link>
         </p>
       )}
       {current && day && (
         <>
           <label className="block space-y-2 text-sm">
-            Упражнение
+            {t("Упражнение")}
             <select
-              aria-label="Упражнение"
+              aria-label={t("Упражнение")}
               className="h-12 w-full min-w-0 rounded-md border border-input bg-card px-3"
               value={current.id}
               onChange={(event) => select(day.id, event.target.value)}
@@ -241,7 +229,9 @@ export function WorkoutPage() {
           </label>
           {completedDay?.dayId === day.id && completedDay.date === workoutDate && (
             <p role="status" className="text-xs text-muted-foreground">
-              Все упражнения этого дня пройдены. Можно выбрать упражнение для дополнительной сессии.
+              {t(
+                "Все упражнения этого дня пройдены. Можно выбрать упражнение для дополнительной сессии.",
+              )}
             </p>
           )}
           <WorkoutForm

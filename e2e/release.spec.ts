@@ -191,6 +191,7 @@ for (const [width, count] of [
     await expect(diary.getByRole("listitem").first()).toContainText("40 кг");
     await noOverflow(page);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
+    await page.getByLabel("Тренировочный день", { exact: true }).selectOption(firstDay.id);
     await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
     await page.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(page.getByText("Записи за период (4)", { exact: true })).toBeVisible();
@@ -230,6 +231,8 @@ for (const [width, count] of [
     await diary.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(diary.getByRole("listitem")).toHaveCount(4);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
+    await page.getByRole("button", { name: "Архивная история", exact: true }).click();
+    await page.getByLabel("Тренировочный день", { exact: true }).selectOption(firstDay.id);
     await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
     await page.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(page.getByText("Записи за период (4)", { exact: true })).toBeVisible();

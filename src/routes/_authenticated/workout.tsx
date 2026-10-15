@@ -4,7 +4,7 @@ import { WorkoutPage } from "@/components/workout-page";
 export const Route = createFileRoute("/_authenticated/workout")({
   head: () => ({
     meta: [
-      { title: "Тренировка — Прогресс Тренер" },
+      { title: "Тренировка — Прогресс Трекер" },
       { name: "description", content: "Запишите подходы, вес и RIR для упражнения." },
     ],
   }),

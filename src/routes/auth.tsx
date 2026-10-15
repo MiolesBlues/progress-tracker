@@ -9,17 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff } from "lucide-react";
+import { useI18n, translateKnown, rememberSignupLanguage } from "@/lib/i18n";
+import { SettingsDialog } from "@/components/settings-dialog";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Вход — Прогресс Тренер" },
+      { title: "Вход — Прогресс Трекер" },
       {
         name: "description",
         content: "Войдите или зарегистрируйтесь, чтобы вести дневник тренировок.",
       },
-      { property: "og:title", content: "Вход — Прогресс Тренер" },
-      { property: "og:description", content: "Вход и регистрация в Прогресс Тренер." },
+      { property: "og:title", content: "Вход — Прогресс Трекер" },
+      { property: "og:description", content: "Вход и регистрация в Прогресс Трекер." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -28,6 +30,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
+  const { t, language } = useI18n();
   const { ready } = useSession();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"in" | "up">("in");
@@ -79,7 +82,8 @@ function AuthPage() {
           options: { emailRedirectTo: `${window.location.origin}/workout` },
         });
         if (error) throw error;
-        if (!data.session) toast.success("Проверьте почту и подтвердите регистрацию");
+        if (data.user) rememberSignupLanguage(data.user.id, language);
+        if (!data.session) toast.success(t("Проверьте почту и подтвердите регистрацию"));
       }
     } catch (err) {
       setAuthError(authMessage(err));
@@ -118,17 +122,20 @@ function AuthPage() {
 
   return (
     <main className="safe-top mx-auto flex min-h-dvh w-full min-w-0 max-w-md flex-col justify-center px-6 py-8">
+      <div className="absolute right-5 top-[calc(env(safe-area-inset-top)+0.5rem)]">
+        <SettingsDialog disabled={!ready} />
+      </div>
       <h1 className="text-3xl font-extrabold tracking-tight">
-        {mode === "in" ? "С возвращением!" : "Создать аккаунт"}
+        {mode === "in" ? t("С возвращением!") : t("Создать аккаунт")}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
         {mode === "in"
-          ? "Ваши тренировки видны только вам."
-          : "Начните отслеживать свои тренировки"}
+          ? t("Ваши тренировки видны только вам.")
+          : t("Начните отслеживать свои тренировки")}
       </p>
       {authError && (
         <p role="alert" className="mt-4 text-sm text-destructive">
-          {authError}
+          {translateKnown(language, authError)}
         </p>
       )}
       <form onSubmit={submit} className="mt-8 space-y-4">
@@ -146,7 +153,7 @@ function AuthPage() {
           />
         </div>
         <div className="min-w-0 space-y-2">
-          <Label htmlFor="pw">Пароль</Label>
+          <Label htmlFor="pw">{t("Пароль")}</Label>
           <div className="relative min-w-0">
             <Input
               id="pw"
@@ -161,7 +168,7 @@ function AuthPage() {
             />
             <button
               type="button"
-              aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+              aria-label={showPassword ? t("Скрыть пароль") : t("Показать пароль")}
               aria-pressed={showPassword}
               disabled={!ready || busy}
               onClick={() => setShowPassword((visible) => !visible)}
@@ -177,7 +184,7 @@ function AuthPage() {
         </div>
         {mode === "up" && (
           <div className="min-w-0 space-y-2">
-            <Label htmlFor="confirm-pw">Подтвердите пароль</Label>
+            <Label htmlFor="confirm-pw">{t("Подтвердите пароль")}</Label>
             <div className="relative min-w-0">
               <Input
                 id="confirm-pw"
@@ -196,8 +203,8 @@ function AuthPage() {
                 type="button"
                 aria-label={
                   showConfirmPassword
-                    ? "Скрыть подтверждение пароля"
-                    : "Показать подтверждение пароля"
+                    ? t("Скрыть подтверждение пароля")
+                    : t("Показать подтверждение пароля")
                 }
                 aria-pressed={showConfirmPassword}
                 disabled={!ready || busy}
@@ -213,7 +220,7 @@ function AuthPage() {
             </div>
             {confirmationError && (
               <p id="confirm-pw-error" role="alert" className="text-sm text-destructive">
-                {confirmationError}
+                {translateKnown(language, confirmationError)}
               </p>
             )}
           </div>
@@ -221,11 +228,11 @@ function AuthPage() {
         <Button type="submit" disabled={!ready || busy} className="h-12 w-full text-base font-bold">
           {busy
             ? mode === "in"
-              ? "Входим…"
-              : "Регистрируемся…"
+              ? t("Входим…")
+              : t("Регистрируемся…")
             : mode === "in"
-              ? "Войти"
-              : "Зарегистрироваться"}
+              ? t("Войти")
+              : t("Зарегистрироваться")}
         </Button>
       </form>
       <Button
@@ -234,7 +241,7 @@ function AuthPage() {
         onClick={google}
         className="mt-3 h-12 w-full"
       >
-        Продолжить с Google
+        {t("Продолжить с Google")}
       </Button>
       <button
         disabled={!ready || busy}
@@ -248,16 +255,16 @@ function AuthPage() {
         <span>
           {mode === "in" ? (
             <>
-              Нет аккаунта?{" "}
+              {t("Нет аккаунта?")}{" "}
               <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
-                Зарегистрироваться
+                {t("Зарегистрироваться")}
               </span>
             </>
           ) : (
             <>
-              Уже есть аккаунт?{" "}
+              {t("Уже есть аккаунт?")}{" "}
               <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
-                Войти
+                {t("Войти")}
               </span>
             </>
           )}

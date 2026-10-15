@@ -62,6 +62,7 @@ it("explains that invalid legacy results need review and leaves the saved data u
   };
   fake.state.rows.workout_entries = [legacy];
   mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архивная история" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("данные требуют отдельной проверки");
   expect(legacy.reps).toEqual([null, 8]);
   expect(screen.queryByLabelText("Тренировка для сравнения")).not.toBeInTheDocument();
@@ -88,6 +89,7 @@ it("selects an older workout independently of graph period and preserves archive
     entry("future", "2099-01-01", 100),
   ];
   mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архивная история" }));
   const select = await screen.findByLabelText("Тренировка для сравнения");
   fireEvent.change(select, { target: { value: "selected" } });
   const sessions = screen
@@ -98,7 +100,7 @@ it("selects an older workout independently of graph period and preserves archive
     .getByRole("heading", { name: "С прошлой календарной неделей" })
     .closest("section")!;
   expect(within(week).getByText(/40 → 55 кг/)).toHaveTextContent("+37,5%");
-  expect(within(week).getByText(/2020-09-21 — 2020-09-27/)).toBeInTheDocument();
+  expect(within(week).getByText(/21\.09\.2020 — 27\.09\.2020/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Всё время" }));
   expect(screen.getByText("Записи за период (4)")).toBeInTheDocument();
   expect(screen.getByTestId("series")).not.toHaveTextContent("2099");
@@ -109,6 +111,7 @@ it("shows every history page and never silently stops at twenty records", async 
     entry(String(i).padStart(3, "0"), "2020-10-05"),
   );
   mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архивная история" }));
   await screen.findByLabelText("Тренировка для сравнения");
   fireEvent.click(screen.getByRole("button", { name: "Всё время" }));
   expect(screen.getByText("Записи за период (23)")).toBeInTheDocument();
@@ -120,9 +123,40 @@ it("shows every history page and never silently stops at twenty records", async 
 it("load error hides all comparison percentages and offers Retry", async () => {
   fake.state.readErrors["workout_entries"] = "denied";
   mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Архивная история" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Расчёты недоступны");
   expect(screen.queryByLabelText("Тренировка для сравнения")).not.toBeInTheDocument();
   delete fake.state.readErrors["workout_entries"];
   fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
   expect(await screen.findByText("Записей пока нет")).toBeInTheDocument();
+});
+
+it("selects a day first, filters exercises, and never keeps the previous exercise's chart", async () => {
+  fake.state.rows.program_days = [
+    { id: "first", user_id: "A", name: "Push", archived_at: null, position: 0 },
+    {
+      id: "second",
+      user_id: "A",
+      name: "Очень длинное название тренировочного дня",
+      archived_at: null,
+      position: 1,
+    },
+  ];
+  fake.state.rows.program_exercises = [
+    { id: "ex-1", user_id: "A", day_id: "first", name: "Жим", archived_at: null, position: 0 },
+    { id: "ex-2", user_id: "A", day_id: "second", name: "Тяга", archived_at: null, position: 0 },
+  ];
+  fake.state.rows.workout_entries = [
+    { ...entry("one", "2020-10-05", 50), exercise_id: "ex-1" },
+    { ...entry("two", "2020-10-05", 90), exercise_id: "ex-2" },
+  ];
+  mount();
+  const day = await screen.findByLabelText("Тренировочный день");
+  expect(day).toHaveValue("first");
+  expect(screen.getByLabelText("Упражнение")).toHaveValue("ex-1");
+  expect(screen.queryByRole("option", { name: /Жим · Push/ })).not.toBeInTheDocument();
+  fireEvent.change(day, { target: { value: "second" } });
+  expect(screen.getByLabelText("Упражнение")).toHaveValue("ex-2");
+  expect(screen.queryByRole("option", { name: "Жим" })).not.toBeInTheDocument();
+  expect(await screen.findByLabelText("Тренировка для сравнения")).toHaveValue("two");
 });

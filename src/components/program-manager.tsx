@@ -6,6 +6,7 @@ import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/li
 import { exercisePatch, nextPosition, programName } from "@/lib/program";
 import { useUserSession } from "@/lib/session";
 import { MAX_DAYS } from "@/lib/workout";
+import { useI18n, translateKnown } from "@/lib/i18n";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
 const selectCls = "h-12 w-full min-w-0 rounded-md border border-input bg-card px-3 text-foreground";
 
 export function ProgramManager() {
+  const { t, language } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
   const qc = useQueryClient();
   const daysResult = useQuery(daysQuery(userId));
@@ -93,12 +95,14 @@ export function ProgramManager() {
       if (!isCurrent()) return false;
       if (result.error) {
         const message = result.error.message;
-        if (message.includes("7 активных дней") || message.includes("хотя бы один активный день"))
-          throw new Error(message);
+        if (message.includes("7 активных дней"))
+          throw new Error(t("Можно иметь не более 7 активных дней."));
+        if (message.includes("хотя бы один активный день"))
+          throw new Error(t("Нужен хотя бы один активный день."));
         if (result.error.code === "22023" || result.error.code === "PGRST116")
-          throw new Error("Программа изменилась. Обновите страницу и повторите действие.");
+          throw new Error(t("Программа изменилась. Обновите страницу и повторите действие."));
         throw new Error(
-          "Не удалось сохранить изменения. Проверьте соединение и повторите попытку.",
+          t("Не удалось сохранить изменения. Проверьте соединение и повторите попытку."),
         );
       }
       await Promise.all([
@@ -108,7 +112,7 @@ export function ProgramManager() {
       return isCurrent();
     } catch (err) {
       if (isCurrent())
-        onError(err instanceof Error ? err.message : "Не удалось сохранить изменения");
+        onError(err instanceof Error ? err.message : t("Не удалось сохранить изменения"));
       return false;
     } finally {
       running.current = false;
@@ -133,16 +137,16 @@ export function ProgramManager() {
     event.preventDefault();
     if (busy) return;
     if (!newExerciseDayId) {
-      setError("Выберите активный тренировочный день перед добавлением упражнения.");
+      setError(t("Выберите активный тренировочный день перед добавлением упражнения."));
       return;
     }
     const targetDay = days.find((day) => day.id === newExerciseDayId);
     if (!targetDay || targetDay.archived_at) {
-      setError("Выбранный тренировочный день больше недоступен. Выберите активный день заново.");
+      setError(t("Выбранный тренировочный день больше недоступен. Выберите активный день заново."));
       return;
     }
     if (!newExerciseSets.trim() || !newExerciseReps.trim()) {
-      setError("Укажите число подходов и целевой диапазон повторений.");
+      setError(t("Укажите число подходов и целевой диапазон повторений."));
       return;
     }
     let values: ReturnType<typeof exercisePatch>;
@@ -158,7 +162,7 @@ export function ProgramManager() {
         days,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Проверьте данные упражнения.");
+      setError(err instanceof Error ? err.message : t("Проверьте данные упражнения."));
       return;
     }
     const targetSets = Number(newExerciseSets);
@@ -174,7 +178,9 @@ export function ProgramManager() {
       const { data: latestDay, error: dayError } = await dayLookup.maybeSingle();
       if (dayError) return { error: dayError };
       if (!latestDay || latestDay.archived_at)
-        throw new Error("Выбранный тренировочный день больше недоступен. Упражнение не создано.");
+        throw new Error(
+          t("Выбранный тренировочный день больше недоступен. Упражнение не создано."),
+        );
       return supabase
         .from("program_exercises")
         .insert({
@@ -193,7 +199,7 @@ export function ProgramManager() {
     setNewExerciseSets("3");
     setNewExerciseReps("");
     setNewExerciseDayId("");
-    toast.success("Упражнение добавлено");
+    toast.success(t("Упражнение добавлено"));
   }
   const updateDay = (id: string, patch: { name?: string; archived_at?: string | null }) =>
     supabase
@@ -215,18 +221,18 @@ export function ProgramManager() {
       .single();
 
   if (daysResult.isPending || programResult.isPending)
-    return <p role="status">Загрузка программы…</p>;
+    return <p role="status">{t("Загрузка программы…")}</p>;
   if (daysResult.isError || programResult.isError)
     return (
       <div role="alert">
-        Не удалось загрузить программу.{" "}
+        {t("Не удалось загрузить программу.")}{" "}
         <Button
           onClick={() => {
             void daysResult.refetch();
             void programResult.refetch();
           }}
         >
-          Повторить
+          {t("Повторить")}
         </Button>
       </div>
     );
@@ -234,9 +240,9 @@ export function ProgramManager() {
   function summary(ex: Exercise) {
     if (ex.target_sets && ex.target_reps)
       return `${ex.target_sets} × ${ex.target_reps.replace("-", "–")}`;
-    if (ex.target_sets) return `${ex.target_sets} подх.`;
-    if (ex.target_reps) return `${ex.target_reps.replace("-", "–")} повт.`;
-    return "Цель не задана";
+    if (ex.target_sets) return t("{count} подх.", { count: ex.target_sets });
+    if (ex.target_reps) return t("{count} повт.", { count: ex.target_reps.replace("-", "–") });
+    return t("Цель не задана");
   }
   function compactRow(ex: Exercise, handle?: ReactNode) {
     return (
@@ -250,7 +256,7 @@ export function ProgramManager() {
           type="button"
           size="icon"
           variant="ghost"
-          aria-label={`Редактировать: ${ex.name}`}
+          aria-label={t("Редактировать: {name}", { name: ex.name })}
           disabled={busy}
           onClick={() => {
             setExerciseError("");
@@ -265,7 +271,11 @@ export function ProgramManager() {
           type="button"
           size="icon"
           variant="ghost"
-          aria-label={ex.archived_at ? `Восстановить: ${ex.name}` : `В архив: ${ex.name}`}
+          aria-label={
+            ex.archived_at
+              ? t("Восстановить: {name}", { name: ex.name })
+              : t("В архив: {name}", { name: ex.name })
+          }
           disabled={busy}
           onClick={() =>
             void run(() =>
@@ -289,10 +299,10 @@ export function ProgramManager() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-extrabold">Программа</h1>
+      <h1 className="text-2xl font-extrabold">{t("Программа")}</h1>
       {error && !managingDays && !addingExercise && (
         <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
-          {error}
+          {translateKnown(language, error)}
         </p>
       )}
       <Sheet
@@ -303,19 +313,19 @@ export function ProgramManager() {
         }}
       >
         <section
-          aria-label="Тренировочные дни"
+          aria-label={t("Тренировочные дни")}
           className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
         >
           <div className="min-w-0">
-            <h2 className="font-bold">Тренировочные дни</h2>
+            <h2 className="font-bold">{t("Тренировочные дни")}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {active.length} из {MAX_DAYS}
+              {t("{count} из {max}", { count: active.length, max: MAX_DAYS })}
             </p>
           </div>
           <SheetTrigger asChild>
             <Button variant="secondary" className="h-11 shrink-0">
               <Pencil className="h-4 w-4" />
-              Изменить дни
+              {t("Изменить дни")}
             </Button>
           </SheetTrigger>
         </section>
@@ -325,15 +335,15 @@ export function ProgramManager() {
         >
           <SheetHeader className="safe-top shrink-0 border-b px-4 pb-4 text-left sm:px-6">
             <div className="flex items-center justify-between gap-3">
-              <SheetTitle>Тренировочные дни</SheetTitle>
+              <SheetTitle>{t("Тренировочные дни")}</SheetTitle>
               <SheetClose asChild>
                 <Button className="h-11 shrink-0" disabled={busy}>
-                  Готово
+                  {t("Готово")}
                 </Button>
               </SheetClose>
             </div>
             <SheetDescription>
-              {active.length} из {MAX_DAYS} активных дней
+              {t("{count} из {max} активных дней", { count: active.length, max: MAX_DAYS })}
             </SheetDescription>
           </SheetHeader>
           <div className="safe-bottom min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pt-4 sm:px-6">
@@ -342,13 +352,13 @@ export function ProgramManager() {
                 role="alert"
                 className="break-words rounded-lg border border-destructive p-3 text-sm"
               >
-                {error}
+                {translateKnown(language, error)}
               </p>
             )}
             <SortableList
               items={active}
               disabled={busy}
-              handleLabel={(day) => `Переместить день ${day.name}`}
+              handleLabel={(day) => t("Переместить день {name}", { name: day.name })}
               draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
               onReorder={(ids) =>
                 void run(() =>
@@ -369,11 +379,11 @@ export function ProgramManager() {
             />
             <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
               <Input
-                aria-label="Название нового дня"
+                aria-label={t("Название нового дня")}
                 value={newDay}
                 onChange={(event) => setNewDay(event.target.value)}
                 maxLength={60}
-                placeholder="Новый день"
+                placeholder={t("Новый день")}
                 className="h-12 min-w-0 flex-1 basis-40"
                 disabled={busy || active.length >= MAX_DAYS}
               />
@@ -382,15 +392,17 @@ export function ProgramManager() {
                 className="h-12 shrink-0"
                 disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
               >
-                Добавить день
+                {t("Добавить день")}
               </Button>
             </form>
             {active.length >= MAX_DAYS && (
-              <p className="text-sm text-muted-foreground">Можно иметь не более 7 активных дней.</p>
+              <p className="text-sm text-muted-foreground">
+                {t("Можно иметь не более 7 активных дней.")}
+              </p>
             )}
             {days.some((day) => day.archived_at) && (
               <details className="space-y-3">
-                <summary className="cursor-pointer py-2 font-bold">Архив дней</summary>
+                <summary className="cursor-pointer py-2 font-bold">{t("Архив дней")}</summary>
                 {days
                   .filter((day) => day.archived_at)
                   .map((day) => (
@@ -406,7 +418,7 @@ export function ProgramManager() {
                       {exercises.some((ex) => ex.day_id === day.id) && (
                         <details className="space-y-2 pt-2">
                           <summary className="cursor-pointer py-2 text-sm">
-                            Упражнения архивного дня
+                            {t("Упражнения архивного дня")}
                           </summary>
                           {exercises
                             .filter((ex) => ex.day_id === day.id)
@@ -423,18 +435,18 @@ export function ProgramManager() {
         </SheetContent>
       </Sheet>
 
-      <section aria-label="Упражнения" className="space-y-3">
-        <h2 className="font-bold">Упражнения</h2>
+      <section aria-label={t("Упражнения")} className="space-y-3">
+        <h2 className="font-bold">{t("Упражнения")}</h2>
         <Select
           value={dayId}
           disabled={busy || !active.length || addingExercise}
           onValueChange={selectDay}
         >
           <SelectTrigger
-            aria-label="День для упражнений"
+            aria-label={t("День для упражнений")}
             className="h-12 w-full min-w-0 bg-card text-left [&>span]:min-w-0 [&>span]:truncate"
           >
-            <SelectValue placeholder="Нет активных дней" />
+            <SelectValue placeholder={t("Нет активных дней")} />
           </SelectTrigger>
           <SelectContent
             position="popper"
@@ -446,7 +458,9 @@ export function ProgramManager() {
               <SelectItem key={day.id} value={day.id} className="min-h-10 whitespace-normal py-2">
                 <span className="block min-w-0 break-words leading-snug">
                   {day.name} ·{" "}
-                  {exercises.filter((ex) => ex.day_id === day.id && !ex.archived_at).length} упр.
+                  {t("{count} упр.", {
+                    count: exercises.filter((ex) => ex.day_id === day.id && !ex.archived_at).length,
+                  })}
                 </span>
               </SelectItem>
             ))}
@@ -454,12 +468,13 @@ export function ProgramManager() {
         </Select>
         {!active.length && (
           <p className="text-sm text-muted-foreground">
-            Нет активных дней. Создайте или восстановите день через «Изменить дни».
+            {t("Нет активных дней. Создайте или восстановите день через «Изменить дни».")}
           </p>
         )}
         <SortableList
           items={currentExercises}
           disabled={busy}
+          handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
           onReorder={(ids) =>
             void run(() =>
               supabase
@@ -470,7 +485,7 @@ export function ProgramManager() {
           render={(ex, handle) => compactRow(ex, handle)}
         />
         {!currentExercises.length && (
-          <p className="text-sm text-muted-foreground">Упражнений пока нет.</p>
+          <p className="text-sm text-muted-foreground">{t("Упражнений пока нет.")}</p>
         )}
         {selectedDay && !selectedDay.archived_at && (
           <Button
@@ -483,12 +498,12 @@ export function ProgramManager() {
               setAddingExercise(true);
             }}
           >
-            Добавить упражнение
+            {t("Добавить упражнение")}
           </Button>
         )}
         {exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
           <details className="space-y-3">
-            <summary className="cursor-pointer py-2 font-bold">Архив упражнений</summary>
+            <summary className="cursor-pointer py-2 font-bold">{t("Архив упражнений")}</summary>
             {exercises
               .filter((ex) => ex.day_id === dayId && ex.archived_at)
               .map((ex) => (
@@ -499,11 +514,14 @@ export function ProgramManager() {
       </section>
 
       {unassigned.length > 0 && (
-        <section aria-label="Упражнения без дня" className="space-y-3 rounded-xl border p-3">
-          <h2 className="font-bold">Без назначенного дня · {unassigned.length}</h2>
+        <section aria-label={t("Упражнения без дня")} className="space-y-3 rounded-xl border p-3">
+          <h2 className="font-bold">
+            {t("Без назначенного дня · {count}", { count: unassigned.length })}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История
-            останется без изменений.
+            {t(
+              "Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История останется без изменений.",
+            )}
           </p>
           {unassigned.map((ex) => (
             <div key={ex.id}>{compactRow(ex)}</div>
@@ -513,7 +531,7 @@ export function ProgramManager() {
       <Sheet open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
         <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl">
           <SheetHeader>
-            <SheetTitle>Редактирование упражнения</SheetTitle>
+            <SheetTitle>{t("Редактирование упражнения")}</SheetTitle>
           </SheetHeader>
           {editingEx && (
             <ExerciseEditor
@@ -546,24 +564,28 @@ export function ProgramManager() {
           className="max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:mx-auto sm:max-w-md"
         >
           <SheetHeader>
-            <SheetTitle>Добавить упражнение</SheetTitle>
+            <SheetTitle>{t("Добавить упражнение")}</SheetTitle>
             <SheetDescription>
-              Упражнение будет добавлено в выбранный тренировочный день.
+              {t("Упражнение будет добавлено в выбранный тренировочный день.")}
             </SheetDescription>
           </SheetHeader>
-          <form aria-label="Новое упражнение" onSubmit={addExercise} className="space-y-4 pt-3">
+          <form
+            aria-label={t("Новое упражнение")}
+            onSubmit={addExercise}
+            className="space-y-4 pt-3"
+          >
             {error && (
               <p
                 role="alert"
                 className="break-words rounded-xl border border-destructive p-3 text-sm"
               >
-                {error}
+                {translateKnown(language, error)}
               </p>
             )}
             <label className="block space-y-1 text-sm">
-              Название упражнения
+              {t("Название упражнения")}
               <Input
-                aria-label="Название упражнения"
+                aria-label={t("Название упражнения")}
                 value={newExerciseName}
                 onChange={(event) => setNewExerciseName(event.target.value)}
                 maxLength={100}
@@ -574,9 +596,9 @@ export function ProgramManager() {
               />
             </label>
             <label className="block space-y-1 text-sm">
-              Количество подходов
+              {t("Количество подходов")}
               <Input
-                aria-label="Количество подходов"
+                aria-label={t("Количество подходов")}
                 type="number"
                 inputMode="numeric"
                 min={1}
@@ -590,9 +612,9 @@ export function ProgramManager() {
               />
             </label>
             <label className="block space-y-1 text-sm">
-              Целевой диапазон повторений
+              {t("Целевой диапазон повторений")}
               <Input
-                aria-label="Целевой диапазон повторений"
+                aria-label={t("Целевой диапазон повторений")}
                 value={newExerciseReps}
                 onChange={(event) => setNewExerciseReps(event.target.value)}
                 placeholder="8–12"
@@ -609,7 +631,7 @@ export function ProgramManager() {
                 busy || !newExerciseName.trim() || !newExerciseSets || !newExerciseReps.trim()
               }
             >
-              Сохранить
+              {t("Сохранить")}
             </Button>
           </form>
         </SheetContent>
@@ -628,22 +650,27 @@ type DayEditorProps = {
   canRestore: boolean;
 };
 function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: DayEditorProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(day.name);
   const [editing, setEditing] = useState(false);
   async function rename(event: FormEvent) {
     event.preventDefault();
     if (await run(() => save({ name: programName(name, 60) }))) setEditing(false);
   }
-  const archiveLabel = day.archived_at ? "Восстановить день" : "Архивировать день";
+  const archiveLabel = day.archived_at ? t("Восстановить день") : t("Архивировать день");
   const archiveDisabled = busy || (day.archived_at ? !canRestore : !canArchive);
   return (
-    <div role="group" aria-label={`День: ${day.name}`} className="rounded-lg bg-card px-2 py-1.5">
+    <div
+      role="group"
+      aria-label={t("День: {name}", { name: day.name })}
+      className="rounded-lg bg-card px-2 py-1.5"
+    >
       <div className="flex min-w-0 items-center gap-1">
         {handle}
         {editing ? (
           <form onSubmit={rename} className="flex min-w-0 flex-1 items-center gap-2">
             <Input
-              aria-label="Название дня"
+              aria-label={t("Название дня")}
               value={name}
               maxLength={60}
               disabled={busy}
@@ -652,14 +679,14 @@ function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: Day
               autoFocus
             />
             <Button type="submit" className="h-9 shrink-0" disabled={busy || !name.trim()}>
-              Сохранить
+              {t("Сохранить")}
             </Button>
             <Button
               type="button"
               size="icon"
               variant="ghost"
               className="h-9 w-9 shrink-0"
-              aria-label="Отменить переименование"
+              aria-label={t("Отменить переименование")}
               disabled={busy}
               onClick={() => {
                 setName(day.name);
@@ -677,7 +704,7 @@ function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: Day
               variant="ghost"
               size="icon"
               className="h-9 w-9 shrink-0"
-              aria-label={`Переименовать день: ${day.name}`}
+              aria-label={t("Переименовать день: {name}", { name: day.name })}
               disabled={busy}
               onClick={() => {
                 setName(day.name);
@@ -708,7 +735,7 @@ function DayEditor({ day, handle, busy, run, save, canArchive, canRestore }: Day
         </Button>
       </div>
       {!day.archived_at && !canArchive && (
-        <p className="text-xs text-muted-foreground">Нужен хотя бы один активный день.</p>
+        <p className="text-xs text-muted-foreground">{t("Нужен хотя бы один активный день.")}</p>
       )}
     </div>
   );
@@ -732,6 +759,7 @@ function ExerciseEditor({
   save,
   nextPosition: positionFor,
 }: ExerciseEditorProps) {
+  const { t, language } = useI18n();
   const [name, setName] = useState(ex.name);
   const [dayId, setDayId] = useState(ex.day_id ?? "");
   const [sets, setSets] = useState(String(ex.target_sets ?? ""));
@@ -740,7 +768,7 @@ function ExerciseEditor({
     event.preventDefault();
     void run(() => {
       if (dayId !== ex.day_id && dayId && days.find((day) => day.id === dayId)?.archived_at)
-        throw new Error("Перенос возможен только в активный день");
+        throw new Error(t("Перенос возможен только в активный день"));
       const patch = exercisePatch({ name, dayId, sets, reps, weight: "" }, days);
       delete patch.working_weight;
       if (patch.day_id !== ex.day_id && patch.day_id) patch.position = positionFor(patch.day_id);
@@ -748,18 +776,22 @@ function ExerciseEditor({
     });
   }
   return (
-    <form aria-label={`Упражнение: ${ex.name}`} onSubmit={submit} className="space-y-3 pt-2">
+    <form
+      aria-label={t("Упражнение: {name}", { name: ex.name })}
+      onSubmit={submit}
+      className="space-y-3 pt-2"
+    >
       {error && (
         <p
           id="exercise-editor-error"
           role="alert"
           className="break-words rounded-xl border border-destructive p-3 text-sm"
         >
-          {error}
+          {translateKnown(language, error)}
         </p>
       )}
       <label className="block space-y-1 text-xs">
-        Название упражнения
+        {t("Название упражнения")}
         <Input
           value={name}
           aria-describedby={error ? "exercise-editor-error" : undefined}
@@ -770,7 +802,7 @@ function ExerciseEditor({
         />
       </label>
       <label className="block space-y-1 text-xs">
-        Тренировочный день
+        {t("Тренировочный день")}
         <select
           className={selectCls}
           aria-describedby={error ? "exercise-editor-error" : undefined}
@@ -778,20 +810,20 @@ function ExerciseEditor({
           onChange={(event) => setDayId(event.target.value)}
           disabled={busy}
         >
-          {!ex.day_id && <option value="">Без назначенного дня</option>}
+          {!ex.day_id && <option value="">{t("Без назначенного дня")}</option>}
           {days
             .filter((day) => !day.archived_at || day.id === ex.day_id)
             .map((day) => (
               <option key={day.id} value={day.id}>
                 {day.name}
-                {day.archived_at ? " (архив)" : ""}
+                {day.archived_at ? t(" (архив)") : ""}
               </option>
             ))}
         </select>
       </label>
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1 text-xs">
-          Подходы
+          {t("Подходы")}
           <Input
             inputMode="numeric"
             aria-describedby={error ? "exercise-editor-error" : undefined}
@@ -803,7 +835,7 @@ function ExerciseEditor({
           />
         </label>
         <label className="space-y-1 text-xs">
-          Повторения
+          {t("Повторения")}
           <Input
             value={reps}
             aria-describedby={error ? "exercise-editor-error" : undefined}
@@ -816,7 +848,7 @@ function ExerciseEditor({
       </div>
       <div className="flex justify-end">
         <Button type="submit" disabled={busy || !name.trim()}>
-          Сохранить
+          {t("Сохранить")}
         </Button>
       </div>
     </form>

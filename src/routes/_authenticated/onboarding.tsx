@@ -5,16 +5,17 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/lib/session";
 import { userKeys } from "@/lib/queries";
-import { MAX_DAYS, UPPER_LOWER_NAMES, defaultDayNames } from "@/lib/workout";
+import { MAX_DAYS, UPPER_LOWER_NAMES } from "@/lib/workout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n, initialDayNames } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({
     meta: [
-      { title: "Настройка программы — Прогресс Тренер" },
+      { title: "Настройка программы — Прогресс Трекер" },
       { name: "description", content: "Выберите число тренировочных дней и их названия." },
-      { property: "og:title", content: "Настройка программы — Прогресс Тренер" },
+      { property: "og:title", content: "Настройка программы — Прогресс Трекер" },
       { property: "og:description", content: "Персональные тренировочные дни." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -24,19 +25,21 @@ export const Route = createFileRoute("/_authenticated/onboarding")({
 });
 
 function Onboarding() {
+  const { t, language } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
   const nav = useNavigate();
   const qc = useQueryClient();
   const [step, setStep] = useState(1);
   const [template, setTemplate] = useState<"empty" | "upper_lower">("empty");
-  const [names, setNames] = useState(defaultDayNames(3));
+  const [names, setNames] = useState(() => initialDayNames(3, language));
   const [busy, setBusy] = useState(false);
 
   const setCount = (n: number) =>
-    setNames((p) => Array.from({ length: n }, (_, i) => p[i] ?? defaultDayNames(n)[i]!));
+    setNames((p) => Array.from({ length: n }, (_, i) => p[i] ?? initialDayNames(n, language)[i]!));
 
   async function finish() {
-    if (names.some((n) => !n.trim())) return void toast.error("У каждого дня должно быть название");
+    if (names.some((n) => !n.trim()))
+      return void toast.error(t("У каждого дня должно быть название"));
     setBusy(true);
     const { error } = await supabase
       .rpc("setup_program", {
@@ -49,8 +52,8 @@ function Onboarding() {
     if (error)
       return void toast.error(
         error.message.includes("already")
-          ? "Программа уже создана"
-          : "Не удалось создать программу",
+          ? t("Программа уже создана")
+          : t("Не удалось создать программу"),
       );
     await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
     if (!isCurrent()) return;
@@ -60,12 +63,12 @@ function Onboarding() {
   return (
     <div className="space-y-6 pt-4">
       <p className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
-        Шаг {step} из 3
+        {t("Шаг {step} из 3", { step })}
       </p>
       {step === 1 && (
         <>
           <h1 className="text-3xl font-extrabold tracking-tight">
-            Сколько тренировочных дней в неделю?
+            {t("Сколько тренировочных дней в неделю?")}
           </h1>
           <div className="grid grid-cols-7 gap-1.5">
             {Array.from({ length: MAX_DAYS }, (_, i) => i + 1).map((n) => (
@@ -79,23 +82,23 @@ function Onboarding() {
             ))}
           </div>
           <p className="text-sm text-muted-foreground">
-            Число дней можно изменить позже в «Программе».
+            {t("Число дней можно изменить позже в «Программе».")}
           </p>
           <Button className="h-14 w-full font-bold" onClick={() => setStep(2)}>
-            Далее
+            {t("Далее")}
           </Button>
         </>
       )}
       {step === 2 && (
         <>
-          <h1 className="text-3xl font-extrabold tracking-tight">С чего начать?</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">{t("С чего начать?")}</h1>
           {(
             [
-              ["empty", "Пустая программа", "Сами добавите упражнения в каждый день."],
+              ["empty", t("Пустая программа"), t("Сами добавите упражнения в каждый день.")],
               [
                 "upper_lower",
-                "Шаблон Upper/Lower",
-                "4 дня, 25 упражнений со стартовыми весами. Всё редактируется.",
+                t("Шаблон Upper/Lower"),
+                t("4 дня, 25 упражнений со стартовыми весами. Всё редактируется."),
               ],
             ] as const
           ).map(([id, t, d]) => (
@@ -110,7 +113,7 @@ function Onboarding() {
           ))}
           <div className="flex gap-2">
             <Button variant="secondary" className="h-14 flex-1" onClick={() => setStep(1)}>
-              Назад
+              {t("Назад")}
             </Button>
             <Button
               className="h-14 flex-1 font-bold"
@@ -119,26 +122,26 @@ function Onboarding() {
                 setStep(3);
               }}
             >
-              Далее
+              {t("Далее")}
             </Button>
           </div>
         </>
       )}
       {step === 3 && (
         <>
-          <h1 className="text-3xl font-extrabold tracking-tight">Названия дней</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">{t("Названия дней")}</h1>
           <p className="-mt-4 text-xs text-muted-foreground">
-            Например: Push, Pull, Legs, Upper, Lower, Full Body
+            {t("Например: Push, Pull, Legs, Upper, Lower, Full Body")}
           </p>
           <div className="space-y-3">
             {names.map((n, i) => (
               <div key={i} className="space-y-1.5 rounded-2xl bg-card p-3">
                 <label htmlFor={`day-name-${i}`} className="block text-xs text-muted-foreground">
-                  Название дня
+                  {t("Название дня")}
                 </label>
                 <Input
                   id={`day-name-${i}`}
-                  aria-label={`День ${i + 1}`}
+                  aria-label={t("День {number}", { number: i + 1 })}
                   value={n}
                   maxLength={60}
                   className="h-11 font-semibold"
@@ -149,10 +152,10 @@ function Onboarding() {
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" className="h-14 flex-1" onClick={() => setStep(2)}>
-              Назад
+              {t("Назад")}
             </Button>
             <Button className="h-14 flex-1 font-bold" disabled={busy} onClick={finish}>
-              {busy ? "Создаю…" : "Готово"}
+              {busy ? t("Создаю…") : t("Готово")}
             </Button>
           </div>
         </>

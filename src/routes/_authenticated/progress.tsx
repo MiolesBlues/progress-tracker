@@ -4,9 +4,9 @@ import { ProgressPage } from "@/components/progress-page";
 export const Route = createFileRoute("/_authenticated/progress")({
   head: () => ({
     meta: [
-      { title: "Прогресс — Прогресс Тренер" },
+      { title: "Прогресс — Прогресс Трекер" },
       { name: "description", content: "Графики веса, повторений и объёма с недельным сравнением." },
-      { property: "og:title", content: "Прогресс — Прогресс Тренер" },
+      { property: "og:title", content: "Прогресс — Прогресс Трекер" },
       { property: "og:description", content: "Ваш прогресс по упражнениям." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

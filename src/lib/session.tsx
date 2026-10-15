@@ -106,16 +106,18 @@ export function useUserSession() {
 
 export function AccountBoundary({
   verifiedUserId,
+  loadingText = "Проверка сессии…",
   children,
 }: {
   verifiedUserId: string;
+  loadingText?: string;
   children: ReactNode;
 }) {
   const session = useSession();
   if (!session.ready || !session.userId || session.userId !== verifiedUserId)
     return (
       <p className="p-5" role="status">
-        Проверка сессии…
+        {loadingText}
       </p>
     );
   return <Fragment key={session.generation}>{children}</Fragment>;

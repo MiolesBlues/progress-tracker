@@ -17,6 +17,10 @@ function dateDaysAgo(days: number) {
   date.setDate(date.getDate() - days);
   return toISO(date);
 }
+function displayedDate(date: string) {
+  const [year, month, day] = date.split("-");
+  return `${day}.${month}.${year}`;
+}
 function entry(id: string, date: string, weight: number, reps: number[]) {
   return {
     id,
@@ -87,7 +91,9 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   expect(screen.getByLabelText("День записей")).toHaveValue("day-1");
   expect(screen.getByLabelText("Упражнение записей")).toHaveValue("press");
-  expect(within(diary).getByText(`${dateDaysAgo(0)} · Верх тела`)).toBeInTheDocument();
+  expect(
+    within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Верх тела`),
+  ).toBeInTheDocument();
   expect(within(diary).getByText("50 кг · 8 / 8 / 7")).toBeInTheDocument();
   expect(within(diary).getAllByText(/RIR 2/).length).toBeGreaterThan(0);
   expect(within(diary).getByText("Хорошее самочувствие")).toBeInTheDocument();
@@ -148,7 +154,9 @@ it.each([false, true])(
     await screen.findByRole("combobox", { name: "День записей" });
     fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "unassigned" } });
     expect(await screen.findByText("65 кг · 8 / 7")).toBeInTheDocument();
-    expect(screen.getByText(`${dateDaysAgo(0)} · Историческое название`)).toBeInTheDocument();
+    expect(
+      screen.getByText(`${displayedDate(dateDaysAgo(0))} · Историческое название`),
+    ).toBeInTheDocument();
     expect(
       fake.state.rows.program_exercises!.find((row) => row.id === "legacy")?.day_id,
     ).toBeNull();

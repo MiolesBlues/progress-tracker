@@ -3,7 +3,7 @@ export function renderErrorPage(): string {
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <title>Не удалось загрузить страницу — Прогресс Тренер</title>
+    <title>Не удалось загрузить страницу — Прогресс Трекер</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       * { box-sizing: border-box; }

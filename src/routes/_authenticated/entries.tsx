@@ -4,7 +4,7 @@ import { EntriesPage } from "@/components/entries-page";
 export const Route = createFileRoute("/_authenticated/entries")({
   head: () => ({
     meta: [
-      { title: "Записи — Прогресс Тренер" },
+      { title: "Записи — Прогресс Трекер" },
       { name: "description", content: "Дневник тренировок по упражнениям." },
     ],
   }),

@@ -5,6 +5,7 @@ import { useUserSession } from "@/lib/session";
 import { toISO } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
+import { useI18n, setsCount } from "@/lib/i18n";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -19,6 +20,7 @@ function daysAgo(days: number, today: string) {
 }
 
 export function EntriesPage() {
+  const { t } = useI18n();
   const { userId } = useUserSession();
   const daysResult = useQuery(daysQuery(userId));
   const programResult = useQuery(programQuery(userId));
@@ -32,11 +34,11 @@ export function EntriesPage() {
           void programResult.refetch();
         }}
       >
-        Не удалось загрузить программу для выбора записей.
+        {t("Не удалось загрузить программу для выбора записей.")}
       </LoadError>
     );
   if (daysResult.isPending || programResult.isPending)
-    return <Loading>Загрузка программы…</Loading>;
+    return <Loading>{t("Загрузка программы…")}</Loading>;
 
   const days = daysResult.data;
   const exercises = programResult.data;
@@ -56,15 +58,15 @@ export function EntriesPage() {
 
   return (
     <div className="min-w-0 space-y-5">
-      <h1 className="text-2xl font-extrabold tracking-tight">Записи</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight">{t("Записи")}</h1>
       {!days.length && !hasUnassigned ? (
-        <p>Сначала добавьте тренировочный день и упражнения в программе.</p>
+        <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
       ) : (
         <>
           <label className="block min-w-0 space-y-1 text-sm">
-            Тренировочный день
+            {t("Тренировочный день")}
             <select
-              aria-label="День записей"
+              aria-label={t("День записей")}
               className={selectCls}
               value={dayId}
               onChange={(event) => {
@@ -75,20 +77,20 @@ export function EntriesPage() {
               {days.map((day) => (
                 <option key={day.id} value={day.id}>
                   {day.name}
-                  {day.archived_at ? " (архив)" : ""}
+                  {day.archived_at ? t(" (архив)") : ""}
                 </option>
               ))}
-              {hasUnassigned && <option value={UNASSIGNED}>Без назначенного дня</option>}
+              {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
             </select>
           </label>
           {!dayExercises.length ? (
-            <p>В этом дне пока нет упражнений с записями.</p>
+            <p>{t("В этом дне пока нет упражнений с записями.")}</p>
           ) : (
             <>
               <label className="block min-w-0 space-y-1 text-sm">
-                Упражнение
+                {t("Упражнение")}
                 <select
-                  aria-label="Упражнение записей"
+                  aria-label={t("Упражнение записей")}
                   className={selectCls}
                   value={exerciseId}
                   onChange={(event) => setChosenExercise(event.target.value)}
@@ -96,7 +98,7 @@ export function EntriesPage() {
                   {dayExercises.map((exercise) => (
                     <option key={exercise.id} value={exercise.id}>
                       {exercise.name}
-                      {exercise.archived_at ? " (архив)" : ""}
+                      {exercise.archived_at ? t(" (архив)") : ""}
                     </option>
                   ))}
                 </select>
@@ -115,6 +117,7 @@ export function EntriesPage() {
 }
 
 function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: string }) {
+  const { t, number, date, language } = useI18n();
   const today = toISO(new Date());
   const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
   const [period, setPeriod] = useState<Period>(30);
@@ -123,10 +126,10 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
   if (result.isError)
     return (
       <LoadError onRetry={() => void result.refetch()}>
-        Не удалось загрузить записи упражнения.
+        {t("Не удалось загрузить записи упражнения.")}
       </LoadError>
     );
-  if (result.isPending) return <Loading>Загрузка записей…</Loading>;
+  if (result.isPending) return <Loading>{t("Загрузка записей…")}</Loading>;
 
   const since =
     period === "today" ? today : period === "all" ? "0001-01-01" : daysAgo(period - 1, today);
@@ -146,16 +149,16 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
   const pageIndex = Math.min(page, pages - 1);
 
   return (
-    <section className="min-w-0 space-y-4" aria-label="Дневник записей упражнения">
+    <section className="min-w-0 space-y-4" aria-label={t("Дневник записей упражнения")}>
       <div className="space-y-2">
-        <span className="text-sm">Период</span>
-        <div className="flex flex-wrap gap-2" aria-label="Фильтр по дате">
+        <span className="text-sm">{t("Период")}</span>
+        <div className="flex flex-wrap gap-2" aria-label={t("Фильтр по дате")}>
           {(
             [
-              ["today", "Сегодня"],
-              [7, "7 дней"],
-              [30, "30 дней"],
-              ["all", "Всё время"],
+              ["today", t("Сегодня")],
+              [7, t("7 дней")],
+              [30, t("30 дней")],
+              ["all", t("Всё время")],
             ] as const
           ).map(([value, label]) => (
             <Button
@@ -175,9 +178,9 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
         </div>
       </div>
       <label className="block min-w-0 space-y-1 text-sm">
-        Сортировка
+        {t("Сортировка")}
         <select
-          aria-label="Сортировка записей"
+          aria-label={t("Сортировка записей")}
           className={selectCls}
           value={sort}
           onChange={(event) => {
@@ -185,29 +188,28 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
             setPage(0);
           }}
         >
-          <option value="recent">Сначала новые</option>
-          <option value="weight-desc">Вес: по убыванию</option>
-          <option value="weight-asc">Вес: по возрастанию</option>
+          <option value="recent">{t("Сначала новые")}</option>
+          <option value="weight-desc">{t("Вес: по убыванию")}</option>
+          <option value="weight-asc">{t("Вес: по возрастанию")}</option>
         </select>
       </label>
-      <h2 className="font-bold">Записи · {records.length}</h2>
+      <h2 className="font-bold">{t("Записи · {count}", { count: records.length })}</h2>
       {!records.length ? (
         <p className="rounded-xl bg-card p-4 text-sm text-muted-foreground">
-          За выбранный период записей нет.
+          {t("За выбранный период записей нет.")}
         </p>
       ) : (
         <ul className="min-w-0 space-y-3">
           {records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE).map((entry) => (
             <li key={entry.id} className="min-w-0 space-y-1 rounded-xl bg-card p-4 text-sm">
               <p className="break-words font-semibold">
-                {entry.performed_on} · {entry.day_name ?? "Без названия дня"}
+                {date(entry.performed_on)} · {entry.day_name ?? t("Без названия дня")}
               </p>
               <p className="num break-all text-base font-bold">
-                {entry.weight.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} кг ·{" "}
-                {entry.reps.join(" / ")}
+                {number(entry.weight, 2)} {t("кг")} · {entry.reps.join(" / ")}
               </p>
               <p className="text-muted-foreground">
-                {entry.reps.length} {entry.reps.length === 1 ? "подход" : "подхода"}
+                {setsCount(entry.reps.length, language)}
                 {entry.rir !== null && ` · RIR ${entry.rir}`}
               </p>
               {entry.notes?.trim() && <p className="break-words">{entry.notes}</p>}
@@ -217,7 +219,7 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
       )}
       {pages > 1 && (
         <nav
-          aria-label="Страницы записей"
+          aria-label={t("Страницы записей")}
           className="flex flex-wrap items-center justify-between gap-2 text-sm"
         >
           <Button
@@ -227,10 +229,10 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
             disabled={pageIndex === 0}
             onClick={() => setPage(pageIndex - 1)}
           >
-            Назад
+            {t("Назад")}
           </Button>
           <span aria-live="polite">
-            Страница {pageIndex + 1} из {pages}
+            {t("Страница {page} из {pages}", { page: pageIndex + 1, pages })}
           </span>
           <Button
             type="button"
@@ -239,7 +241,7 @@ function ExerciseEntries({ userId, exerciseId }: { userId: string; exerciseId: s
             disabled={pageIndex + 1 === pages}
             onClick={() => setPage(pageIndex + 1)}
           >
-            Далее
+            {t("Далее")}
           </Button>
         </nav>
       )}

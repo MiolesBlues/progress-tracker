@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { signOutSafely } from "@/lib/auth-actions";
 import { navigationTabs } from "@/lib/navigation";
+import { SettingsDialog } from "@/components/settings-dialog";
+import { useI18n, translateKnown } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -37,9 +39,10 @@ export const Route = createFileRoute("/_authenticated")({
 
 function Layout() {
   const { userId } = Route.useRouteContext();
+  const { t } = useI18n();
   // A stale router guard must never render a previous account's component tree.
   return (
-    <AccountBoundary verifiedUserId={userId}>
+    <AccountBoundary verifiedUserId={userId} loadingText={t("Проверка сессии…")}>
       <SessionLayout />
     </AccountBoundary>
   );
@@ -47,10 +50,11 @@ function Layout() {
 
 function SessionLayout() {
   const { userId, store } = useUserSession();
+  const { t, language } = useI18n();
   const navigate = useNavigate();
   async function signOut() {
     const result = await signOutSafely(store);
-    if (result.message) toast.error(result.message);
+    if (result.message) toast.error(translateKnown(language, result.message));
     if (result.signedOut) void navigate({ to: "/auth", replace: true });
   }
   const daysResult = useQuery(daysQuery(userId));
@@ -67,25 +71,28 @@ function SessionLayout() {
     <div className="mx-auto min-h-dvh max-w-md">
       <header className="safe-top flex items-center justify-between px-5 pb-2">
         <span className="text-sm font-bold tracking-widest text-muted-foreground uppercase">
-          Прогресс Тренер
+          {t("Прогресс Трекер")}
         </span>
-        <button
-          onClick={signOut}
-          aria-label="Выйти"
-          className="rounded-full p-2 text-muted-foreground hover:text-foreground"
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <SettingsDialog />
+          <button
+            onClick={signOut}
+            aria-label={t("Выйти")}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
+        </div>
       </header>
       <main className="px-5 pb-32">
         {daysResult.isError ? (
           <LoadError onRetry={() => void daysResult.refetch()}>
-            Не удалось загрузить тренировочные дни.
+            {t("Не удалось загрузить тренировочные дни.")}
           </LoadError>
         ) : daysResult.isPending ? (
-          <Loading>Загрузка тренировочных дней…</Loading>
+          <Loading>{t("Загрузка тренировочных дней…")}</Loading>
         ) : !daysResult.data.length && path !== "/onboarding" ? (
-          <Loading>Настройка программы…</Loading>
+          <Loading>{t("Настройка программы…")}</Loading>
         ) : (
           <Outlet />
         )}
@@ -100,7 +107,7 @@ function SessionLayout() {
               activeProps={{ className: "text-primary" }}
             >
               <Icon className="h-5 w-5" />
-              {label}
+              {t(label)}
             </Link>
           ))}
         </div>

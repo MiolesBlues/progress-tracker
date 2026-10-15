@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n, translateKnown } from "@/lib/i18n";
 
 type WorkoutFormProps = {
   exercise: Exercise;
@@ -37,6 +38,7 @@ export function WorkoutForm({
   onDateChange,
   onSaved,
 }: WorkoutFormProps) {
+  const { t, language } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
   const qc = useQueryClient();
   const defaults = (): WorkoutFields => {
@@ -198,7 +200,7 @@ export function WorkoutForm({
       // Cancel a pre-save read before invalidating: its late response must not re-seed stale history.
       await qc.cancelQueries({ queryKey: userKeys.lastEntry(userId, exercise.id) });
       if (!isCurrent()) return;
-      toast.success("Ваша тренировка сохранена", {
+      toast.success(t("Ваша тренировка сохранена"), {
         id: "workout-saved",
         duration: 3000,
         position: "bottom-center",
@@ -240,22 +242,26 @@ export function WorkoutForm({
     exercise.target_sets !== null && exercise.target_reps
       ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
       : exercise.target_sets !== null
-        ? `${exercise.target_sets} подх.`
+        ? t("{count} подх.", { count: exercise.target_sets })
         : exercise.target_reps
-          ? `${exercise.target_reps.replace(/-/g, "–")} повт.`
+          ? t("{count} повт.", { count: exercise.target_reps.replace(/-/g, "–") })
           : "";
   const previous = lastResult.data;
 
   return (
-    <form onSubmit={save} className="space-y-5" aria-label="Запись тренировки">
+    <form onSubmit={save} className="space-y-5" aria-label={t("Запись тренировки")}>
       {storageError && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
-          {storageError}
+          {translateKnown(language, storageError)}
         </p>
       )}
       {initial.other && initial.other.fields.date !== draft.fields.date && (
         <div role="status" className="space-y-2 text-sm text-muted-foreground">
-          <p>Есть незавершённый черновик за {initial.other.fields.date}. Текущая дата сохранена.</p>
+          <p>
+            {t("Есть незавершённый черновик за {date}. Текущая дата сохранена.", {
+              date: initial.other.fields.date,
+            })}
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -264,7 +270,7 @@ export function WorkoutForm({
               if (initial.other) change("date", initial.other.fields.date);
             }}
           >
-            Открыть черновик за {initial.other.fields.date}
+            {t("Открыть черновик за {date}", { date: initial.other.fields.date })}
           </Button>
         </div>
       )}
@@ -275,7 +281,9 @@ export function WorkoutForm({
           onClick={() => {
             if (
               !window.confirm(
-                "Удалить повреждённый черновик этого упражнения и начать заново? Сначала проверьте историю: запись могла уже сохраниться.",
+                t(
+                  "Удалить повреждённый черновик этого упражнения и начать заново? Сначала проверьте историю: запись могла уже сохраниться.",
+                ),
               )
             )
               return;
@@ -291,47 +299,51 @@ export function WorkoutForm({
             }
           }}
         >
-          Начать новый черновик
+          {t("Начать новый черновик")}
         </Button>
       )}
       {(lastResult.isPending || (!lastResult.isFetchedAfterMount && lastResult.isFetching)) && (
-        <Loading>Загрузка предыдущей тренировки…</Loading>
+        <Loading>{t("Загрузка предыдущей тренировки…")}</Loading>
       )}
       {lastResult.isError && (
         <LoadError onRetry={() => void lastResult.refetch()}>
-          Не удалось загрузить предыдущую тренировку. Введённые значения сохранены; можно повторить
-          загрузку или заполнить форму вручную.
+          {t(
+            "Не удалось загрузить предыдущую тренировку. Введённые значения сохранены; можно повторить загрузку или заполнить форму вручную.",
+          )}
         </LoadError>
       )}
       {lastResult.isSuccess && lastResult.isFetchedAfterMount && !lastResult.isFetching && (
         <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-snug text-muted-foreground">
-          {plan && <span>План {plan}</span>}
+          {plan && <span>{t("План {plan}", { plan })}</span>}
           {plan && <span aria-hidden="true">·</span>}
           {previous ? (
             <span>
-              Было {previous.weight !== null && `${Number(previous.weight)} кг × `}
-              {previous.reps.join("/")}
+              {t("Было {weight} кг × {reps}", {
+                weight: previous.weight === null ? "—" : String(Number(previous.weight)),
+                reps: previous.reps.join("/"),
+              })}
             </span>
           ) : (
-            <span>Истории нет</span>
+            <span>{t("Истории нет")}</span>
           )}
         </p>
       )}
       {error && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
-          {error}
+          {translateKnown(language, error)}
         </p>
       )}
       {draft.operation && (
         <p role="status" className="text-sm text-muted-foreground">
-          Операция ожидает подтверждения. При повторе отправятся те же значения; поля временно
-          заблокированы.
+          {t(
+            "Операция ожидает подтверждения. При повторе отправятся те же значения; поля временно заблокированы.",
+          )}
         </p>
       )}
       <fieldset disabled={locked} className="space-y-5">
         <div className="grid grid-cols-1 gap-3 min-[390px]:grid-cols-2">
           <div className="min-w-0 space-y-2">
-            <Label htmlFor="date">Дата</Label>
+            <Label htmlFor="date">{t("Дата")}</Label>
             <Input
               id="date"
               type="date"
@@ -342,26 +354,26 @@ export function WorkoutForm({
             />
           </div>
           <div className="min-w-0 space-y-2">
-            <Label htmlFor="w">Рабочий вес, кг</Label>
+            <Label htmlFor="w">{t("Рабочий вес, кг")}</Label>
             <Input
               id="w"
               inputMode="decimal"
               value={fields.weight}
               onChange={(event) => change("weight", event.target.value)}
               className="num box-border h-12 min-w-0 w-full max-w-full text-lg"
-              placeholder="Укажите вес"
+              placeholder={t("Укажите вес")}
             />
           </div>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label>Повторения · подходов: {fields.reps.length}</Label>
+            <Label>{t("Повторения · подходов: {count}", { count: fields.reps.length })}</Label>
             <div className="flex gap-1">
               <Button
                 type="button"
                 size="icon"
                 variant="secondary"
-                aria-label="Убрать подход"
+                aria-label={t("Убрать подход")}
                 disabled={locked || fields.reps.length <= 1}
                 onClick={() => change("reps", fields.reps.slice(0, -1))}
               >
@@ -371,7 +383,7 @@ export function WorkoutForm({
                 type="button"
                 size="icon"
                 variant="secondary"
-                aria-label="Добавить подход"
+                aria-label={t("Добавить подход")}
                 disabled={locked || fields.reps.length >= MAX_SETS}
                 onClick={() => change("reps", [...fields.reps, ""])}
               >
@@ -380,8 +392,9 @@ export function WorkoutForm({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            В каждом поле — повторения одного подхода. Пустой подход нужно заполнить или явно
-            убрать.
+            {t(
+              "В каждом поле — повторения одного подхода. Пустой подход нужно заполнить или явно убрать.",
+            )}
           </p>
           <div className="grid grid-cols-5 gap-2">
             {fields.reps.map((value, index) => (
@@ -389,7 +402,7 @@ export function WorkoutForm({
                 <span className="text-[10px] text-muted-foreground">#{index + 1}</span>
                 <Input
                   inputMode="numeric"
-                  aria-label={`Подход ${index + 1}`}
+                  aria-label={t("Подход {number}", { number: index + 1 })}
                   value={value}
                   onChange={(event) =>
                     change(
@@ -404,7 +417,7 @@ export function WorkoutForm({
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="rir">RIR (необязательно)</Label>
+          <Label htmlFor="rir">{t("RIR (необязательно)")}</Label>
           <Input
             id="rir"
             inputMode="decimal"
@@ -415,7 +428,7 @@ export function WorkoutForm({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="notes">Заметки</Label>
+          <Label htmlFor="notes">{t("Заметки")}</Label>
           <Textarea
             id="notes"
             maxLength={1000}
@@ -430,7 +443,7 @@ export function WorkoutForm({
         disabled={saving || blocked}
         className="h-14 w-full text-base font-bold"
       >
-        {saving ? "Сохранение…" : draft.operation ? "Повторить сохранение" : "Сохранить"}
+        {saving ? t("Сохранение…") : draft.operation ? t("Повторить сохранение") : t("Сохранить")}
       </Button>
     </form>
   );
