@@ -728,7 +728,213 @@ it("keeps archived exercise and confirmation open when deletion fails", async ()
   await within(dialog).findByText("Исторических записей: 1");
   fake.state.nextError = "Network unavailable";
   fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
-  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Не удалось удалить");
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+    "Результат удаления пока не подтверждён",
+  );
   expect(fake.state.rows.program_exercises).toHaveLength(1);
   expect(fake.state.rows.workout_entries).toHaveLength(1);
+});
+
+it("reconciles a committed exercise deletion after a lost RPC reply and clears only its draft", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Old lift", "Первый"), archived_at: "2026-10-01" },
+    exercise("Keep lift", "Первый"),
+  ];
+  fake.state.rows.workout_entries = [
+    { id: "old-entry", user_id: "A", exercise_id: "Old lift" },
+    { id: "keep-entry", user_id: "A", exercise_id: "Keep lift" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  localStorage.setItem("workout:draft:v1:A:Old lift", "old draft");
+  localStorage.setItem("workout:draft:v1:A:Keep lift", "keep draft");
+  mount();
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Old lift" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 1");
+  const original = fake.state.rpc.getMockImplementation()!;
+  fake.state.rpc.mockImplementationOnce(async (name, args) => {
+    const response = await original(name, args);
+    return name === "delete_archived_program_exercise"
+      ? { data: null, error: { code: "503", message: "gateway timeout" } }
+      : response;
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  await waitFor(() => expect(fake.state.rows.program_exercises).toHaveLength(1));
+  await waitFor(() => expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBeNull());
+  expect(localStorage.getItem("workout:draft:v1:A:Keep lift")).toBe("keep draft");
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+});
+
+it("reconciles a lost day-delete reply without clearing exercise history", async () => {
+  fake.state.rows.program_days = [day("Active"), day("Archived", 1, "2026-10-01")];
+  fake.state.rows.program_exercises = [exercise("Keep lift", "Archived")];
+  fake.state.rows.workout_entries = [
+    {
+      id: "historic",
+      user_id: "A",
+      exercise_id: "Keep lift",
+      day_id: "Archived",
+      day_name: "Archived",
+    },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  mount();
+  await openDayManagement();
+  fireEvent.click(screen.getByText("Архив дней"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить день: Archived" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 1");
+  const original = fake.state.rpc.getMockImplementation()!;
+  fake.state.rpc.mockImplementationOnce(async (name, args) => {
+    const response = await original(name, args);
+    return name === "delete_archived_program_day"
+      ? { data: null, error: { code: "503", message: "gateway timeout" } }
+      : response;
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить день" }));
+  await waitFor(() => expect(fake.state.rows.program_days).toHaveLength(1));
+  expect(fake.state.rows.program_exercises[0]?.day_id).toBeNull();
+  expect(fake.state.rows.workout_entries[0]).toMatchObject({
+    id: "historic",
+    exercise_id: "Keep lift",
+    day_id: null,
+    day_name: "Archived",
+  });
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+});
+
+it("preserves the draft on a confirmed deletion rejection", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Old lift", "Первый"), archived_at: "2026-10-01" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  localStorage.setItem("workout:draft:v1:A:Old lift", "draft");
+  mount();
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Old lift" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 0");
+  fake.state.rpc.mockImplementationOnce(async () => ({
+    data: null,
+    error: { code: "22023", message: "Only archived objects may be deleted" },
+  }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("Сервер отклонил удаление");
+  expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBe("draft");
+  expect(fake.state.rows.program_exercises).toHaveLength(1);
+});
+
+it("keeps draft and pending marker when the outcome cannot be reconciled", async () => {
+  fake.state.rows.program_exercises = [
+    { ...exercise("Old lift", "Первый"), archived_at: "2026-10-01" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  localStorage.setItem("workout:draft:v1:A:Old lift", "draft");
+  mount();
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Old lift" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 0");
+  fake.state.rpc.mockImplementationOnce(async () => {
+    fake.state.readErrors["program_exercises"] = "read timeout";
+    return { data: null, error: { code: "503", message: "gateway timeout" } };
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  expect(await within(dialog).findByRole("alert")).toHaveTextContent("не подтверждён");
+  expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBe("draft");
+  expect(localStorage.getItem("archive-delete:pending:v1:A")).toContain('"Old lift"');
+});
+
+it("finishes pending cleanup after reload when a previously owned exercise is absent", async () => {
+  fake.state.rows.program_exercises = [exercise("Keep lift", "Первый")];
+  localStorage.setItem("workout:draft:v1:A:Old lift", "draft");
+  localStorage.setItem(
+    "archive-delete:pending:v1:A",
+    JSON.stringify([{ kind: "exercise", id: "Old lift" }]),
+  );
+  mount();
+  await waitFor(() => expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBeNull());
+  expect(localStorage.getItem("archive-delete:pending:v1:A")).toBeNull();
+  expect(fake.state.rows.program_exercises).toHaveLength(1);
+});
+
+it("fails closed when the server capability RPC is missing", async () => {
+  fake.state.deletionCapability = false;
+  fake.state.rows.program_days = [day("Активный"), day("Архив", 1, "2026-10-01")];
+  fake.state.rows.program_exercises = [
+    { ...exercise("Old lift", "Архив"), archived_at: "2026-10-01" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  mount();
+  expect(await screen.findByText("Удаление пока недоступно на сервере.")).toBeVisible();
+  await openDayManagement();
+  fireEvent.click(screen.getByText("Архив дней"));
+  expect(screen.queryByRole("button", { name: "Удалить день: Архив" })).toBeNull();
+  fireEvent.click(screen.getByText("Готово"));
+  fireEvent.click(screen.getByText("Архив упражнений"));
+  expect(screen.queryByRole("button", { name: "Удалить упражнение: Old lift" })).toBeNull();
+  expect(
+    fake.state.rpc.mock.calls.some(([name]) => name.startsWith("delete_archived_program_")),
+  ).toBe(false);
+});
+
+it("reconciles a late delete after switching A to B and back to A", async () => {
+  fake.state.rows.program_days = [day("День A"), { ...day("День B"), user_id: "B" }];
+  fake.state.rows.program_exercises = [
+    { ...exercise("Old lift", "День A"), archived_at: "2026-10-01" },
+    { ...exercise("B lift", "День B"), user_id: "B" },
+  ];
+  localStorage.setItem("app:archive-settings:v1:A", "1");
+  localStorage.setItem("workout:draft:v1:A:Old lift", "draft A");
+  const app = (userId: string) => (
+    <QueryClientProvider client={qc}>
+      <SessionProvider onIdentityChange={vi.fn()}>
+        <AccountBoundary verifiedUserId={userId}>
+          <ProgramManager />
+        </AccountBoundary>
+      </SessionProvider>
+    </QueryClientProvider>
+  );
+  const view = render(app("A"));
+  act(() => authEvent("SIGNED_IN", "A"));
+  fireEvent.click(await screen.findByText("Архив упражнений"));
+  fireEvent.click(screen.getByRole("button", { name: "Удалить упражнение: Old lift" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await within(dialog).findByText("Исторических записей: 0");
+  const original = fake.state.rpc.getMockImplementation()!;
+  let finish!: () => void;
+  const gate = new Promise<void>((resolve) => (finish = resolve));
+  fake.state.rpc.mockImplementation(async (name, args) => {
+    if (name === "delete_archived_program_exercise") {
+      await gate;
+      const currentUser = fake.state.userId;
+      fake.state.userId = "A";
+      const result = await original(name, args);
+      fake.state.userId = currentUser;
+      return result;
+    }
+    return original(name, args);
+  });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Удалить навсегда" }));
+  await waitFor(() =>
+    expect(
+      fake.state.rpc.mock.calls.some(([name]) => name === "delete_archived_program_exercise"),
+    ).toBe(true),
+  );
+  act(() => authEvent("SIGNED_IN", "B"));
+  view.rerender(app("B"));
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "День для упражнений" })).toHaveTextContent(
+      "День B",
+    ),
+  );
+  await act(async () => {
+    finish();
+  });
+  act(() => authEvent("SIGNED_IN", "A"));
+  view.rerender(app("A"));
+  await waitFor(() => expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBeNull());
+  expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBeNull();
+  expect(screen.queryByText("B lift")).toBeNull();
 });

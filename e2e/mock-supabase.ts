@@ -15,6 +15,8 @@ export async function mockSupabase(page: Page) {
     users,
     offline: false,
     loseSaveResponse: false,
+    archiveDeletionAvailable: true,
+    deleteReplyStatus: null as number | null,
     failReorder: false,
     failPatch: false,
     archiveDayOnInsert: false,
@@ -125,6 +127,8 @@ export async function mockSupabase(page: Page) {
         }
         return respond(operation);
       }
+      if (url.pathname.endsWith("/archive_deletion_capabilities"))
+        return respond(state.archiveDeletionAvailable);
       if (url.pathname.endsWith("/delete_archived_program_day")) {
         const day = rows["program_days"]!.find(
           (row) => row.id === args["_day_id"] && row.user_id === id,
@@ -139,7 +143,9 @@ export async function mockSupabase(page: Page) {
           if (row.user_id === id && row["day_id"] === day.id) row["day_id"] = null;
         });
         rows["program_days"]!.splice(rows["program_days"]!.indexOf(day), 1);
-        return respond(true);
+        const status = state.deleteReplyStatus;
+        state.deleteReplyStatus = null;
+        return status ? respond({ message: "simulated lost reply" }, status) : respond(true);
       }
       if (url.pathname.endsWith("/delete_archived_program_exercise")) {
         const exercise = rows["program_exercises"]!.find(
@@ -152,7 +158,9 @@ export async function mockSupabase(page: Page) {
           (row) => !(row.user_id === id && row["exercise_id"] === exercise.id),
         );
         rows["program_exercises"]!.splice(rows["program_exercises"]!.indexOf(exercise), 1);
-        return respond(true);
+        const status = state.deleteReplyStatus;
+        state.deleteReplyStatus = null;
+        return status ? respond({ message: "simulated lost reply" }, status) : respond(true);
       }
       if (url.pathname.includes("/reorder_")) {
         if (state.failReorder) {

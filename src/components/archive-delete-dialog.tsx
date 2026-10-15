@@ -22,7 +22,7 @@ type Props = {
   userId: string;
   exerciseCount?: number;
   disabled: boolean;
-  onConfirm: () => Promise<boolean>;
+  onConfirm: () => Promise<"success" | "rejected" | "unknown" | "unavailable">;
 };
 
 export function ArchiveDeleteDialog({
@@ -54,11 +54,14 @@ export function ArchiveDeleteDialog({
   async function confirm() {
     if (disabled || !countResult.isSuccess || countResult.isFetching) return;
     setError("");
-    if (await onConfirm()) setOpen(false);
-    else
+    const result = await onConfirm();
+    if (result === "success") setOpen(false);
+    else if (result === "unknown")
       setError(
-        t("Не удалось удалить. Данные сохранены; проверьте соединение и повторите попытку."),
+        t("Результат удаления пока не подтверждён. Проверьте соединение и повторите безопасно."),
       );
+    else if (result === "unavailable") setError(t("Удаление пока недоступно на сервере."));
+    else setError(t("Сервер отклонил удаление. Данные и черновик сохранены."));
   }
   return (
     <AlertDialog

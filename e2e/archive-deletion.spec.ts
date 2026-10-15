@@ -84,7 +84,77 @@ for (const width of [320, 375, 390, 430]) {
     await expect(
       page.getByRole("button", { name: "Удалить упражнение: Исторический жим" }),
     ).toHaveCount(0);
-    expect(backend.rows["workout_entries"]).toHaveLength(0);
+    await expect.poll(() => backend.rows["workout_entries"]!.length).toBe(0);
     await noOverflow(page);
   });
 }
+
+test("a committed exercise deletion with HTTP 503 is reconciled and clears its own draft", async ({
+  page,
+}) => {
+  const backend = await mockSupabase(page);
+  await page.goto("/");
+  await register(page, "lost-delete@example.invalid", 1);
+  await addExercise(page, "Delete after 503");
+  await addExercise(page, "Keep after 503");
+  const exercise = backend.rows["program_exercises"]!.find(
+    (row) => row["name"] === "Delete after 503",
+  )!;
+  const keep = backend.rows["program_exercises"]!.find((row) => row["name"] === "Keep after 503")!;
+  await page.getByRole("button", { name: "В архив: Delete after 503" }).click();
+  await page.getByRole("button", { name: "Настройки" }).click();
+  const settings = page.getByRole("dialog", { name: "Настройки" });
+  await settings.getByRole("checkbox", { name: "Разрешить полное удаление" }).click();
+  await settings.getByRole("button", { name: "Закрыть" }).click();
+  await page.evaluate(
+    ({ userId, exerciseId, keepId }) => {
+      localStorage.setItem(`workout:draft:v1:${userId}:${exerciseId}`, "draft to remove");
+      localStorage.setItem(`workout:draft:v1:${userId}:${keepId}`, "draft to keep");
+    },
+    { userId: exercise.user_id, exerciseId: exercise.id, keepId: keep.id },
+  );
+  backend.deleteReplyStatus = 503;
+  await page.getByRole("button", { name: "Архив упражнений" }).click();
+  await page.getByRole("button", { name: "Удалить упражнение: Delete after 503" }).click();
+  const confirmation = page.getByRole("alertdialog");
+  await expect(confirmation.getByText("Исторических записей: 0")).toBeVisible();
+  await confirmation.getByRole("button", { name: "Удалить навсегда" }).click();
+  await expect(
+    page.getByRole("button", { name: "Удалить упражнение: Delete after 503" }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ userId, exerciseId }) =>
+          localStorage.getItem(`workout:draft:v1:${userId}:${exerciseId}`),
+        { userId: exercise.user_id, exerciseId: exercise.id },
+      ),
+    )
+    .toBeNull();
+  expect(backend.rows["program_exercises"]!.some((row) => row.id === exercise.id)).toBe(false);
+  expect(
+    await page.evaluate(
+      ({ userId, exerciseId }) => localStorage.getItem(`workout:draft:v1:${userId}:${exerciseId}`),
+      { userId: exercise.user_id, exerciseId: keep.id },
+    ),
+  ).toBe("draft to keep");
+});
+
+test("missing server deletion capability hides delete controls", async ({ page }) => {
+  const backend = await mockSupabase(page);
+  backend.archiveDeletionAvailable = false;
+  await page.goto("/");
+  await register(page, "delete-unavailable@example.invalid", 2);
+  await addExercise(page, "Archived but blocked");
+  await page.getByRole("button", { name: "В архив: Archived but blocked" }).click();
+  await page.getByRole("button", { name: "Настройки" }).click();
+  const settings = page.getByRole("dialog", { name: "Настройки" });
+  await settings.getByRole("checkbox", { name: "Разрешить полное удаление" }).click();
+  await settings.getByRole("button", { name: "Закрыть" }).click();
+  await expect(page.getByText("Удаление пока недоступно на сервере.")).toBeVisible();
+  await page.getByRole("button", { name: "Архив упражнений" }).click();
+  expect(await page.getByRole("button", { name: /Удалить упражнение/ }).count()).toBe(0);
+  expect(
+    backend.rpcCalls.filter((call) => call.name.startsWith("delete_archived_program_")).length,
+  ).toBe(0);
+});

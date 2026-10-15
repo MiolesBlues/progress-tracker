@@ -33,6 +33,11 @@ export const english = {
   "Не удалось подсчитать записи.": "Could not count entries.",
   "Не удалось удалить. Данные сохранены; проверьте соединение и повторите попытку.":
     "Could not delete. Data was preserved; check your connection and try again.",
+  "Результат удаления пока не подтверждён. Проверьте соединение и повторите безопасно.":
+    "The deletion result is not confirmed yet. Check your connection and retry safely.",
+  "Сервер отклонил удаление. Данные и черновик сохранены.":
+    "The server rejected the deletion. Data and draft were preserved.",
+  "Удаление пока недоступно на сервере.": "Deletion is not available on the server yet.",
   Отмена: "Cancel",
   "Удалить день": "Delete day",
   "Удалить навсегда": "Delete permanently",

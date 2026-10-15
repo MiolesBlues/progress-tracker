@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
+const C = "33333333-3333-4333-8333-333333333333";
 const file = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 let db;
 const rows = async (sql, args = []) => (await db.query(sql, args)).rows;
@@ -34,10 +35,14 @@ before(async () => {
 after(async () => db?.close());
 
 test("RPC grants deny anonymous calls and direct table DELETE", async () => {
-  for (const name of ["delete_archived_program_day", "delete_archived_program_exercise"]) {
+  for (const name of [
+    "delete_archived_program_day",
+    "delete_archived_program_exercise",
+    "archive_deletion_capabilities",
+  ]) {
     const [grant] = await rows(
       "SELECT has_function_privilege('authenticated',$1,'EXECUTE') AS allowed, has_function_privilege('anon',$1,'EXECUTE') AS anonymous",
-      [`public.${name}(uuid)`],
+      [name === "archive_deletion_capabilities" ? `public.${name}()` : `public.${name}(uuid)`],
     );
     assert.equal(grant.allowed, true);
     assert.equal(grant.anonymous, false);
@@ -49,6 +54,40 @@ test("RPC grants deny anonymous calls and direct table DELETE", async () => {
           .allowed,
         false,
       );
+    const [ledger] = await rows(
+      `SELECT has_table_privilege('anon','public.workout_entry_operations','SELECT') AS anon_read,
+        has_table_privilege('authenticated','public.workout_entry_operations','SELECT') AS own_read,
+        has_table_privilege('authenticated','public.workout_entry_operations','INSERT') AS insert_allowed,
+        has_table_privilege('authenticated','public.workout_entry_operations','UPDATE') AS update_allowed,
+        has_table_privilege('authenticated','public.workout_entry_operations','DELETE') AS delete_allowed,
+        c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls
+       FROM pg_class c WHERE c.oid='public.workout_entry_operations'::regclass`,
+    );
+    assert.deepEqual(ledger, {
+      anon_read: false,
+      own_read: true,
+      insert_allowed: false,
+      update_allowed: false,
+      delete_allowed: false,
+      rls: true,
+      force_rls: true,
+    });
+    const [tombstones] = await rows(
+      `SELECT has_table_privilege('anon','public.workout_entry_operation_tombstones','SELECT') AS anon_read,
+        has_table_privilege('authenticated','public.workout_entry_operation_tombstones','SELECT') AS own_read,
+        has_table_privilege('authenticated','public.workout_entry_operation_tombstones','INSERT') AS insert_allowed,
+        has_table_privilege('authenticated','public.workout_entry_operation_tombstones','DELETE') AS delete_allowed,
+        c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls
+       FROM pg_class c WHERE c.oid='public.workout_entry_operation_tombstones'::regclass`,
+    );
+    assert.deepEqual(tombstones, {
+      anon_read: false,
+      own_read: true,
+      insert_allowed: false,
+      delete_allowed: false,
+      rls: true,
+      force_rls: true,
+    });
   });
 });
 
@@ -119,6 +158,110 @@ test("archived day deletion keeps exercises and every meaningful history field",
     assert.equal(
       (await rows("SELECT day_id FROM program_exercises WHERE id=$1", [linked.id]))[0].day_id,
       second.id,
+    );
+  });
+});
+
+test("a lost save reply can be retried exactly after day deletion, while changed payloads fail", async () => {
+  await db.query("INSERT INTO auth.users VALUES ($1)", [C]);
+  await asUser(C, async () => {
+    await db.query("SELECT setup_program($1::text[])", [["Leg day", "Other day"]]);
+    const [day, otherDay] = await rows(
+      "SELECT id FROM program_days WHERE user_id=$1 ORDER BY position",
+      [C],
+    );
+    const [exercise] = await rows(
+      "INSERT INTO program_exercises(name,day_id) VALUES ('Squat',$1) RETURNING id",
+      [day.id],
+    );
+    const id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const original = [id, exercise.id, day.id, "2026-10-15", 100, [8, 7, 6], 2, "retry me"];
+    assert.equal(
+      (await rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8) AS id", original))[0].id,
+      id,
+    );
+    await db.query("UPDATE program_days SET archived_at=now() WHERE id=$1", [day.id]);
+    assert.equal(
+      (await rows("SELECT delete_archived_program_day($1) AS ok", [day.id]))[0].ok,
+      true,
+    );
+    assert.equal(
+      (await rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8) AS id", original))[0].id,
+      id,
+    );
+    assert.equal(
+      (await rows("SELECT count(*)::int AS n FROM workout_entries WHERE id=$1", [id]))[0].n,
+      1,
+    );
+    const changed = [
+      [id, otherDay.id, day.id, "2026-10-15", 100, [8, 7, 6], 2, "retry me"],
+      [id, exercise.id, otherDay.id, "2026-10-15", 100, [8, 7, 6], 2, "retry me"],
+      [id, exercise.id, day.id, "2026-10-14", 100, [8, 7, 6], 2, "retry me"],
+      [id, exercise.id, day.id, "2026-10-15", 101, [8, 7, 6], 2, "retry me"],
+      [id, exercise.id, day.id, "2026-10-15", 100, [8, 7, 5], 2, "retry me"],
+      [id, exercise.id, day.id, "2026-10-15", 100, [8, 7, 6], 3, "retry me"],
+      [id, exercise.id, day.id, "2026-10-15", 100, [8, 7, 6], 2, "changed"],
+    ];
+    for (const payload of changed)
+      await assert.rejects(
+        rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8)", payload),
+        (error) => error.code === "22023",
+      );
+  });
+});
+
+test("permanent exercise deletion removes payload history but prevents UUID reuse", async () => {
+  const userId = "44444444-4444-4444-8444-444444444444";
+  await db.query("INSERT INTO auth.users VALUES ($1)", [userId]);
+  await asUser(userId, async () => {
+    await db.query("SELECT setup_program($1::text[])", [["Only day"]]);
+    const [day] = await rows("SELECT id FROM program_days WHERE user_id=$1", [userId]);
+    const [exercise] = await rows(
+      "INSERT INTO program_exercises(name,day_id) VALUES ('Delete me',$1) RETURNING id",
+      [day.id],
+    );
+    const id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const args = [id, exercise.id, day.id, "2026-10-15", 60, [8, 8], 2, "private note"];
+    await rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8)", args);
+    await db.query("UPDATE program_exercises SET archived_at=now() WHERE id=$1", [exercise.id]);
+    assert.equal(
+      (await rows("SELECT delete_archived_program_exercise($1) AS ok", [exercise.id]))[0].ok,
+      true,
+    );
+    assert.equal(
+      (await rows("SELECT count(*)::int AS n FROM workout_entries WHERE id=$1", [id]))[0].n,
+      0,
+    );
+    assert.equal(
+      (await rows("SELECT count(*)::int AS n FROM workout_entry_operations WHERE id=$1", [id]))[0]
+        .n,
+      0,
+    );
+    assert.equal(
+      (
+        await rows(
+          "SELECT count(*)::int AS n FROM workout_entry_operation_tombstones WHERE id=$1",
+          [id],
+        )
+      )[0].n,
+      1,
+    );
+    await assert.rejects(
+      rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8)", args),
+      (error) => error.code === "23503",
+    );
+    await assert.rejects(
+      rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8)", [
+        id,
+        exercise.id,
+        day.id,
+        "2026-10-15",
+        61,
+        [8, 8],
+        2,
+        "changed",
+      ]),
+      (error) => error.code === "23503",
     );
   });
 });

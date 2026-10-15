@@ -166,6 +166,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      archive_deletion_capabilities: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       delete_archived_program_day: {
         Args: { _day_id: string }
         Returns: boolean

@@ -1,6 +1,6 @@
 import { pendingRpc } from "@/lib/pending-rpc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { daysQuery, programQuery, userKeys, type Day, type Exercise } from "@/lib/queries";
@@ -10,6 +10,11 @@ import { MAX_DAYS } from "@/lib/workout";
 import { useI18n, translateKnown } from "@/lib/i18n";
 import { useArchivePreferences } from "@/lib/archive-preferences";
 import { removeExerciseDrafts } from "@/lib/workout-draft";
+import {
+  clearArchiveDeletionPending,
+  markArchiveDeletionPending,
+  readPendingArchiveDeletions,
+} from "@/lib/archive-deletion";
 import { ArchiveDeleteDialog } from "@/components/archive-delete-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,8 +49,19 @@ export function ProgramManager() {
   const qc = useQueryClient();
   const daysResult = useQuery(daysQuery(userId));
   const programResult = useQuery(programQuery(userId));
-  const days = daysResult.data ?? [];
-  const exercises = programResult.data ?? [];
+  const deletionCapability = useQuery({
+    queryKey: [...userKeys.all(userId), "archive-deletion-capability"],
+    enabled: deletionEnabled,
+    retry: false,
+    queryFn: async ({ signal: querySignal }) => {
+      const result = await supabase.rpc("archive_deletion_capabilities").abortSignal(querySignal);
+      if (result.error) throw result.error;
+      return result.data === true;
+    },
+  });
+  const canDeleteArchived = deletionEnabled && deletionCapability.data === true;
+  const days = useMemo(() => daysResult.data ?? [], [daysResult.data]);
+  const exercises = useMemo(() => programResult.data ?? [], [programResult.data]);
   const active = days.filter((day) => !day.archived_at);
   const selectionKey = `program:day:v1:${userId}`;
   const [selected, setSelected] = useState(() => {
@@ -73,6 +89,48 @@ export function ProgramManager() {
   const archiveExpanded = archiveExpandedByUser[userId] ?? false;
   const currentExercises = exercises.filter((ex) => ex.day_id === dayId && !ex.archived_at);
   const unassigned = exercises.filter((ex) => ex.day_id === null);
+
+  useEffect(() => {
+    if (
+      !programResult.isSuccess ||
+      !programResult.isFetchedAfterMount ||
+      !daysResult.isFetchedAfterMount ||
+      !isCurrent()
+    )
+      return;
+    const pending = readPendingArchiveDeletions(userId);
+    for (const deletion of pending) {
+      const stillExists =
+        deletion.kind === "exercise"
+          ? exercises.some((exercise) => exercise.id === deletion.id)
+          : days.some((day) => day.id === deletion.id);
+      if (stillExists) continue;
+      if (deletion.kind === "exercise") {
+        try {
+          removeExerciseDrafts(userId, deletion.id);
+        } catch {
+          continue;
+        }
+      }
+      clearArchiveDeletionPending(userId, deletion);
+      if (deletion.kind === "exercise") {
+        void qc.cancelQueries({ queryKey: userKeys.entries(userId, deletion.id) }).then(() => {
+          if (!isCurrent()) return;
+          qc.removeQueries({ queryKey: userKeys.entries(userId, deletion.id) });
+          qc.removeQueries({ queryKey: userKeys.lastEntry(userId, deletion.id) });
+        });
+      }
+    }
+  }, [
+    days,
+    daysResult.isFetchedAfterMount,
+    exercises,
+    isCurrent,
+    programResult.isFetchedAfterMount,
+    programResult.isSuccess,
+    qc,
+    userId,
+  ]);
 
   function selectDay(id: string) {
     setSelected(id);
@@ -127,52 +185,96 @@ export function ProgramManager() {
     }
   };
 
-  async function deleteArchived(kind: "day" | "exercise", id: string): Promise<boolean> {
-    if (running.current || !isCurrent()) return false;
+  async function deleteArchived(
+    kind: "day" | "exercise",
+    id: string,
+  ): Promise<"success" | "rejected" | "unknown" | "unavailable"> {
+    if (running.current || !isCurrent()) return "unknown";
+    if (!canDeleteArchived) return "unavailable";
     running.current = true;
     setBusy(true);
     try {
+      const table = kind === "day" ? "program_days" : "program_exercises";
+      const { data: owned, error: ownershipError } = await supabase
+        .from(table)
+        .select("id, archived_at")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .abortSignal(signal)
+        .maybeSingle();
+      if (!isCurrent()) return "unknown";
+      if (ownershipError) return "unknown";
+      const pending = readPendingArchiveDeletions(userId).some(
+        (item) => item.kind === kind && item.id === id,
+      );
+      if (!owned) {
+        if (!pending) return "rejected";
+        return await finishConfirmedDeletion(kind, id);
+      }
+      if (!owned.archived_at) return "rejected";
+      markArchiveDeletionPending(userId, { kind, id });
       const result =
         kind === "day"
           ? await supabase.rpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
           : await supabase
               .rpc("delete_archived_program_exercise", { _exercise_id: id })
               .abortSignal(signal);
-      if (!isCurrent()) return false;
-      if (result.error || result.data !== true) throw new Error("Deletion failed");
-      if (kind === "day") {
-        qc.setQueryData<Day[]>(userKeys.days(userId), (old) => old?.filter((day) => day.id !== id));
-        qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
-          old?.map((exercise) =>
-            exercise.day_id === id ? { ...exercise, day_id: null } : exercise,
-          ),
-        );
-        toast.success(t("День удалён, упражнения и история сохранены"));
-      } else {
-        qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
-          old?.filter((exercise) => exercise.id !== id),
-        );
-        await qc.cancelQueries({ queryKey: userKeys.entries(userId, id) });
-        await qc.cancelQueries({ queryKey: userKeys.lastEntry(userId, id) });
-        qc.removeQueries({ queryKey: userKeys.entries(userId, id) });
-        qc.removeQueries({ queryKey: userKeys.lastEntry(userId, id) });
-        setEditing(null);
-        try {
-          removeExerciseDrafts(userId, id);
-        } catch {
-          toast.error(t("Упражнение удалено, но локальный черновик очистить не удалось."));
-        }
-        toast.success(t("Упражнение и его история удалены"));
+      if (!isCurrent()) return "unknown";
+      if (!result.error && result.data === true) return await finishConfirmedDeletion(kind, id);
+
+      const { data: after, error: reconcileError } = await supabase
+        .from(table)
+        .select("id")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .abortSignal(signal)
+        .maybeSingle();
+      if (!isCurrent()) return "unknown";
+      if (reconcileError) return "unknown";
+      if (!after) return await finishConfirmedDeletion(kind, id);
+      if (result.error?.code === "22023" || result.error?.code === "42501") {
+        clearArchiveDeletionPending(userId, { kind, id });
+        return "rejected";
       }
-      await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
-      return isCurrent();
+      return "unknown";
     } catch {
-      if (isCurrent()) await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
-      return false;
+      return "unknown";
     } finally {
       running.current = false;
       if (isCurrent()) setBusy(false);
     }
+  }
+
+  async function finishConfirmedDeletion(
+    kind: "day" | "exercise",
+    id: string,
+  ): Promise<"success" | "unknown"> {
+    if (!isCurrent()) return "unknown";
+    if (kind === "day") {
+      qc.setQueryData<Day[]>(userKeys.days(userId), (old) => old?.filter((day) => day.id !== id));
+      qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
+        old?.map((exercise) => (exercise.day_id === id ? { ...exercise, day_id: null } : exercise)),
+      );
+      toast.success(t("День удалён, упражнения и история сохранены"));
+    } else {
+      try {
+        removeExerciseDrafts(userId, id);
+      } catch {
+        return "unknown";
+      }
+      qc.setQueryData<Exercise[]>(userKeys.program(userId), (old) =>
+        old?.filter((exercise) => exercise.id !== id),
+      );
+      await qc.cancelQueries({ queryKey: userKeys.entries(userId, id) });
+      await qc.cancelQueries({ queryKey: userKeys.lastEntry(userId, id) });
+      qc.removeQueries({ queryKey: userKeys.entries(userId, id) });
+      qc.removeQueries({ queryKey: userKeys.lastEntry(userId, id) });
+      setEditing(null);
+      toast.success(t("Упражнение и его история удалены"));
+    }
+    clearArchiveDeletionPending(userId, { kind, id });
+    await qc.invalidateQueries({ queryKey: userKeys.all(userId) });
+    return isCurrent() ? "success" : "unknown";
   }
 
   async function addDay(event: FormEvent) {
@@ -353,7 +455,7 @@ export function ProgramManager() {
             <Archive className="h-4 w-4" />
           )}
         </Button>
-        {deletionEnabled && ex.archived_at && (
+        {canDeleteArchived && ex.archived_at && (
           <ArchiveDeleteDialog
             kind="exercise"
             id={ex.id}
@@ -376,6 +478,13 @@ export function ProgramManager() {
           {translateKnown(language, error)}
         </p>
       )}
+      {deletionEnabled &&
+        (deletionCapability.isSuccess || deletionCapability.isError) &&
+        !canDeleteArchived && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("Удаление пока недоступно на сервере.")}
+          </p>
+        )}
       <Sheet
         open={managingDays}
         onOpenChange={(open) => {
@@ -487,7 +596,7 @@ export function ProgramManager() {
                         canArchive={false}
                         canRestore={active.length < MAX_DAYS}
                         deleteControl={
-                          deletionEnabled ? (
+                          canDeleteArchived ? (
                             <ArchiveDeleteDialog
                               kind="day"
                               id={day.id}
@@ -562,8 +671,9 @@ export function ProgramManager() {
           handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
           onReorder={(ids) =>
             void run(() =>
-              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids })
-                .abortSignal(signal),
+              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids }).abortSignal(
+                signal,
+              ),
             )
           }
           render={(ex, handle) => compactRow(ex, handle)}

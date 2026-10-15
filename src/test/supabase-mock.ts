@@ -33,6 +33,7 @@ const fake = vi.hoisted(() => {
     authChange: null as ((event: string, session: { user: { id: string } } | null) => void) | null,
     userId: null as string | null,
     nextError: null as string | null,
+    deletionCapability: true,
     readErrors: {} as Record<string, string>,
     delaySelect: null as { table: string; filters: Row; promise: Promise<Response> } | null,
     saveRpc: vi.fn(
@@ -47,7 +48,12 @@ const fake = vi.hoisted(() => {
     sequence: 0,
     maxRows: Infinity,
     rpc: vi.fn(
-      async (name: string, args: { _ids?: string[]; _day_id?: string; _exercise_id?: string }) => {
+      async (
+        name: string,
+        args: { _ids?: string[]; _day_id?: string; _exercise_id?: string } = {},
+      ) => {
+        if (name === "archive_deletion_capabilities")
+          return { data: state.deletionCapability, error: null };
         if (state.nextError) {
           const message = state.nextError;
           state.nextError = null;
@@ -224,9 +230,11 @@ export { fake };
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: fake.from,
-    rpc: (name: string, args: { _ids?: string[] } & Record<string, unknown>) => ({
+    rpc: (name: string, args: { _ids?: string[] } & Record<string, unknown> = {}) => ({
       abortSignal: () =>
         name === "save_workout_entry" ? fake.state.saveRpc(args) : fake.state.rpc(name, args),
+      then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
+        fake.state.rpc(name, args).then(resolve, reject),
     }),
     auth: {
       onAuthStateChange: (callback: typeof fake.state.authChange) => {
@@ -246,6 +254,7 @@ export function resetFake() {
   for (const key of Object.keys(fake.state.rows)) fake.state.rows[key] = [];
   fake.state.calls.length = 0;
   fake.state.nextError = null;
+  fake.state.deletionCapability = true;
   fake.state.readErrors = {};
   fake.state.delaySelect = null;
   fake.state.saveRpc.mockReset();
