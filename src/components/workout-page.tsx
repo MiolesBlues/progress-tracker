@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { daysQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
+import { useWorkoutPreferences } from "@/lib/archive-preferences";
 import { toISO } from "@/lib/workout";
 import { isWorkoutDate } from "@/lib/workout-input";
 import { WorkoutForm } from "@/components/workout-form";
@@ -19,6 +20,7 @@ import {
 export function WorkoutPage() {
   const { t, language } = useI18n();
   const { userId } = useUserSession();
+  const { autoAdvance } = useWorkoutPreferences(userId);
   const programResult = useQuery(programQuery(userId));
   const daysResult = useQuery(daysQuery(userId));
   const selectionKey = `workout:selection:v1:${userId}`;
@@ -104,6 +106,7 @@ export function WorkoutPage() {
   function afterSaved(exerciseId: string, dayId: string, date: string) {
     const selectedExerciseId = selection.exerciseId || exercises[0]?.id;
     if (selection.dayId !== dayId || selectedExerciseId !== exerciseId) return false;
+    if (!autoAdvance) return false;
     const sessionKey = `${dayId}:${date}`;
     const completedIds = new Set(savedExercises[sessionKey] ?? []);
     completedIds.add(exerciseId);

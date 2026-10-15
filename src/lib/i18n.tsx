@@ -15,6 +15,8 @@ export const english = {
   "Управление данными": "Data management",
   "Разрешить полное удаление": "Enable permanent deletion",
   "Показывать архивные дни и упражнения": "Show archived days and exercises",
+  "Автоматически переходить к следующему упражнению": "Automatically switch to the next exercise",
+  "После сохранения выбирать следующее упражнение": "Select the next exercise after saving",
   "Выберите тренировочный день": "Select a training day",
   "Выберите упражнение": "Select an exercise",
   "Удалить день: {name}": "Delete day: {name}",

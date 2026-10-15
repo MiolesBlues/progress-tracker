@@ -68,6 +68,58 @@ it("stores deletion and archive choices separately for each account", async () =
   expect(archive).toBeChecked();
 });
 
+it("defaults auto-advance on, persists it across remounts, and isolates it per account", async () => {
+  const app = () => (
+    <QueryClientProvider client={client}>
+      <SessionProvider onIdentityChange={() => {}}>
+        <LanguageProvider>
+          <SettingsDialog />
+        </LanguageProvider>
+      </SessionProvider>
+    </QueryClientProvider>
+  );
+  const view = render(app());
+  act(() => authEvent("SIGNED_IN", "A"));
+  fireEvent.click(screen.getByRole("button", { name: "Настройки" }));
+  const autoAdvance = screen.getByRole("checkbox", {
+    name: "Автоматически переходить к следующему упражнению",
+  });
+  expect(autoAdvance).toBeChecked();
+  expect(screen.getByText("После сохранения выбирать следующее упражнение")).toBeInTheDocument();
+  fireEvent.click(autoAdvance);
+  expect(autoAdvance).not.toBeChecked();
+  expect(localStorage.getItem("app:archive-settings:v1:A")).toBe("4");
+
+  view.unmount();
+  render(app());
+  act(() => authEvent("SIGNED_IN", "A"));
+  fireEvent.click(screen.getByRole("button", { name: "Настройки" }));
+  expect(
+    screen.getByRole("checkbox", { name: "Автоматически переходить к следующему упражнению" }),
+  ).not.toBeChecked();
+
+  act(() => authEvent("SIGNED_IN", "B"));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Автоматически переходить к следующему упражнению",
+      }),
+    ).toBeChecked(),
+  );
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Автоматически переходить к следующему упражнению" }),
+  );
+  expect(localStorage.getItem("app:archive-settings:v1:B")).toBe("4");
+  act(() => authEvent("SIGNED_IN", "A"));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Автоматически переходить к следующему упражнению",
+      }),
+    ).not.toBeChecked(),
+  );
+});
+
 it("shows the new controls in English for an account that selected English", async () => {
   localStorage.setItem("app:language:v1:A", "en");
   render(
@@ -82,6 +134,11 @@ it("shows the new controls in English for an account that selected English", asy
   act(() => authEvent("SIGNED_IN", "A"));
   fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
   expect(screen.getByText("Data management")).toBeInTheDocument();
+  expect(screen.getByText("Workout")).toBeInTheDocument();
+  expect(
+    screen.getByRole("checkbox", { name: "Automatically switch to the next exercise" }),
+  ).toBeChecked();
+  expect(screen.getByText("Select the next exercise after saving")).toBeInTheDocument();
   expect(screen.getByRole("checkbox", { name: "Enable permanent deletion" })).toBeInTheDocument();
   expect(
     screen.getByRole("checkbox", { name: "Show archived days and exercises" }),

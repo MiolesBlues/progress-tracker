@@ -1,6 +1,6 @@
 import { Settings } from "lucide-react";
 import { useI18n, type Language } from "@/lib/i18n";
-import { useArchivePreferences } from "@/lib/archive-preferences";
+import { useArchivePreferences, useWorkoutPreferences } from "@/lib/archive-preferences";
 import { useSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,6 +23,7 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
   const { language, setLanguage, t } = useI18n();
   const { userId } = useSession();
   const archive = useArchivePreferences(userId);
+  const workout = useWorkoutPreferences(userId);
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -81,6 +82,22 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
               aria-label={t("Показывать архивные дни и упражнения")}
             />
             <span>{t("Показывать архивные дни и упражнения")}</span>
+          </label>
+        </fieldset>
+        <fieldset className="space-y-3 border-t pt-4" disabled={!workout.available}>
+          <legend className="pb-2 text-sm font-semibold">{t("Тренировка")}</legend>
+          <label className="flex min-h-11 items-start gap-3 text-sm">
+            <Checkbox
+              checked={workout.autoAdvance}
+              onCheckedChange={(checked) => workout.setAutoAdvance(checked === true)}
+              aria-label={t("Автоматически переходить к следующему упражнению")}
+            />
+            <span className="space-y-1">
+              <span className="block">{t("Автоматически переходить к следующему упражнению")}</span>
+              <span className="block text-xs text-muted-foreground">
+                {t("После сохранения выбирать следующее упражнение")}
+              </span>
+            </span>
           </label>
         </fieldset>
       </DialogContent>

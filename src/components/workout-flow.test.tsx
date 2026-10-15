@@ -12,6 +12,8 @@ import { draftKey, newDraft, readDraft, writeDraft } from "@/lib/workout-draft";
 import { userKeys } from "@/lib/queries";
 import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
+import { LanguageProvider } from "@/lib/i18n";
+import { SettingsDialog } from "@/components/settings-dialog";
 
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
@@ -350,6 +352,114 @@ it("advances after server confirmation and prefills the next exercise history", 
   fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
   await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX));
   expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
+});
+
+it("keeps the exercise selected with auto-advance off and adds separate historical entries safely", async () => {
+  const idempotentSave = fake.state.saveRpc.getMockImplementation();
+  let attempts = 0;
+  fake.state.saveRpc.mockImplementation(async (args) => {
+    const result = await idempotentSave!(args);
+    attempts++;
+    if (attempts === 2) throw new TypeError("Failed to fetch");
+    return result;
+  });
+  mount(
+    <>
+      <WorkoutPage />
+      <LanguageProvider>
+        <SettingsDialog />
+      </LanguageProvider>
+    </>,
+  );
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: "Настройки" }));
+  fireEvent.click(
+    screen.getByRole("checkbox", { name: "Автоматически переходить к следующему упражнению" }),
+  );
+  expect(localStorage.getItem(`app:archive-settings:v1:${A}`)).toBe("4");
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
+
+  const changeEntry = async (
+    date: string,
+    previousWeight: string,
+    weight: string,
+    reps: string[],
+  ) => {
+    fireEvent.change(screen.getByLabelText("Дата"), { target: { value: date } });
+    await waitFor(() => expect(screen.getByLabelText("Дата")).toHaveValue(date));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue(previousWeight),
+    );
+    expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+    fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: weight } });
+    for (let index = 0; index < reps.length; index++)
+      fireEvent.change(screen.getByLabelText(`Подход ${index + 1}`), {
+        target: { value: reps[index] },
+      });
+    if (screen.queryByLabelText(`Подход ${reps.length + 1}`))
+      fireEvent.click(screen.getByRole("button", { name: "Убрать подход" }));
+  };
+
+  await changeEntry("2026-09-01", "30", "50", ["8", "8", "8"]);
+  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "2" } });
+  const firstId = readDraft(A, EX)!.id;
+  submit();
+  await waitFor(() =>
+    expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
+      2,
+    ),
+  );
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-01");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50");
+  expect(screen.getByLabelText("Подход 3")).toHaveValue("8");
+  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
+  const secondId = readDraft(A, EX)!.id;
+  expect(secondId).not.toBe(firstId);
+  expect(readDraft(A, EX)?.operation).toBeNull();
+
+  await changeEntry("2026-09-05", "50", "52,5", ["8", "8", "7"]);
+  const retryId = readDraft(A, EX)!.id;
+  submit();
+  await screen.findByRole("button", { name: "Повторить сохранение" });
+  expect(readDraft(A, EX)?.operation?.id).toBe(retryId);
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-05");
+  fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
+  await waitFor(() => expect(readDraft(A, EX)?.id).not.toBe(retryId));
+  expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(fake.state.saveRpc.mock.calls[2]![0]);
+  expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
+    3,
+  );
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-05");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("52.5");
+
+  await changeEntry("2026-09-10", "52.5", "55", ["8", "7", "6"]);
+  const thirdId = readDraft(A, EX)!.id;
+  submit();
+  await waitFor(() =>
+    expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
+      4,
+    ),
+  );
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-10");
+  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("55");
+  expect(
+    screen.getAllByLabelText(/^Подход \d+$/).map((field) => (field as HTMLInputElement).value),
+  ).toEqual(["8", "7", "6"]);
+  const entries = fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX);
+  expect(entries.map((row) => row["performed_on"])).toEqual([
+    "2026-10-12",
+    "2026-09-01",
+    "2026-09-05",
+    "2026-09-10",
+  ]);
+  expect(entries.map((row) => row["weight"])).toEqual([50, 50, 52.5, 55]);
+  expect(new Set(entries.slice(1).map((row) => row.id)).size).toBe(3);
+  expect(thirdId).not.toBe(retryId);
+  expect(toast.success).toHaveBeenCalledTimes(3);
 });
 it("loads only the selected exercise's own recorded reps and RIR", async () => {
   mount();
