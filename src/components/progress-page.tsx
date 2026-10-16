@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -28,7 +29,8 @@ import { useUserSession } from "@/lib/session";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "./ui/button";
 
-const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
+const selectCls =
+  "h-11 min-w-0 w-full appearance-none truncate rounded-md border border-input bg-card px-3 pr-9 text-foreground";
 const PAGE_SIZE = 20;
 
 export function ProgressPage() {
@@ -46,7 +48,7 @@ export function ProgressPage() {
     days.some((day) => day.archived_at) ||
     exercises.some((exercise) => exercise.archived_at || !exercise.day_id);
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-4">
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Прогресс")}</h1>
       {programResult.isError || daysResult.isError ? (
         <LoadError
@@ -83,44 +85,62 @@ export function ProgressPage() {
           )}
           {selection.dayId ? (
             <>
-              <label className="block min-w-0 space-y-1 text-sm">
-                {t("Тренировочный день")}
-                <select
-                  aria-label={t("Тренировочный день")}
-                  className={selectCls}
-                  value={selection.dayId}
-                  onChange={(event) => {
-                    setDay(event.target.value);
-                    setExercise("");
-                  }}
-                >
-                  {selection.dayOptions.map((day) => (
-                    <option key={day.id} value={day.id}>
-                      {day.name}
-                    </option>
-                  ))}
-                  {mode === "archive" && exercises.some((exercise) => !exercise.day_id) && (
-                    <option value={UNASSIGNED_HISTORY_DAY}>{t("История без активного дня")}</option>
-                  )}
-                </select>
-              </label>
-              {selection.exerciseId ? (
-                <>
-                  <label className="block min-w-0 space-y-1 text-sm">
-                    {t("Упражнение")}
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
+                <label className="block min-w-0 space-y-1 text-xs">
+                  {t("Тренировочный день")}
+                  <span className="relative block min-w-0">
                     <select
-                      aria-label={t("Упражнение")}
+                      aria-label={t("Тренировочный день")}
                       className={selectCls}
-                      value={selection.exerciseId}
-                      onChange={(event) => setExercise(event.target.value)}
+                      value={selection.dayId}
+                      onChange={(event) => {
+                        setDay(event.target.value);
+                        setExercise("");
+                      }}
                     >
-                      {selection.dayExercises.map((exercise) => (
-                        <option key={exercise.id} value={exercise.id}>
-                          {exercise.name}
+                      {selection.dayOptions.map((day) => (
+                        <option key={day.id} value={day.id}>
+                          {day.name}
                         </option>
                       ))}
+                      {mode === "archive" && exercises.some((exercise) => !exercise.day_id) && (
+                        <option value={UNASSIGNED_HISTORY_DAY}>
+                          {t("История без активного дня")}
+                        </option>
+                      )}
                     </select>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                  </span>
+                </label>
+                {selection.exerciseId && (
+                  <label className="block min-w-0 space-y-1 text-xs">
+                    {t("Упражнение")}
+                    <span className="relative block min-w-0">
+                      <select
+                        aria-label={t("Упражнение")}
+                        className={selectCls}
+                        value={selection.exerciseId}
+                        onChange={(event) => setExercise(event.target.value)}
+                      >
+                        {selection.dayExercises.map((exercise) => (
+                          <option key={exercise.id} value={exercise.id}>
+                            {exercise.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      />
+                    </span>
                   </label>
+                )}
+              </div>
+              {selection.exerciseId ? (
+                <>
                   <ExerciseHistory
                     key={`${userId}:${selection.exerciseId}`}
                     userId={userId}
