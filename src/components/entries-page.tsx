@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { toISO } from "@/lib/workout";
@@ -126,6 +127,9 @@ export function EntriesPage() {
                   key={`${userId}:${exerciseId}`}
                   userId={userId}
                   exerciseId={exerciseId}
+                  exerciseName={
+                    dayExercises.find((exercise) => exercise.id === exerciseId)?.name ?? ""
+                  }
                   dayNames={dayNames}
                 />
               ) : (
@@ -142,10 +146,12 @@ export function EntriesPage() {
 function ExerciseEntries({
   userId,
   exerciseId,
+  exerciseName,
   dayNames,
 }: {
   userId: string;
   exerciseId: string;
+  exerciseName: string;
   dayNames: Map<string, string>;
 }) {
   const { t, number, date, language } = useI18n();
@@ -154,6 +160,7 @@ function ExerciseEntries({
   const [period, setPeriod] = useState<Period>(30);
   const [sort, setSort] = useState<Sort>("recent");
   const [page, setPage] = useState(0);
+  const [expandedEntries, setExpandedEntries] = useState<Set<string>>(() => new Set());
   if (result.isError)
     return (
       <LoadError onRetry={() => void result.refetch()}>
@@ -230,23 +237,72 @@ function ExerciseEntries({
           {t("За выбранный период записей нет.")}
         </p>
       ) : (
-        <ul className="min-w-0 space-y-3">
+        <ul className="min-w-0 divide-y divide-border/60">
           {records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE).map((entry) => (
-            <li key={entry.id} className="min-w-0 space-y-1 rounded-xl bg-card p-4 text-sm">
-              <p className="break-words font-semibold">
-                {date(entry.performed_on)} ·{" "}
-                {(entry.day_id ? dayNames.get(entry.day_id) : undefined) ||
-                  entry.day_name?.trim() ||
-                  t("Без назначенного дня")}
-              </p>
-              <p className="num break-all text-base font-bold">
-                {number(entry.weight, 2)} {t("кг")} · {entry.reps.join(" / ")}
-              </p>
-              <p className="text-muted-foreground">
-                {setsCount(entry.reps.length, language)}
-                {entry.rir !== null && ` · RIR ${entry.rir}`}
-              </p>
-              {entry.notes?.trim() && <p className="break-words">{entry.notes}</p>}
+            <li key={entry.id} className="min-w-0 py-1 text-sm">
+              <button
+                type="button"
+                aria-expanded={expandedEntries.has(entry.id)}
+                aria-controls={`entry-sets-${entry.id}`}
+                onClick={() =>
+                  setExpandedEntries((current) => {
+                    const next = new Set(current);
+                    if (next.has(entry.id)) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  })
+                }
+                className="flex min-h-11 w-full min-w-0 items-center gap-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{exerciseName}</span>
+                  <span className="block truncate text-xs text-muted-foreground tabular-nums">
+                    {setsCount(entry.reps.length, language)} ·{" "}
+                    {t("Рабочий вес {weight}", { weight: `${number(entry.weight, 2)} ${t("кг")}` })}
+                  </span>
+                </span>
+                <span className="max-w-[35%] truncate text-right text-xs text-muted-foreground">
+                  {date(entry.performed_on)} ·{" "}
+                  {(entry.day_id ? dayNames.get(entry.day_id) : undefined) ||
+                    entry.day_name?.trim() ||
+                    t("Без назначенного дня")}
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${expandedEntries.has(entry.id) ? "rotate-180" : ""}`}
+                />
+              </button>
+              <div
+                id={`entry-sets-${entry.id}`}
+                aria-hidden={!expandedEntries.has(entry.id)}
+                className={`grid transition-[grid-template-rows,opacity] duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${expandedEntries.has(entry.id) ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-t border-border/50 py-2 text-xs">
+                    <span className="text-muted-foreground">{t("SET")}</span>
+                    <span className="text-muted-foreground">{t("WEIGHT")}</span>
+                    <span className="text-muted-foreground">{t("REPS")}</span>
+                    <span className="text-muted-foreground">RIR</span>
+                    {entry.reps.map((reps, index) => (
+                      <Fragment key={index}>
+                        <span className="tabular-nums">{index + 1}</span>
+                        <span className="tabular-nums">
+                          {number(entry.weight, 2)} {t("кг")}
+                        </span>
+                        <span className="tabular-nums">{reps}</span>
+                        <span className="tabular-nums">
+                          {entry.rir === null ? "—" : number(entry.rir)}
+                        </span>
+                      </Fragment>
+                    ))}
+                  </div>
+                  {entry.notes?.trim() && (
+                    <p className="break-words border-t border-border/40 py-2 text-xs text-muted-foreground">
+                      {entry.notes}
+                    </p>
+                  )}
+                </div>
+              </div>
             </li>
           ))}
         </ul>

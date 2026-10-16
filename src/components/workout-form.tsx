@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { ChevronDown, Minus, Plus } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { prefillFor } from "@/lib/workout";
@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useI18n, translateKnown, setsCount } from "@/lib/i18n";
+import { useI18n, translateKnown } from "@/lib/i18n";
 
 type WorkoutFormProps = {
   exercise: Exercise;
@@ -77,7 +77,6 @@ export function WorkoutForm({
   const [blocked, setBlocked] = useState(!!initial.error);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [previousExpanded, setPreviousExpanded] = useState(false);
   const submitting = useRef(false);
   const mounted = useRef(true);
   const historyDate = draft.fields.date;
@@ -314,65 +313,20 @@ export function WorkoutForm({
         </LoadError>
       )}
       {lastResult.isSuccess && lastResult.isFetchedAfterMount && !lastResult.isFetching && (
-        <div className="min-w-0">
-          <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-snug text-muted-foreground">
-            {plan && <span>{t("План {plan}", { plan })}</span>}
-            {plan && <span aria-hidden="true">·</span>}
-            {!previous && <span>{t("Истории нет")}</span>}
-          </p>
-          {previous && (
-            <div className="border-b border-border/60">
-              <button
-                type="button"
-                aria-expanded={previousExpanded}
-                aria-controls="previous-workout-sets"
-                onClick={() => setPreviousExpanded((expanded) => !expanded)}
-                className="flex min-h-11 w-full min-w-0 items-center gap-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{exercise.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground tabular-nums">
-                    {setsCount(previous.reps.length, language)} ·{" "}
-                    {t("Рабочий вес {weight}", {
-                      weight:
-                        previous.weight === null ? "—" : `${String(Number(previous.weight))} кг`,
-                    })}
-                  </span>
-                </span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${previousExpanded ? "rotate-180" : ""}`}
-                />
-              </button>
-              <div
-                id="previous-workout-sets"
-                aria-hidden={!previousExpanded}
-                className={`grid transition-[grid-template-rows,opacity] duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${previousExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
-              >
-                <div className="min-h-0 overflow-hidden">
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-t border-border/50 py-2 text-xs">
-                    <span className="text-muted-foreground">{t("SET")}</span>
-                    <span className="text-muted-foreground">{t("WEIGHT")}</span>
-                    <span className="text-muted-foreground">{t("REPS")}</span>
-                    <span className="text-muted-foreground">RIR</span>
-                    {previous.reps.map((reps, index) => (
-                      <Fragment key={index}>
-                        <span className="tabular-nums">{index + 1}</span>
-                        <span className="tabular-nums">
-                          {previous.weight === null ? "—" : `${String(Number(previous.weight))} кг`}
-                        </span>
-                        <span className="tabular-nums">{reps}</span>
-                        <span className="tabular-nums">
-                          {previous.rir === null ? "—" : String(Number(previous.rir))}
-                        </span>
-                      </Fragment>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-1 text-xs leading-snug text-muted-foreground">
+          {plan && <span>{t("План {plan}", { plan })}</span>}
+          {plan && <span aria-hidden="true">·</span>}
+          {previous ? (
+            <span>
+              {t("Было {weight} кг × {reps}", {
+                weight: previous.weight === null ? "—" : String(Number(previous.weight)),
+                reps: previous.reps.join("/"),
+              })}
+            </span>
+          ) : (
+            <span>{t("Истории нет")}</span>
           )}
-        </div>
+        </p>
       )}
       {error && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">

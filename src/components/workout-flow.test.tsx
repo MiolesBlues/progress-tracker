@@ -120,7 +120,7 @@ it("shows active days with exercise counts and filters exercises after selection
   fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
   mount();
   await ready();
-  expect(screen.getByRole("button", { name: /Жим.*4 подхода.*Рабочий вес 50 кг/ })).toBeVisible();
+  expect(screen.getByText("Было 50 кг × 8/8/7/6")).toBeVisible();
   expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
     "Силовой · 1 упражнение",
   );
@@ -135,27 +135,6 @@ it("shows active days with exercise counts and filters exercises after selection
   expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
     "День восстановления · 1 упражнение",
   );
-});
-
-it("shows the previous session as an accessible compact set table and toggles it repeatedly", async () => {
-  fake.state.rows.workout_entries = [{ ...last(EX, 39), reps: [10, 10, 9, 8], rir: null }];
-  mount();
-  await ready();
-  const toggle = screen.getByRole("button", { name: /Жим.*4 подхода/ });
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
-  const table = document.getElementById("previous-workout-sets");
-  expect(table).toHaveAttribute("aria-hidden", "false");
-  expect(table).toHaveTextContent(/1\s*39 кг\s*10\s*—/);
-  expect(table).toHaveTextContent(/2\s*39 кг\s*10\s*—/);
-  expect(table).toHaveTextContent(/3\s*39 кг\s*9\s*—/);
-  expect(table).toHaveTextContent(/4\s*39 кг\s*8\s*—/);
-  fireEvent.click(toggle);
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "true");
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-expanded", "false");
 });
 
 it("remembers the selected day separately for users A and B", async () => {
