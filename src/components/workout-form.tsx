@@ -41,7 +41,6 @@ type WorkoutFormProps = {
   initialDate: string;
   onDateChange: (date: string) => void;
   onSaved: (exerciseId: string, dayId: string, date: string) => boolean;
-  onStartFocus?: () => void;
   focusMode?: boolean;
 };
 
@@ -137,7 +136,6 @@ function PerSetWorkoutForm({
   initialDate,
   onDateChange,
   onSaved,
-  onStartFocus,
   legacyDraft,
   focusMode = false,
 }: WorkoutFormProps & { legacyDraft: WorkoutDraft | null }) {
@@ -485,15 +483,6 @@ function PerSetWorkoutForm({
               className="box-border h-12 w-full min-w-0 max-w-full px-2 sm:px-3"
               required
             />
-            {onStartFocus && (
-              <Button
-                type="button"
-                className="h-14 w-full text-base font-semibold"
-                onClick={onStartFocus}
-              >
-                {t("Начать тренировку")}
-              </Button>
-            )}
           </div>
         )}
         <section className="space-y-3" aria-label={t("Подходы")}>

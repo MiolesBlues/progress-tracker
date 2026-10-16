@@ -9,6 +9,8 @@ import { toISO } from "@/lib/workout";
 import { isWorkoutDate } from "@/lib/workout-input";
 import { WorkoutForm } from "@/components/workout-form";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Loading, LoadError } from "@/components/query-feedback";
 import { useI18n, exerciseCount } from "@/lib/i18n";
 import {
@@ -55,6 +57,8 @@ export function WorkoutPage() {
   });
   const [completedDay, setCompletedDay] = useState<{ dayId: string; date: string } | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [focusStarted, setFocusStarted] = useState(false);
+  const activeFocus = focusMode && focusStarted;
   const [focusListOpen, setFocusListOpen] = useState(false);
   const [savedExercises, setSavedExercises] = useState<Record<string, string[]>>({});
   const days = useMemo(
@@ -115,7 +119,7 @@ export function WorkoutPage() {
   function afterSaved(exerciseId: string, dayId: string, date: string) {
     const selectedExerciseId = selection.exerciseId || exercises[0]?.id;
     if (selection.dayId !== dayId || selectedExerciseId !== exerciseId) return false;
-    if (focusMode) {
+    if (activeFocus) {
       const sessionKey = `${dayId}:${date}`;
       const nextCompletedIds = new Set(savedExercises[sessionKey] ?? []);
       nextCompletedIds.add(exerciseId);
@@ -189,7 +193,39 @@ export function WorkoutPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
-      {!focusMode && (
+      {!activeFocus && (
+        <div
+          className="grid grid-cols-2 rounded-xl bg-muted p-1"
+          role="group"
+          aria-label={t("Режим тренировки")}
+        >
+          <Button
+            type="button"
+            variant={!focusMode ? "secondary" : "ghost"}
+            className="h-10"
+            aria-pressed={!focusMode}
+            onClick={() => {
+              setFocusMode(false);
+              setFocusStarted(false);
+            }}
+          >
+            {t("Обычный")}
+          </Button>
+          <Button
+            type="button"
+            variant={focusMode ? "secondary" : "ghost"}
+            className="h-10"
+            aria-pressed={focusMode}
+            onClick={() => {
+              setFocusMode(true);
+              setFocusStarted(false);
+            }}
+          >
+            {t("Фокус")}
+          </Button>
+        </div>
+      )}
+      {!activeFocus && (
         <div className="min-w-0 space-y-2">
           <label id="training-day-label" className="block text-sm font-medium">
             {t("Тренировочный день")}
@@ -274,18 +310,76 @@ export function WorkoutPage() {
           initialDate={workoutDate}
           onDateChange={changeDate}
           onSaved={afterSaved}
-          onStartFocus={() => {
-            setFocusMode(true);
-            setFocusListOpen(false);
-          }}
         />
       )}
-      {focusMode && current && day && (
+      {focusMode && !focusStarted && day && (
+        <section
+          className="space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5"
+          aria-label={t("Подготовка тренировки")}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="focus-date">{t("Дата")}</Label>
+            <Input
+              id="focus-date"
+              type="date"
+              value={workoutDate}
+              onChange={(event) => changeDate(event.target.value)}
+              className="h-12"
+              required
+            />
+          </div>
+          <Button
+            type="button"
+            className="h-14 w-full text-base font-semibold"
+            disabled={!current}
+            onClick={() => {
+              setFocusStarted(true);
+              setFocusListOpen(false);
+            }}
+          >
+            {t("Начать тренировку")}
+          </Button>
+        </section>
+      )}
+      {focusMode && !focusStarted && !day && (
+        <p className="text-sm text-muted-foreground">
+          {t("Добавьте тренировочный день, чтобы начать.")}
+        </p>
+      )}
+      {activeFocus && current && day && (
         <section
           key={`focus:${day.id}:${current.id}`}
           className="overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none sm:p-5"
           aria-label={t("Focus Mode")}
         >
+          <div
+            className="mb-4 grid grid-cols-2 rounded-xl bg-muted p-1"
+            role="group"
+            aria-label={t("Режим тренировки")}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-10"
+              aria-pressed={!focusMode}
+              onClick={() => {
+                setFocusMode(false);
+                setFocusStarted(false);
+                setFocusListOpen(false);
+              }}
+            >
+              {t("Обычный")}
+            </Button>
+            <Button
+              type="button"
+              variant={focusMode ? "secondary" : "ghost"}
+              className="h-10"
+              aria-pressed={focusMode}
+              onClick={() => setFocusMode(true)}
+            >
+              {t("Фокус")}
+            </Button>
+          </div>
           {allExercisesCompleted ? (
             <div className="space-y-4 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -295,7 +389,13 @@ export function WorkoutPage() {
                 <h2 className="text-xl font-bold">{t("Тренировка завершена")}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{t("Все упражнения записаны")}</p>
               </div>
-              <Button className="h-12 w-full" onClick={() => setFocusMode(false)}>
+              <Button
+                className="h-12 w-full"
+                onClick={() => {
+                  setFocusMode(false);
+                  setFocusStarted(false);
+                }}
+              >
                 {t("Завершить и вернуться")}
               </Button>
             </div>
@@ -384,7 +484,10 @@ export function WorkoutPage() {
                   type="button"
                   variant="ghost"
                   className="h-10 w-full"
-                  onClick={() => setFocusMode(false)}
+                  onClick={() => {
+                    setFocusMode(false);
+                    setFocusStarted(false);
+                  }}
                 >
                   {t("Вернуться в обычный режим")}
                 </Button>
@@ -396,6 +499,7 @@ export function WorkoutPage() {
       {completedDay &&
         completedDay.dayId === day?.id &&
         completedDay.date === workoutDate &&
+        !activeFocus &&
         !focusMode && (
           <p role="status" className="text-xs text-muted-foreground">
             {t(

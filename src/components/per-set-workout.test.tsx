@@ -201,9 +201,16 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
   const view = mount();
   await screen.findByLabelText("Вес подхода 1");
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  expect(screen.getByRole("group", { name: "Режим тренировки" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Обычный" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Фокус" })).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Фокус" }));
+  expect(screen.getByRole("button", { name: "Фокус" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByLabelText("Тренировочный день")).toBeInTheDocument();
   expect(screen.getByLabelText("Дата")).toBeInTheDocument();
-  expect(screen.getByLabelText("Упражнение")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Упражнение")).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Focus Mode" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Вес подхода 1")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByRole("region", { name: "Focus Mode" })).toHaveTextContent("Жим");
   fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
@@ -221,11 +228,12 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
     "33.33333333333333",
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Вернуться в обычный режим" }));
+  fireEvent.click(screen.getByRole("button", { name: "Обычный" }));
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
   view.unmount();
   mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
   fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
     "aria-valuenow",
@@ -236,7 +244,8 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
 it("keeps program order on skip and lets the user return to an unfinished exercise", async () => {
   addSecondExercise();
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByText("Жим")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Скип" }));
   expect(screen.getByRole("heading", { name: "Тяга" })).toBeInTheDocument();
@@ -248,7 +257,8 @@ it("keeps program order on skip and lets the user return to an unfinished exerci
 
 it("keeps each Focus Mode set's manual values independent while navigating and resizing the plan", async () => {
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   await screen.findByLabelText("Вес подхода 1");
   fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "51.25" } });
   fireEvent.change(screen.getByLabelText("Повторения подхода 1"), { target: { value: "9" } });
@@ -273,7 +283,8 @@ it("keeps each Focus Mode set's manual values independent while navigating and r
 it("saves once after the final set, offers the next unfinished exercise, and finishes without another save", async () => {
   addSecondExercise();
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   await screen.findByLabelText("Вес подхода 1");
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
