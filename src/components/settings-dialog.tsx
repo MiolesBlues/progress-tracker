@@ -72,7 +72,7 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
           <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("Тема оформления")}>
             {(
               [
-                ["system", Monitor, "Системная"],
+                ["system", Monitor, "Авто"],
                 ["light", Sun, "Светлая"],
                 ["dark", Moon, "Тёмная"],
               ] as const

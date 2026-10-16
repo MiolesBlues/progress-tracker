@@ -57,7 +57,7 @@ function ThemeControls() {
   return (
     <div>
       <button type="button" aria-pressed={mode === "system"} onClick={() => setMode("system")}>
-        Системная
+        Авто
       </button>
       <button type="button" aria-pressed={mode === "light"} onClick={() => setMode("light")}>
         Светлая
@@ -108,7 +108,7 @@ it("returns to following the system when System is selected again", async () => 
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Светлая" }));
   expect(document.documentElement.dataset["theme"]).toBe("light");
-  fireEvent.click(screen.getByRole("button", { name: "Системная" }));
+  fireEvent.click(screen.getByRole("button", { name: "Авто" }));
   expect(localStorage.getItem("app:theme:v1")).toBeNull();
   act(() => setSystemTheme(true));
   expect(document.documentElement.dataset["theme"]).toBe("dark");
