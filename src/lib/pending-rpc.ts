@@ -8,8 +8,10 @@ import { supabase } from "@/integrations/supabase/client";
 type PendingRpc = "reorder_program_days" | "reorder_program_exercises" | "save_workout_entry";
 
 export function pendingRpc(name: PendingRpc, args: Record<string, unknown>) {
-  return (supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => ReturnType<typeof supabase.rpc>)(
-    name,
-    args,
-  );
+  return (
+    supabase.rpc as unknown as (
+      n: string,
+      a: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>
+  )(name, args);
 }

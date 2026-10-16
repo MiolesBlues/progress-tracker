@@ -15,7 +15,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SessionProvider } from "@/lib/session";
 import { Toaster } from "@/components/ui/sonner";
-import { LanguageProvider, useI18n } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
+import { LanguageProvider } from "@/lib/i18n-provider";
 
 function NotFoundComponent() {
   const { t } = useI18n();

@@ -4,7 +4,6 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { authEvent, resetFake } from "@/test/supabase-mock";
 import { SessionProvider } from "./session";
 import {
-  LanguageProvider,
   initialDayNames,
   readLanguage,
   rememberSignupLanguage,
@@ -12,6 +11,7 @@ import {
   translateKnown,
   useI18n,
 } from "./i18n";
+import { LanguageProvider } from "./i18n-provider";
 
 it("uses the requested English label for an entry without day information", () => {
   expect(translate("en", "Без назначенного дня")).toBe("Unassigned day");

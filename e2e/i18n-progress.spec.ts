@@ -12,23 +12,22 @@ import {
 import { mockSupabase } from "./mock-supabase";
 
 test("English registration and onboarding keep the new account's language", async ({ page }) => {
-  await mockSupabase(page);
+  const backend = await mockSupabase(page);
+  await page.addInitScript(() => localStorage.setItem("app:language:v1:guest", "en"));
   await page.goto("/");
-  await expect(page.getByRole("link", { name: "Начать" })).toBeVisible();
-  await page.getByRole("button", { name: "Настройки" }).click();
-  await page
-    .getByRole("dialog", { name: "Настройки" })
-    .getByRole("combobox", { name: "Язык интерфейса" })
-    .click();
-  await page.getByRole("option", { name: "English" }).click();
-  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: /^(Настройки|Settings)$/ })).toHaveCount(0);
   await page.getByRole("link", { name: "Get started" }).click();
   await expect(page.getByRole("heading", { name: "Welcome back!" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "No account? Sign up" }).click();
+  await expect(page.getByRole("heading", { name: "Create an account" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
   await page.getByLabel("Email").fill("english-signup@example.invalid");
   await page.getByLabel("Password", { exact: true }).fill("Local-only-test-password!");
   await page.getByLabel("Confirm password").fill("Local-only-test-password!");
   await page.getByRole("button", { name: "Sign up", exact: true }).click();
+  expect(backend.signupCalls).toHaveLength(1);
+  expect(backend.signupCalls[0]?.["email"]).toBe("english-signup@example.invalid");
   await expect(
     page.getByRole("heading", { name: "How many training days per week?" }),
   ).toBeVisible();
@@ -41,6 +40,17 @@ test("English registration and onboarding keep the new account's language", asyn
   await page.reload();
   await expect(page.getByRole("heading", { name: "Program" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome back!" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toHaveCount(0);
+  await page.getByLabel("Email").fill("english-signup@example.invalid");
+  await page.getByLabel("Password", { exact: true }).fill("Local-only-test-password!");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Workout", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Program", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Program", exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
 for (const width of [320, 375, 390, 430]) {
@@ -49,6 +59,17 @@ for (const width of [320, 375, 390, 430]) {
     await mockSupabase(page);
     await page.goto("/");
     await expect(page.getByRole("link", { name: "Начать" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Настройки|Settings)$/ })).toHaveCount(0);
+    await page.getByRole("link", { name: "Начать", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "С возвращением!" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Настройки|Settings)$/ })).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Нет аккаунта? Зарегистрироваться", exact: true })
+      .click();
+    await expect(page.getByRole("heading", { name: "Создать аккаунт" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^(Настройки|Settings)$/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "Уже есть аккаунт? Войти", exact: true }).click();
+    await register(page, `mobile-${width}@example.invalid`, 1);
     await page.getByRole("button", { name: "Настройки" }).click();
     const dialog = page.getByRole("dialog", { name: "Настройки" });
     await dialog.getByRole("combobox", { name: "Язык интерфейса" }).click();
@@ -56,9 +77,11 @@ for (const width of [320, 375, 390, 430]) {
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await noOverflow(page);
     await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("heading", { name: "Program", exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    await expect(page.getByRole("link", { name: "Get started" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Program", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Settings" }).click();
     await page
       .getByRole("dialog", { name: "Settings" })
@@ -66,7 +89,8 @@ for (const width of [320, 375, 390, 430]) {
       .click();
     await page.getByRole("option", { name: "Русский" }).click();
     await page.getByRole("button", { name: "Закрыть" }).click();
-    await register(page, `mobile-${width}@example.invalid`, 1);
+    await expect(page.getByRole("heading", { name: "Программа", exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "ru");
     await addExercise(page);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
     await expect(page.getByLabel("Тренировочный день", { exact: true })).toHaveValue(/.+/);

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { authEvent, resetFake } from "@/test/supabase-mock";
 import { SessionProvider } from "@/lib/session";
-import { LanguageProvider } from "@/lib/i18n";
+import { LanguageProvider } from "@/lib/i18n-provider";
 import { SettingsDialog } from "./settings-dialog";
 
 let client: QueryClient;

@@ -12,7 +12,7 @@ import { draftKey, newDraft, readDraft, writeDraft } from "@/lib/workout-draft";
 import { userKeys } from "@/lib/queries";
 import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
-import { LanguageProvider } from "@/lib/i18n";
+import { LanguageProvider } from "@/lib/i18n-provider";
 import { SettingsDialog } from "@/components/settings-dialog";
 
 vi.mock("@tanstack/react-router", async (original) => ({

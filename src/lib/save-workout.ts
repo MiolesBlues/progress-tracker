@@ -13,15 +13,15 @@ export class SaveWorkoutError extends Error {
 
 export async function saveWorkout(id: string, payload: WorkoutPayload, signal: AbortSignal) {
   const { data, error } = await pendingRpc("save_workout_entry", {
-      _id: id,
-      _exercise_id: payload.exercise_id,
-      _day_id: payload.day_id,
-      _performed_on: payload.performed_on,
-      _weight: payload.weight,
-      _reps: payload.reps,
-      _rir: payload.rir,
-      _notes: payload.notes,
-    })
+    _id: id,
+    _exercise_id: payload.exercise_id,
+    _day_id: payload.day_id,
+    _performed_on: payload.performed_on,
+    _weight: payload.weight,
+    _reps: payload.reps,
+    _rir: payload.rir,
+    _notes: payload.notes,
+  })
     .abortSignal(signal)
     .then(
       (result: { data: unknown; error: { message: string; code?: string } | null }) => result,
