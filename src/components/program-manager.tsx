@@ -134,9 +134,8 @@ export function ProgramManager() {
     try {
       const result =
         kind === "day"
-          ? await supabase.rpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
-          : await supabase
-              .rpc("delete_archived_program_exercise", { _exercise_id: id })
+          ? await pendingRpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
+          : await pendingRpc("delete_archived_program_exercise", { _exercise_id: id })
               .abortSignal(signal);
       if (!isCurrent()) return false;
       if (result.error || result.data !== true) throw new Error("Deletion failed");
