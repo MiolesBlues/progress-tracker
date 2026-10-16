@@ -9,6 +9,10 @@ export const STORAGE_PREFIX = "app:language:v1:";
 export const english = {
   "Прогресс Трекер": "Progress Tracker",
   Настройки: "Settings",
+  "Тема оформления": "Appearance",
+  Системная: "System",
+  Светлая: "Light",
+  Тёмная: "Dark",
   Закрыть: "Close",
   Уведомления: "Notifications",
   "Закрыть уведомление": "Close notification",

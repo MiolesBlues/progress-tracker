@@ -17,6 +17,7 @@ import { SessionProvider } from "@/lib/session";
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/lib/i18n";
 import { LanguageProvider } from "@/lib/i18n-provider";
+import { ThemeProvider } from "@/lib/theme";
 
 function NotFoundComponent() {
   const { t } = useI18n();
@@ -69,6 +70,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#16171c" },
+      { name: "color-scheme", content: "dark light" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "Прогресс Трекер" },
@@ -93,8 +95,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(()=>{try{const s=localStorage.getItem("app:theme:v1");const m=s==="light"||s==="dark"?s:"system";const d=m==="dark"||(m==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);const r=document.documentElement;r.dataset.theme=d?"dark":"light";r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";const t=document.querySelector('meta[name="theme-color"]');if(t)t.content=d?"#16171c":"#f5f7f2"}catch(e){}})();`,
+          }}
+        />
         <HeadContent />
       </head>
       <body>
@@ -114,17 +121,19 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider onIdentityChange={onIdentityChange}>
-        <LanguageProvider>
-          <LocalizedDocumentTitle />
-          <Outlet />
-          <Toaster
-            position="bottom-center"
-            offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-            mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-          />
-        </LanguageProvider>
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider onIdentityChange={onIdentityChange}>
+          <LanguageProvider>
+            <LocalizedDocumentTitle />
+            <Outlet />
+            <Toaster
+              position="bottom-center"
+              offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+              mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+            />
+          </LanguageProvider>
+        </SessionProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

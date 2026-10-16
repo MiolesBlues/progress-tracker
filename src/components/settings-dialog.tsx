@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { Monitor, Moon, Settings, Sun } from "lucide-react";
 import { useI18n, type Language } from "@/lib/i18n";
 import { useArchivePreferences, useWorkoutPreferences } from "@/lib/archive-preferences";
 import { useSession } from "@/lib/session";
@@ -18,9 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTheme, type ThemeMode } from "@/lib/theme";
 
 export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
   const { language, setLanguage, t } = useI18n();
+  const { mode, setMode } = useTheme();
   const { userId } = useSession();
   const archive = useArchivePreferences(userId);
   const workout = useWorkoutPreferences(userId);
@@ -65,6 +67,30 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
             </SelectContent>
           </Select>
         </div>
+        <fieldset className="space-y-2">
+          <legend className="pb-1 text-sm font-medium">{t("Тема оформления")}</legend>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("Тема оформления")}>
+            {(
+              [
+                ["system", Monitor, "Системная"],
+                ["light", Sun, "Светлая"],
+                ["dark", Moon, "Тёмная"],
+              ] as const
+            ).map(([value, Icon, label]) => (
+              <Button
+                key={value}
+                type="button"
+                variant={mode === value ? "secondary" : "outline"}
+                aria-pressed={mode === value}
+                onClick={() => setMode(value as ThemeMode)}
+                className="h-12 min-w-0 flex-col gap-1 px-2 text-xs aria-pressed:border-primary aria-pressed:text-foreground"
+              >
+                <Icon aria-hidden="true" className="h-4 w-4" />
+                {t(label)}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
         <fieldset className="space-y-3 border-t pt-4" disabled={!archive.available}>
           <legend className="pb-2 text-sm font-semibold">{t("Управление данными")}</legend>
           <label className="flex min-h-11 items-center gap-3 text-sm">

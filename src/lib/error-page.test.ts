@@ -22,7 +22,7 @@ describe("standalone error page language (no React hydration)", () => {
       expect(doc.querySelector("h1")?.textContent).toBe(heading);
       expect(doc.querySelector("button")?.textContent).toBe(retry);
       expect(doc.querySelector("a")?.textContent).toBe(home);
-      expect(doc.querySelectorAll("script")).toHaveLength(0);
+      expect(doc.querySelector("script")?.textContent).toContain("app:theme:v1");
     },
   );
 

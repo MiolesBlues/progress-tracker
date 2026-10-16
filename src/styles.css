@@ -61,6 +61,31 @@
   color-scheme: dark;
 }
 
+:root[data-theme="light"] {
+  --background: oklch(0.985 0.006 125);
+  --foreground: oklch(0.2 0.012 255);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.012 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.012 255);
+  --primary: oklch(0.48 0.13 132);
+  --primary-foreground: oklch(0.99 0.005 120);
+  --secondary: oklch(0.95 0.012 125);
+  --secondary-foreground: oklch(0.25 0.02 255);
+  --muted: oklch(0.95 0.008 255);
+  --muted-foreground: oklch(0.43 0.015 255);
+  --accent: oklch(0.94 0.022 132);
+  --accent-foreground: oklch(0.24 0.035 132);
+  --destructive: oklch(0.53 0.19 26);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.48 0.12 150);
+  --border: oklch(0.87 0.012 255);
+  --input: oklch(0.84 0.014 255);
+  --ring: oklch(0.48 0.13 132);
+  --chart-1: oklch(0.48 0.13 132);
+  color-scheme: light;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
@@ -73,6 +98,15 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    color: inherit;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 28%, transparent);
   }
   input,
   select,

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { authEvent, resetFake } from "@/test/supabase-mock";
 import { SessionProvider } from "@/lib/session";
 import { LanguageProvider } from "@/lib/i18n-provider";
+import { ThemeProvider } from "@/lib/theme";
 import { SettingsDialog } from "./settings-dialog";
 
 let client: QueryClient;
@@ -20,9 +21,11 @@ it("opens and closes settings by X and Escape without changing the account sessi
   render(
     <QueryClientProvider client={client}>
       <SessionProvider onIdentityChange={() => {}}>
-        <LanguageProvider>
-          <SettingsDialog />
-        </LanguageProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <SettingsDialog />
+          </LanguageProvider>
+        </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>,
   );
@@ -41,9 +44,11 @@ it("stores deletion and archive choices separately for each account", async () =
   render(
     <QueryClientProvider client={client}>
       <SessionProvider onIdentityChange={() => {}}>
-        <LanguageProvider>
-          <SettingsDialog />
-        </LanguageProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <SettingsDialog />
+          </LanguageProvider>
+        </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>,
   );
@@ -72,9 +77,11 @@ it("defaults auto-advance on, persists it across remounts, and isolates it per a
   const app = () => (
     <QueryClientProvider client={client}>
       <SessionProvider onIdentityChange={() => {}}>
-        <LanguageProvider>
-          <SettingsDialog />
-        </LanguageProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <SettingsDialog />
+          </LanguageProvider>
+        </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>
   );
@@ -125,9 +132,11 @@ it("shows the new controls in English for an account that selected English", asy
   render(
     <QueryClientProvider client={client}>
       <SessionProvider onIdentityChange={() => {}}>
-        <LanguageProvider>
-          <SettingsDialog />
-        </LanguageProvider>
+        <ThemeProvider>
+          <LanguageProvider>
+            <SettingsDialog />
+          </LanguageProvider>
+        </ThemeProvider>
       </SessionProvider>
     </QueryClientProvider>,
   );
