@@ -614,6 +614,29 @@ it("isolates archive visibility and exercises when switching accounts", async ()
   expect(screen.queryByRole("button", { name: "Редактировать: Архив A" })).toBeNull();
 });
 
+it("renders exercise editing in a compact centered dialog with a fixed save action", async () => {
+  fake.state.rows.program_exercises = [exercise("Жим", "Первый")];
+  mount();
+  const trigger = await screen.findByRole("button", { name: "Редактировать: Жим" });
+  fireEvent.click(trigger);
+
+  const dialog = await screen.findByRole("dialog", { name: "Редактирование упражнения" });
+  expect(dialog).toHaveClass("max-h-[90dvh]", "max-w-[480px]");
+  expect(dialog).toHaveStyle({ width: "min(480px, calc(100vw - 2rem))" });
+  expect(dialog.querySelector(".overflow-y-auto")).not.toBeNull();
+  expect(within(dialog).getByLabelText("Название упражнения")).toHaveValue("Жим");
+  expect(within(dialog).getByLabelText("Тренировочный день")).toHaveValue("Первый");
+  expect(within(dialog).getByLabelText("Подходы")).toHaveValue("3");
+  expect(within(dialog).getByLabelText("Повторения")).toHaveValue("8-12");
+  expect(within(dialog).getByRole("button", { name: "Сохранить" })).toHaveClass("w-full");
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "Закрыть" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Редактирование упражнения" })).toBeNull(),
+  );
+  expect(trigger).toHaveFocus();
+});
+
 it("B06 displays validation and network errors inside the editor, preserving input", async () => {
   fake.state.rows.program_exercises = [exercise("Жим", "Первый")];
   mount();
