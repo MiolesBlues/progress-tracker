@@ -9,7 +9,11 @@ import { userKeys, type Day } from "@/lib/queries";
 
 vi.mock("@/lib/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/session")>()),
-  useUserSession: () => ({ userId: "A" }),
+  useUserSession: () => ({
+    userId: "A",
+    signal: new AbortController().signal,
+    isCurrent: () => true,
+  }),
 }));
 
 let qc: QueryClient;
@@ -158,6 +162,49 @@ it("renders independent set weights, reps, RIR, and warm-up type from set histor
   expect(item).toHaveTextContent("42,5 кг");
   expect(item).toHaveTextContent("2");
   expect(item).toHaveTextContent("W");
+});
+
+it("edits one saved set through the owner-scoped per-set RPC", async () => {
+  fake.state.rows.workout_entries = [entry("editable", dateDaysAgo(0), 50, [8])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "set-to-edit",
+      user_id: "A",
+      workout_entry_id: "editable",
+      position: 1,
+      weight: "50.00",
+      reps: 8,
+      rir: "2.0",
+      set_type: "working",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const entryItem = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(entryItem).getByRole("button"));
+  fireEvent.click(within(entryItem).getByRole("button", { name: "Изменить подход 1" }));
+  fireEvent.change(within(entryItem).getByLabelText("Вес подхода 1"), {
+    target: { value: "52.25" },
+  });
+  fireEvent.change(within(entryItem).getByLabelText("Повторения подхода 1"), {
+    target: { value: "9" },
+  });
+  fireEvent.change(within(entryItem).getByLabelText("RIR подхода 1"), { target: { value: "" } });
+  fireEvent.click(within(entryItem).getByRole("button", { name: "Сохранить подход 1" }));
+  await waitFor(() =>
+    expect(fake.state.rpc).toHaveBeenCalledWith(
+      "update_workout_entry_set",
+      expect.objectContaining({
+        _entry_id: "editable",
+        _set_id: "set-to-edit",
+        _weight: "52.25",
+        _reps: 9,
+        _rir: null,
+      }),
+    ),
+  );
+  expect(fake.state.rows.workout_entries[0]).toMatchObject({ weight: 50, reps: [8] });
 });
 
 it("keeps multiple workout records open and preserves set order and missing RIR", async () => {

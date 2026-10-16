@@ -7,6 +7,9 @@ import { useUserSession } from "@/lib/session";
 import { prefillFor } from "@/lib/workout";
 import {
   MAX_SETS,
+  MAX_REPS,
+  MAX_WEIGHT,
+  decimal,
   validatePerSetWorkout,
   type PerSetWorkoutFields,
   type WorkoutSetFields,
@@ -29,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import { useI18n, translateKnown } from "@/lib/i18n";
 
 type WorkoutFormProps = {
@@ -37,6 +41,7 @@ type WorkoutFormProps = {
   initialDate: string;
   onDateChange: (date: string) => void;
   onSaved: (exerciseId: string, dayId: string, date: string) => boolean;
+  focusMode?: boolean;
 };
 
 function newSet(position: number, weight = "", reps = "", rir = ""): WorkoutSetFields {
@@ -132,6 +137,7 @@ function PerSetWorkoutForm({
   onDateChange,
   onSaved,
   legacyDraft,
+  focusMode = false,
 }: WorkoutFormProps & { legacyDraft: WorkoutDraft | null }) {
   const { t, language, date } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
@@ -171,6 +177,9 @@ function PerSetWorkoutForm({
   const [blocked, setBlocked] = useState(!!initial.error);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [activeSetIndex, setActiveSetIndex] = useState(0);
+  const setWeightRef = useRef<HTMLInputElement>(null);
+  const focusedSetId = draft.fields.sets[activeSetIndex]?.id;
   const running = useRef(false);
   const mounted = useRef(true);
   const lastResult = useQuery(lastEntryQuery(userId, exercise.id, draft.fields.date));
@@ -190,6 +199,12 @@ function PerSetWorkoutForm({
       setStorageError("Черновик не сохранён на устройстве. Проверьте доступ к хранилищу.");
     }
   }, []);
+  useEffect(() => {
+    if (focusMode && focusedSetId) setWeightRef.current?.focus();
+  }, [focusedSetId, focusMode]);
+  useEffect(() => {
+    setActiveSetIndex((index) => Math.min(index, Math.max(0, draft.fields.sets.length - 1)));
+  }, [draft.fields.sets.length]);
   useEffect(() => {
     if (
       !lastResult.isFetchedAfterMount ||
@@ -254,7 +269,47 @@ function PerSetWorkoutForm({
       onDateChange(nextFields.date);
       return;
     }
-    commit({ ...current, fields: nextFields, dirty: { ...current.dirty, [dirty]: true } });
+    commit({
+      ...current,
+      fields: nextFields,
+      recordedSetIds: dirty === "sets" ? [] : current.recordedSetIds,
+      dirty: { ...current.dirty, [dirty]: true },
+    });
+  }
+
+  function recordFocusSet() {
+    const current = draftRef.current;
+    const set = current.fields.sets[activeSetIndex];
+    if (!set || !set.reps.trim() || !set.weight.trim()) {
+      setError("Заполните вес и повторения текущего подхода перед записью.");
+      return;
+    }
+    try {
+      decimal(
+        set.weight.trim().replace(",", "."),
+        `Вес подхода ${activeSetIndex + 1}`,
+        MAX_WEIGHT,
+        2,
+      );
+      if (
+        !/^\d+$/.test(set.reps.trim()) ||
+        !Number.isSafeInteger(Number(set.reps)) ||
+        Number(set.reps) > MAX_REPS
+      )
+        throw new Error(`Подход ${activeSetIndex + 1}: укажите целое количество повторений.`);
+      if (set.rir.trim())
+        decimal(set.rir.trim().replace(",", "."), `RIR подхода ${activeSetIndex + 1}`, 10, 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Проверьте данные подхода.");
+      return;
+    }
+    const recordedSetIds = [...new Set([...current.recordedSetIds, set.id])];
+    commit({ ...current, recordedSetIds, dirty: { ...current.dirty, sets: true } });
+    const nextIndex = current.fields.sets.findIndex(
+      (candidate) => !recordedSetIds.includes(candidate.id),
+    );
+    if (nextIndex >= 0) setActiveSetIndex(nextIndex);
+    setError("");
   }
 
   async function save(event: FormEvent) {
@@ -336,6 +391,13 @@ function PerSetWorkoutForm({
       ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
       : "";
   const previous = lastResult.data;
+  const visibleSets = focusMode
+    ? fields.sets[activeSetIndex]
+      ? [{ set: fields.sets[activeSetIndex]!, index: activeSetIndex }]
+      : []
+    : fields.sets.map((set, index) => ({ set, index }));
+  const recordedCount = fields.sets.filter((set) => draft.recordedSetIds.includes(set.id)).length;
+  const focusProgress = fields.sets.length ? (recordedCount / fields.sets.length) * 100 : 0;
   return (
     <form onSubmit={save} className="space-y-5" aria-label={t("Запись тренировки")}>
       {storageError && (
@@ -374,10 +436,22 @@ function PerSetWorkoutForm({
         </LoadError>
       )}
       {lastResult.isSuccess && lastResult.isFetchedAfterMount && !lastResult.isFetching && (
-        <p className="text-xs text-muted-foreground">
-          {plan && <>{t("План {plan}", { plan })} · </>}
-          {previous ? t("Предыдущая тренировка загружена по подходам") : t("Истории нет")}
-        </p>
+        <div className="space-y-2 text-xs text-muted-foreground">
+          <p>
+            {plan && <>{t("План {plan}", { plan })} · </>}
+            {previous ? t("Предыдущая тренировка загружена по подходам") : t("Истории нет")}
+          </p>
+          {previous?.sets?.length ? (
+            <ul aria-label={t("Прошлые результаты по подходам")} className="space-y-1">
+              {previous.sets.map((set) => (
+                <li key={set.position}>
+                  {t("Подход {number}", { number: set.position })}: {set.weight} {t("кг")} ×{" "}
+                  {set.reps} · RIR {set.rir ?? "—"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       )}
       {error && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
@@ -404,6 +478,42 @@ function PerSetWorkoutForm({
           />
         </div>
         <section className="space-y-3" aria-label={t("Подходы")}>
+          {focusMode && (
+            <div className="space-y-2 rounded-xl bg-card p-3" aria-label={t("Прогресс подходов")}>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span>
+                  {t("Подход {number} из {count}", {
+                    number: activeSetIndex + 1,
+                    count: fields.sets.length,
+                  })}
+                </span>
+                <span className="text-muted-foreground">
+                  {recordedCount}/{fields.sets.length}
+                </span>
+              </div>
+              <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
+              <div className="flex justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={activeSetIndex === 0}
+                  onClick={() => setActiveSetIndex((index) => Math.max(0, index - 1))}
+                >
+                  {t("Предыдущий подход")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={activeSetIndex >= fields.sets.length - 1}
+                  onClick={() =>
+                    setActiveSetIndex((index) => Math.min(fields.sets.length - 1, index + 1))
+                  }
+                >
+                  {t("Следующий подход")}
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <Label>{t("Подходы · {count}", { count: fields.sets.length })}</Label>
             <div className="flex gap-1">
@@ -456,15 +566,16 @@ function PerSetWorkoutForm({
             </div>
           </div>
           <div className="space-y-2">
-            {fields.sets.map((set, index) => (
+            {visibleSets.map(({ set, index }) => (
               <div
                 key={set.id}
-                className="grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2"
+                className={`grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2 ${focusMode ? "animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : ""}`}
               >
                 <span className="pb-3 text-xs text-muted-foreground">#{index + 1}</span>
                 <label className="min-w-0 space-y-1 text-xs">
                   <span>{set.load_type === "bodyweight" ? t("Доп. вес, кг") : t("Вес, кг")}</span>
                   <Input
+                    ref={focusMode && index === activeSetIndex ? setWeightRef : undefined}
                     aria-label={t("Вес подхода {number}", { number: index + 1 })}
                     inputMode="decimal"
                     value={set.weight}
@@ -623,6 +734,18 @@ function PerSetWorkoutForm({
               </div>
             ))}
           </div>
+          {focusMode && (
+            <Button
+              type="button"
+              className="h-12 w-full"
+              onClick={recordFocusSet}
+              disabled={locked}
+            >
+              {draft.recordedSetIds.includes(fields.sets[activeSetIndex]?.id ?? "")
+                ? t("Подход записан · далее")
+                : t("Записать подход · далее")}
+            </Button>
+          )}
         </section>
         <div className="space-y-2">
           <Label htmlFor="notes">{t("Заметки")}</Label>

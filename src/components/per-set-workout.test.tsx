@@ -180,3 +180,56 @@ it("allows explicit warm-up and bodyweight-load selection on a per-set basis", a
   expect(screen.getByLabelText("Тип подхода 2")).toHaveValue("warmup");
   expect(screen.getByLabelText("Тип нагрузки 3")).toHaveValue("bodyweight");
 });
+
+it("uses the same draft in Focus Mode and restores recorded-set progress after reload", async () => {
+  const view = mount();
+  await screen.findByLabelText("Вес подхода 1");
+  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  fireEvent.click(screen.getByRole("button", { name: "Focus Mode" }));
+  expect(screen.getByRole("region", { name: "Текущее упражнение" })).toHaveTextContent("Жим");
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход · далее" }));
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
+  expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
+    "aria-valuenow",
+    "33.33333333333333",
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Обычный режим" }));
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
+  view.unmount();
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Focus Mode" }));
+  expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
+    "aria-valuenow",
+    "33.33333333333333",
+  );
+});
+
+it("allows reordering the Focus Mode exercise queue without changing the program order", async () => {
+  fake.state.rows.program_exercises.push({
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    user_id: USER,
+    day_id: DAY,
+    name: "Тяга",
+    position: 1,
+    target_sets: 3,
+    target_reps: "8",
+    working_weight: 30,
+    example_reps: [8, 8, 8],
+    archived_at: null,
+  });
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Focus Mode" }));
+  expect(screen.getByRole("region", { name: "Текущее упражнение" })).toHaveTextContent(
+    "Упражнение 1 из 2",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Переместить упражнение для выполнения ниже" }),
+  );
+  expect(JSON.parse(localStorage.getItem(`workout:focus-order:v1:${USER}`)!)[DAY]).toEqual([
+    "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    EXERCISE,
+  ]);
+  expect(fake.state.rows.program_exercises.map((exercise) => exercise.position)).toEqual([0, 1]);
+});

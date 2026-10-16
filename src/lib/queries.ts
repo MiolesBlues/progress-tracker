@@ -143,8 +143,10 @@ export const entriesQuery = (
         for (const row of setRows ?? []) {
           const sets = setsByEntry.get(row.workout_entry_id) ?? [];
           sets.push({
+            id: row.id,
             position: row.position,
             weight: Number(row.weight),
+            weightExact: String(row.weight),
             reps: row.reps,
             rir: row.rir === null ? null : Number(row.rir),
             set_type: row.set_type,

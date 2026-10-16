@@ -24,6 +24,8 @@ export type PerSetWorkoutDraft = {
   exerciseId: string;
   id: string;
   fields: PerSetWorkoutFields;
+  /** Set IDs confirmed in Focus Mode; optional when reading existing V2 drafts. */
+  recordedSetIds: string[];
   dirty: { date: boolean; sets: boolean; notes: boolean };
   operation: { id: string; payload: PerSetWorkoutPayload } | null;
 };
@@ -42,7 +44,7 @@ export function removeExerciseDrafts(userId: string, exerciseId: string) {
 export const hasDraftInput = (draft: WorkoutDraft) =>
   !!draft.operation || Object.values(draft.dirty).some(Boolean);
 export const hasPerSetDraftInput = (draft: PerSetWorkoutDraft) =>
-  !!draft.operation || Object.values(draft.dirty).some(Boolean);
+  !!draft.operation || draft.recordedSetIds.length > 0 || Object.values(draft.dirty).some(Boolean);
 const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -70,6 +72,7 @@ export function newPerSetDraft(
     exerciseId,
     id: crypto.randomUUID(),
     fields,
+    recordedSetIds: [],
     dirty: { date: false, sets: false, notes: false },
     operation: null,
   };
@@ -253,5 +256,16 @@ function parsePerSetDraft(raw: string, userId: string, exerciseId: string): PerS
         throw new Error("Повреждён один из подходов черновика. Данные не изменены.");
     }
   }
-  return draft as unknown as PerSetWorkoutDraft;
+  const ids = (fields["sets"] as unknown[])
+    .filter(isRecord)
+    .map((set) => set["id"])
+    .filter((id): id is string => typeof id === "string");
+  const recorded = draft["recordedSetIds"] === undefined ? [] : draft["recordedSetIds"];
+  if (
+    !Array.isArray(recorded) ||
+    !recorded.every((id) => typeof id === "string" && uuid.test(id) && ids.includes(id)) ||
+    new Set(recorded).size !== recorded.length
+  )
+    throw new Error("В черновике Focus Mode поврежден список подтверждённых подходов.");
+  return { ...draft, recordedSetIds: recorded } as unknown as PerSetWorkoutDraft;
 }

@@ -38,6 +38,8 @@ export interface EntryLike {
   reps: number[];
   rir?: number | null;
   sets?: {
+    id?: string;
+    weightExact?: string;
     position: number;
     weight: number;
     reps: number;

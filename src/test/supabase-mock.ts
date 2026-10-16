@@ -61,6 +61,15 @@ const fake = vi.hoisted(() => {
           state.nextError = null;
           return { error: { message } };
         }
+        if (
+          [
+            "add_workout_entry_set",
+            "update_workout_entry_set",
+            "delete_workout_entry_set",
+            "reorder_workout_entry_sets",
+          ].includes(name)
+        )
+          return { data: true, error: null };
         if (name === "delete_archived_program_day") {
           const day = state.rows.program_days.find(
             (row) => row.id === args._day_id && row.user_id === state.userId,
@@ -263,6 +272,7 @@ export function resetFake() {
   fake.state.userId = null;
   for (const key of Object.keys(fake.state.rows)) fake.state.rows[key] = [];
   fake.state.calls.length = 0;
+  fake.state.rpc.mockClear();
   fake.state.nextError = null;
   fake.state.deletionCapability = true;
   fake.state.readErrors = {};

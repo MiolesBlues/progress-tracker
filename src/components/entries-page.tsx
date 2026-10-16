@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { ChevronDown, Pencil, X } from "lucide-react";
+import { daysQuery, entriesQuery, lastEntryQuery, programQuery, userKeys } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { effectiveSets, toISO, workoutMetrics } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
@@ -15,6 +15,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { decimal } from "@/lib/workout-input";
+import { updateWorkoutSet } from "@/lib/save-workout";
+import { toast } from "sonner";
+import type { HistoryEntry } from "@/lib/analytics";
+import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -337,25 +343,19 @@ function ExerciseEntries({
                 className={`grid transition-[grid-template-rows,opacity] duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${expandedEntries.has(entry.id) ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
               >
                 <div className="min-h-0 overflow-hidden">
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-t border-border/50 py-2 text-xs">
+                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-t border-border/50 py-2 text-xs">
                     <span className="text-muted-foreground">{t("SET")}</span>
                     <span className="text-muted-foreground">{t("WEIGHT")}</span>
                     <span className="text-muted-foreground">{t("REPS")}</span>
                     <span className="text-muted-foreground">RIR</span>
+                    <span />
                     {effectiveSets(entry).map((set) => (
-                      <Fragment key={`${entry.id}:${set.position}`}>
-                        <span className="tabular-nums">
-                          {set.position}
-                          {set.set_type === "warmup" ? " · W" : ""}
-                        </span>
-                        <span className="tabular-nums">
-                          {number(set.weight, 2)} {t("кг")}
-                        </span>
-                        <span className="tabular-nums">{set.reps}</span>
-                        <span className="tabular-nums">
-                          {set.rir === null ? "—" : number(set.rir)}
-                        </span>
-                      </Fragment>
+                      <HistorySetRow
+                        key={`${entry.id}:${set.position}`}
+                        entryId={entry.id}
+                        exerciseId={exerciseId}
+                        set={set}
+                      />
                     ))}
                   </div>
                   {entry.notes?.trim() && (
@@ -398,5 +398,164 @@ function ExerciseEntries({
         </nav>
       )}
     </section>
+  );
+}
+
+function HistorySetRow({
+  entryId,
+  exerciseId,
+  set,
+}: {
+  entryId: string;
+  exerciseId: string;
+  set: NonNullable<HistoryEntry["sets"]>[number];
+}) {
+  const { t, number } = useI18n();
+  const { userId, signal, isCurrent } = useUserSession();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [values, setValues] = useState({
+    weight: set.weightExact ?? String(set.weight),
+    reps: String(set.reps),
+    rir: set.rir === null ? "" : String(set.rir),
+  });
+  async function save() {
+    if (!set.id || saving || !isCurrent()) return;
+    setError("");
+    setSaving(true);
+    try {
+      const weight = values.weight.trim().replace(",", ".");
+      decimal(weight, "Вес", MAX_WEIGHT, 2);
+      if (
+        !/^\d+$/.test(values.reps) ||
+        !Number.isSafeInteger(Number(values.reps)) ||
+        Number(values.reps) > MAX_REPS
+      )
+        throw new Error("Укажите целое количество повторений.");
+      const rirText = values.rir.trim().replace(",", ".");
+      if (rirText) decimal(rirText, "RIR", 10, 1);
+      await updateWorkoutSet(
+        entryId,
+        {
+          id: set.id,
+          position: set.position,
+          weight,
+          reps: Number(values.reps),
+          rir: rirText || null,
+          set_type: set.set_type,
+          load_type: set.load_type,
+        },
+        signal,
+      );
+      if (!isCurrent()) return;
+      setEditing(false);
+      toast.success(t("Подход обновлён"), { id: `set-updated-${set.id}`, duration: 2500 });
+      void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
+      void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
+    } catch (reason) {
+      if (isCurrent())
+        setError(reason instanceof Error ? reason.message : "Не удалось изменить подход.");
+    } finally {
+      if (isCurrent()) setSaving(false);
+    }
+  }
+  return (
+    <div className="col-span-5 grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 border-t border-border/30 py-1 text-xs">
+      <span className="tabular-nums">
+        {set.position}
+        {set.set_type === "warmup" ? " · W" : ""}
+      </span>
+      {editing ? (
+        <Input
+          aria-label={t("Вес подхода {number}", { number: set.position })}
+          inputMode="decimal"
+          value={values.weight}
+          onChange={(event) => setValues({ ...values, weight: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">
+          {number(set.weight, 2)} {t("кг")}
+        </span>
+      )}
+      {editing ? (
+        <Input
+          aria-label={t("Повторения подхода {number}", { number: set.position })}
+          inputMode="numeric"
+          value={values.reps}
+          onChange={(event) => setValues({ ...values, reps: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">{set.reps}</span>
+      )}
+      {editing ? (
+        <Input
+          aria-label={t("RIR подхода {number}", { number: set.position })}
+          inputMode="decimal"
+          value={values.rir}
+          onChange={(event) => setValues({ ...values, rir: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">{set.rir === null ? "—" : number(set.rir)}</span>
+      )}
+      {set.id &&
+        (editing ? (
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("Сохранить подход {number}", { number: set.position })}
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              {saving ? "…" : <Check className="h-4 w-4" />}
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("Отмена редактирования подхода")}
+              disabled={saving}
+              onClick={() => {
+                setValues({
+                  weight: set.weightExact ?? String(set.weight),
+                  reps: String(set.reps),
+                  rir: set.rir === null ? "" : String(set.rir),
+                });
+                setEditing(false);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={t("Изменить подход {number}", { number: set.position })}
+            onClick={() => {
+              setValues({
+                weight: set.weightExact ?? String(set.weight),
+                reps: String(set.reps),
+                rir: set.rir === null ? "" : String(set.rir),
+              });
+              setEditing(true);
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ))}
+      {error && (
+        <p role="alert" className="col-span-5 text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
