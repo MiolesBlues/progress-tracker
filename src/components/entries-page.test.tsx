@@ -44,6 +44,13 @@ function mount() {
     </QueryClientProvider>,
   );
 }
+function chooseSort(diary: HTMLElement, label: string) {
+  fireEvent.pointerDown(within(diary).getByRole("button", { name: "Сортировка записей" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(screen.getByRole("menuitemradio", { name: label }));
+}
 
 beforeEach(() => {
   resetFake();
@@ -261,18 +268,41 @@ it("filters diary entries by date and sorts weights in both directions", async (
   expect(within(diary).queryByText("40 кг · 10")).not.toBeInTheDocument();
 
   fireEvent.click(within(diary).getByRole("button", { name: "Всё время" }));
-  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
-    target: { value: "weight-asc" },
-  });
+  chooseSort(diary, "Вес: по возрастанию");
   await waitFor(() => {
     expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("35 кг");
   });
-  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
-    target: { value: "weight-desc" },
-  });
+  chooseSort(diary, "Вес: по убыванию");
   await waitFor(() => {
     expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
   });
+  chooseSort(diary, "Сначала новые");
+  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
+});
+
+it("persists sort per user and marks the current choice with a check", async () => {
+  mount();
+  let diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const trigger = within(diary).getByRole("button", { name: "Сортировка записей" });
+  expect(trigger).toHaveClass("h-11", "w-11");
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  expect(screen.getByRole("menuitemradio", { name: "Сначала новые" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "Вес: по возрастанию" }));
+  expect(localStorage.getItem("app:entries-sort:v1:A")).toBe("weight-asc");
+
+  fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "day-2" } });
+  diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  fireEvent.pointerDown(within(diary).getByRole("button", { name: "Сортировка записей" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  expect(screen.getByRole("menuitemradio", { name: "Вес: по возрастанию" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
 });
 
 it.each([false, true])(
@@ -322,17 +352,13 @@ it("B08 limits the DOM to 20 entries while loading every server page and resetti
   expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(9);
   fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
   expect(within(diary).getByText("Страница 2 из 60")).toBeInTheDocument();
-  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
-    target: { value: "weight-desc" },
-  });
+  chooseSort(diary, "Вес: по убыванию");
   expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
   expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent(/1\s199 кг/);
   fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
   fireEvent.click(within(diary).getByRole("button", { name: "Сегодня" }));
   expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
-  fireEvent.change(within(diary).getByLabelText("Сортировка записей"), {
-    target: { value: "weight-asc" },
-  });
+  chooseSort(diary, "Вес: по возрастанию");
   expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("0 кг");
   expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
 });
