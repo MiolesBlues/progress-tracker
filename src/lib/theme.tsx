@@ -23,7 +23,7 @@ function applyTheme(mode: ThemeMode, systemDark: boolean) {
   root.style.colorScheme = dark ? "dark" : "light";
   document
     .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    ?.setAttribute("content", dark ? "#16171c" : "#f5f7f2");
+    ?.setAttribute("content", dark ? "#16171c" : "#F7FAFF");
 }
 
 type ThemeContextValue = { mode: ThemeMode; setMode: (mode: ThemeMode) => void };
