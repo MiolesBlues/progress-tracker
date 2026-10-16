@@ -213,16 +213,41 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
   expect(screen.queryByLabelText("Вес подхода 1")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByRole("region", { name: "Focus Mode" })).toHaveTextContent("Жим");
-  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "1" },
+  });
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
-  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 1" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "0" },
+  });
   expect(screen.queryByLabelText("Тренировочный день")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Упражнение")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Тип подхода 1")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Тип нагрузки 1")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Выбрать подход/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Выбрать подход" })).toHaveValue("0");
+  expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
+    "aria-valuenow",
+    "0",
+  );
+  const weightInput = screen.getByLabelText("Вес подхода 1");
+  const repsInput = screen.getByLabelText("Повторения подхода 1");
+  const rirInput = screen.getByLabelText("RIR подхода 1");
+  const inputRow = weightInput.closest(".grid-cols-3");
+  expect(inputRow).toBeTruthy();
+  expect(repsInput.closest(".grid-cols-3")).toBe(inputRow);
+  expect(rirInput.closest(".grid-cols-3")).toBe(inputRow);
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  expect(screen.getByRole("list", { name: "Записанные подходы" })).toHaveTextContent(
+    "1. 40.00 кг × 8 · RIR 2",
+  );
+  const recordButton = screen.getByRole("button", { name: "Записать подход" });
+  const recordedSets = screen.getByRole("list", { name: "Записанные подходы" });
+  expect(recordButton.compareDocumentPosition(recordedSets)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
+  expect(screen.getByText("Подход 2 из 3")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Выбрать подход" })).toHaveValue("1");
   expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
     "aria-valuenow",
     "33.33333333333333",
@@ -263,21 +288,48 @@ it("keeps each Focus Mode set's manual values independent while navigating and r
   fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "51.25" } });
   fireEvent.change(screen.getByLabelText("Повторения подхода 1"), { target: { value: "9" } });
   fireEvent.change(screen.getByLabelText("RIR подхода 1"), { target: { value: "2" } });
-  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "1" },
+  });
   fireEvent.change(screen.getByLabelText("Вес подхода 2"), { target: { value: "62.5" } });
   fireEvent.change(screen.getByLabelText("Повторения подхода 2"), { target: { value: "7" } });
   fireEvent.change(screen.getByLabelText("RIR подхода 2"), { target: { value: "1" } });
-  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 1" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "0" },
+  });
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("51.25");
   expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("9");
   expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("2");
   fireEvent.click(screen.getByRole("button", { name: "Добавить подход" }));
   expect(screen.getByLabelText("Вес подхода 4")).toHaveValue("");
   fireEvent.click(screen.getByRole("button", { name: "Убрать последний подход" }));
-  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "1" },
+  });
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("62.5");
   expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue("7");
   expect(screen.getByLabelText("RIR подхода 2")).toHaveValue("1");
+});
+
+it("keeps recorded-set progress while editing the next set", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
+  await screen.findByLabelText("Вес подхода 1");
+  fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "40" } });
+  fireEvent.change(screen.getByLabelText("Повторения подхода 1"), { target: { value: "8" } });
+  fireEvent.change(screen.getByLabelText("RIR подхода 1"), { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  fireEvent.change(screen.getByLabelText("Вес подхода 2"), { target: { value: "47.5" } });
+
+  expect(screen.getByRole("list", { name: "Записанные подходы" })).toHaveTextContent(
+    "1. 40 кг × 8 · RIR 2",
+  );
+  expect(screen.getByText("Подход 2 из 3")).toBeInTheDocument();
+  expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
+    "aria-valuenow",
+    "33.33333333333333",
+  );
 });
 
 it("saves once after the final set, offers the next unfinished exercise, and finishes without another save", async () => {

@@ -269,10 +269,30 @@ function PerSetWorkoutForm({
       onDateChange(nextFields.date);
       return;
     }
+    const changedRecordedSetIds = new Set(
+      current.fields.sets
+        .filter((set) => current.recordedSetIds.includes(set.id))
+        .filter((set) => {
+          const next = nextFields.sets.find((candidate) => candidate.id === set.id);
+          return (
+            !next ||
+            next.position !== set.position ||
+            next.weight !== set.weight ||
+            next.reps !== set.reps ||
+            next.rir !== set.rir ||
+            next.set_type !== set.set_type ||
+            next.load_type !== set.load_type
+          );
+        })
+        .map((set) => set.id),
+    );
     commit({
       ...current,
       fields: nextFields,
-      recordedSetIds: dirty === "sets" ? [] : current.recordedSetIds,
+      recordedSetIds:
+        dirty === "sets"
+          ? current.recordedSetIds.filter((id) => !changedRecordedSetIds.has(id))
+          : current.recordedSetIds,
       dirty: { ...current.dirty, [dirty]: true },
     });
   }
@@ -486,48 +506,8 @@ function PerSetWorkoutForm({
           </div>
         )}
         <section className="space-y-3" aria-label={t("Подходы")}>
-          {focusMode && (
-            <div
-              className="space-y-3 border-t border-border pt-4"
-              aria-label={t("Прогресс подходов")}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold">
-                  {t("Подход {number} из {count}", {
-                    number: activeSetIndex + 1,
-                    count: fields.sets.length,
-                  })}
-                </span>
-                <span className="num text-xs text-muted-foreground">
-                  {recordedCount}/{fields.sets.length}
-                </span>
-              </div>
-              <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
-              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Выбрать подход")}>
-                {fields.sets.map((set, index) => {
-                  const isActive = index === activeSetIndex;
-                  const isRecorded = draft.recordedSetIds.includes(set.id);
-                  return (
-                    <Button
-                      key={set.id}
-                      type="button"
-                      size="icon"
-                      variant={isActive ? "default" : "outline"}
-                      aria-label={t("Выбрать подход {number}", { number: index + 1 })}
-                      aria-pressed={isActive}
-                      className="h-10 w-10 rounded-full"
-                      onClick={() => setActiveSetIndex(index)}
-                    >
-                      {isRecorded ? <span className="sr-only">{t("Выполнено")}</span> : null}
-                      {isRecorded ? "✓" : index + 1}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
           <div
-            className={`flex items-center justify-between gap-2 ${focusMode ? "border-t border-border pt-4" : ""}`}
+            className={`flex items-center justify-between gap-2 ${focusMode ? "border-t border-border pt-3" : ""}`}
           >
             <Label>{t("Подходы · {count}", { count: fields.sets.length })}</Label>
             <div className="flex gap-1">
@@ -582,13 +562,38 @@ function PerSetWorkoutForm({
               </Button>
             </div>
           </div>
+          {focusMode && (
+            <div className="space-y-2" aria-label={t("Прогресс подходов")}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">
+                  {t("Подход {number} из {count}", {
+                    number: activeSetIndex + 1,
+                    count: fields.sets.length,
+                  })}
+                </span>
+                <select
+                  aria-label={t("Выбрать подход")}
+                  value={activeSetIndex}
+                  onChange={(event) => setActiveSetIndex(Number(event.target.value))}
+                  className="num h-8 w-14 shrink-0 appearance-none rounded-md border border-border bg-background px-1 text-center text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {fields.sets.map((set, index) => (
+                    <option key={set.id} value={index}>
+                      {index + 1}/{fields.sets.length}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
+            </div>
+          )}
           <div className="space-y-2">
             {visibleSets.map(({ set, index }) => (
               <div
                 key={set.id}
                 className={
                   focusMode
-                    ? "grid grid-cols-3 items-end gap-3 py-1 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
+                    ? "grid grid-cols-3 items-end gap-2 py-1 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
                     : "grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2"
                 }
               >
@@ -596,7 +601,13 @@ function PerSetWorkoutForm({
                   <span className="pb-3 text-xs text-muted-foreground">#{index + 1}</span>
                 )}
                 <label className="min-w-0 space-y-1 text-xs">
-                  <span>{set.load_type === "bodyweight" ? t("Доп. вес, кг") : t("Вес, кг")}</span>
+                  <span>
+                    {focusMode
+                      ? t("Вес")
+                      : set.load_type === "bodyweight"
+                        ? t("Доп. вес, кг")
+                        : t("Вес, кг")}
+                  </span>
                   <Input
                     ref={focusMode && index === activeSetIndex ? setWeightRef : undefined}
                     aria-label={t("Вес подхода {number}", { number: index + 1 })}
@@ -614,7 +625,7 @@ function PerSetWorkoutForm({
                         "sets",
                       )
                     }
-                    className="num h-11 min-w-0 px-2"
+                    className="num h-11 min-w-0 px-1 sm:px-2"
                   />
                 </label>
                 <label className="min-w-0 space-y-1 text-xs">
@@ -634,7 +645,7 @@ function PerSetWorkoutForm({
                         "sets",
                       )
                     }
-                    className="num h-11 min-w-0 px-2"
+                    className="num h-11 min-w-0 px-1 sm:px-2"
                   />
                 </label>
                 <label className="min-w-0 space-y-1 text-xs">
@@ -655,7 +666,7 @@ function PerSetWorkoutForm({
                         "sets",
                       )
                     }
-                    className="num h-11 min-w-0 px-2"
+                    className="num h-11 min-w-0 px-1 sm:px-2"
                   />
                 </label>
                 {!focusMode && (
@@ -791,6 +802,30 @@ function PerSetWorkoutForm({
                   ? t("Повторить сохранение")
                   : t("Записать подход")}
             </Button>
+          )}
+          {focusMode && recordedCount > 0 && (
+            <div className="space-y-1.5 border-t border-border pt-3" aria-live="polite">
+              <h3 className="text-xs font-semibold text-muted-foreground">
+                {t("Записанные подходы")}
+              </h3>
+              <ul aria-label={t("Записанные подходы")} className="space-y-1">
+                {fields.sets.map((set, index) =>
+                  draft.recordedSetIds.includes(set.id) ? (
+                    <li
+                      key={set.id}
+                      className="flex min-h-8 items-center rounded-md bg-muted/60 px-2 text-sm"
+                    >
+                      <span className="num mr-2 w-5 shrink-0 text-xs text-muted-foreground">
+                        {index + 1}.
+                      </span>{" "}
+                      <span className="num min-w-0 truncate">
+                        {set.weight} {t("кг")} × {set.reps} · RIR {set.rir ? Number(set.rir) : "—"}
+                      </span>
+                    </li>
+                  ) : null,
+                )}
+              </ul>
+            </div>
           )}
         </section>
         {!focusMode && (

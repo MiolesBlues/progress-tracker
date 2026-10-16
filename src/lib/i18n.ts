@@ -245,6 +245,7 @@ export const english = {
   "Переместить упражнение для выполнения ниже": "Move exercise later",
   "Прогресс подходов": "Set progress",
   "Подход {number} из {count}": "Set {number} of {count}",
+  "Записанные подходы": "Recorded sets",
   "Предыдущий подход": "Previous set",
   "Следующий подход": "Next set",
   "Записать подход · далее": "Record set · next",
