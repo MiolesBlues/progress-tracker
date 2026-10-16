@@ -19,6 +19,16 @@ for (const [key, value] of Object.entries(PUBLIC_BACKEND)) {
 }
 
 export default defineConfig({
+  vite: {
+    // Explicit replacements survive hosted builds without .env and keep this app
+    // on its verified backend, even if the host injects another project's values.
+    define: Object.fromEntries(
+      Object.entries(PUBLIC_BACKEND).map(([key, value]) => [
+        `import.meta.env.${key}`,
+        JSON.stringify(value),
+      ]),
+    ),
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

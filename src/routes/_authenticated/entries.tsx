@@ -6,6 +6,10 @@ export const Route = createFileRoute("/_authenticated/entries")({
     meta: [
       { title: "Записи — Прогресс Трекер" },
       { name: "description", content: "Дневник тренировок по упражнениям." },
+      { property: "og:title", content: "Записи — Прогресс Трекер" },
+      { property: "og:description", content: "Дневник тренировок по упражнениям." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: EntriesPage,
