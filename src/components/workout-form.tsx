@@ -41,6 +41,7 @@ type WorkoutFormProps = {
   initialDate: string;
   onDateChange: (date: string) => void;
   onSaved: (exerciseId: string, dayId: string, date: string) => boolean;
+  onStartFocus?: () => void;
   focusMode?: boolean;
 };
 
@@ -136,6 +137,7 @@ function PerSetWorkoutForm({
   initialDate,
   onDateChange,
   onSaved,
+  onStartFocus,
   legacyDraft,
   focusMode = false,
 }: WorkoutFormProps & { legacyDraft: WorkoutDraft | null }) {
@@ -153,7 +155,7 @@ function PerSetWorkoutForm({
   const [initial] = useState(() => {
     try {
       const saved = readPerSetDraft(userId, exercise.id, initialDate);
-      if (saved && hasPerSetDraftInput(saved)) return { draft: saved, error: "" };
+      if (saved) return { draft: saved, error: "" };
       const fields = legacyDraft
         ? {
             date: legacyDraft.fields.date,
@@ -309,11 +311,12 @@ function PerSetWorkoutForm({
       (candidate) => !recordedSetIds.includes(candidate.id),
     );
     if (nextIndex >= 0) setActiveSetIndex(nextIndex);
+    else void save();
     setError("");
   }
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  async function save(event?: FormEvent) {
+    event?.preventDefault();
     if (running.current || blocked || !isCurrent()) return;
     running.current = true;
     setError("");
@@ -391,6 +394,7 @@ function PerSetWorkoutForm({
       ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
       : "";
   const previous = lastResult.data;
+  const activeSet = fields.sets[activeSetIndex];
   const visibleSets = focusMode
     ? fields.sets[activeSetIndex]
       ? [{ set: fields.sets[activeSetIndex]!, index: activeSetIndex }]
@@ -399,7 +403,11 @@ function PerSetWorkoutForm({
   const recordedCount = fields.sets.filter((set) => draft.recordedSetIds.includes(set.id)).length;
   const focusProgress = fields.sets.length ? (recordedCount / fields.sets.length) * 100 : 0;
   return (
-    <form onSubmit={save} className="space-y-5" aria-label={t("Запись тренировки")}>
+    <form
+      onSubmit={save}
+      className={focusMode ? "space-y-4" : "space-y-5"}
+      aria-label={t("Запись тренировки")}
+    >
       {storageError && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
           {translateKnown(language, storageError)}
@@ -465,56 +473,73 @@ function PerSetWorkoutForm({
           )}
         </p>
       )}
-      <fieldset disabled={locked} className="space-y-5">
-        <div className="min-w-0 space-y-2">
-          <Label htmlFor="date">{t("Дата")}</Label>
-          <Input
-            id="date"
-            type="date"
-            value={fields.date}
-            onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
-            className="box-border h-12 w-full min-w-0 max-w-full px-2 sm:px-3"
-            required
-          />
-        </div>
+      <fieldset disabled={locked} className={focusMode ? "space-y-4" : "space-y-5"}>
+        {!focusMode && (
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor="date">{t("Дата")}</Label>
+            <Input
+              id="date"
+              type="date"
+              value={fields.date}
+              onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
+              className="box-border h-12 w-full min-w-0 max-w-full px-2 sm:px-3"
+              required
+            />
+            {onStartFocus && (
+              <Button
+                type="button"
+                className="h-14 w-full text-base font-semibold"
+                onClick={onStartFocus}
+              >
+                {t("Начать тренировку")}
+              </Button>
+            )}
+          </div>
+        )}
         <section className="space-y-3" aria-label={t("Подходы")}>
           {focusMode && (
-            <div className="space-y-2 rounded-xl bg-card p-3" aria-label={t("Прогресс подходов")}>
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>
+            <div
+              className="space-y-3 border-t border-border pt-4"
+              aria-label={t("Прогресс подходов")}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">
                   {t("Подход {number} из {count}", {
                     number: activeSetIndex + 1,
                     count: fields.sets.length,
                   })}
                 </span>
-                <span className="text-muted-foreground">
+                <span className="num text-xs text-muted-foreground">
                   {recordedCount}/{fields.sets.length}
                 </span>
               </div>
               <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
-              <div className="flex justify-between gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={activeSetIndex === 0}
-                  onClick={() => setActiveSetIndex((index) => Math.max(0, index - 1))}
-                >
-                  {t("Предыдущий подход")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={activeSetIndex >= fields.sets.length - 1}
-                  onClick={() =>
-                    setActiveSetIndex((index) => Math.min(fields.sets.length - 1, index + 1))
-                  }
-                >
-                  {t("Следующий подход")}
-                </Button>
+              <div className="flex flex-wrap gap-2" role="group" aria-label={t("Выбрать подход")}>
+                {fields.sets.map((set, index) => {
+                  const isActive = index === activeSetIndex;
+                  const isRecorded = draft.recordedSetIds.includes(set.id);
+                  return (
+                    <Button
+                      key={set.id}
+                      type="button"
+                      size="icon"
+                      variant={isActive ? "default" : "outline"}
+                      aria-label={t("Выбрать подход {number}", { number: index + 1 })}
+                      aria-pressed={isActive}
+                      className="h-10 w-10 rounded-full"
+                      onClick={() => setActiveSetIndex(index)}
+                    >
+                      {isRecorded ? <span className="sr-only">{t("Выполнено")}</span> : null}
+                      {isRecorded ? "✓" : index + 1}
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between gap-2">
+          <div
+            className={`flex items-center justify-between gap-2 ${focusMode ? "border-t border-border pt-4" : ""}`}
+          >
             <Label>{t("Подходы · {count}", { count: fields.sets.length })}</Label>
             <div className="flex gap-1">
               <Button
@@ -543,23 +568,26 @@ function PerSetWorkoutForm({
                 variant="secondary"
                 aria-label={t("Добавить подход")}
                 disabled={locked || fields.sets.length >= MAX_SETS}
-                onClick={() =>
+                onClick={() => {
                   update(
                     {
                       ...fields,
                       sets: [
                         ...fields.sets,
-                        newSet(
-                          fields.sets.length + 1,
-                          fields.sets.at(-1)?.weight ?? "",
-                          fields.sets.at(-1)?.reps ?? "",
-                          fields.sets.at(-1)?.rir ?? "",
-                        ),
+                        focusMode
+                          ? newSet(fields.sets.length + 1)
+                          : newSet(
+                              fields.sets.length + 1,
+                              fields.sets.at(-1)?.weight ?? "",
+                              fields.sets.at(-1)?.reps ?? "",
+                              fields.sets.at(-1)?.rir ?? "",
+                            ),
                       ],
                     },
                     "sets",
-                  )
-                }
+                  );
+                  if (focusMode) setActiveSetIndex(fields.sets.length);
+                }}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -569,9 +597,15 @@ function PerSetWorkoutForm({
             {visibleSets.map(({ set, index }) => (
               <div
                 key={set.id}
-                className={`grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2 ${focusMode ? "animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : ""}`}
+                className={
+                  focusMode
+                    ? "grid grid-cols-3 items-end gap-3 py-1 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
+                    : "grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2"
+                }
               >
-                <span className="pb-3 text-xs text-muted-foreground">#{index + 1}</span>
+                {!focusMode && (
+                  <span className="pb-3 text-xs text-muted-foreground">#{index + 1}</span>
+                )}
                 <label className="min-w-0 space-y-1 text-xs">
                   <span>{set.load_type === "bodyweight" ? t("Доп. вес, кг") : t("Вес, кг")}</span>
                   <Input
@@ -635,136 +669,163 @@ function PerSetWorkoutForm({
                     className="num h-11 min-w-0 px-2"
                   />
                 </label>
-                <div className="flex flex-col gap-1">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={t("Переместить подход вверх")}
-                    disabled={locked || index === 0}
-                    onClick={() => {
-                      const sets = [...fields.sets];
-                      const before = sets[index - 1]!;
-                      sets[index - 1] = sets[index]!;
-                      sets[index] = before;
-                      update(
-                        { ...fields, sets: sets.map((item, i) => ({ ...item, position: i + 1 })) },
-                        "sets",
-                      );
-                    }}
-                  >
-                    <ArrowUp className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label={t("Переместить подход вниз")}
-                    disabled={locked || index === fields.sets.length - 1}
-                    onClick={() => {
-                      const sets = [...fields.sets];
-                      const after = sets[index + 1]!;
-                      sets[index + 1] = sets[index]!;
-                      sets[index] = after;
-                      update(
-                        { ...fields, sets: sets.map((item, i) => ({ ...item, position: i + 1 })) },
-                        "sets",
-                      );
-                    }}
-                  >
-                    <ArrowDown className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="col-span-5 grid grid-cols-2 gap-2">
-                  <label className="min-w-0 space-y-1 text-xs">
-                    <span>{t("Тип подхода")}</span>
-                    <select
-                      aria-label={t("Тип подхода {number}", { number: index + 1 })}
-                      className="h-10 w-full rounded-md border border-input bg-background px-2"
-                      value={set.set_type}
-                      onChange={(event) =>
+                {!focusMode && (
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={t("Переместить подход вверх")}
+                      disabled={locked || index === 0}
+                      onClick={() => {
+                        const sets = [...fields.sets];
+                        const before = sets[index - 1]!;
+                        sets[index - 1] = sets[index]!;
+                        sets[index] = before;
                         update(
                           {
                             ...fields,
-                            sets: fields.sets.map((item, i) =>
-                              i === index
-                                ? {
-                                    ...item,
-                                    set_type: event.target.value as WorkoutSetFields["set_type"],
-                                  }
-                                : item,
-                            ),
+                            sets: sets.map((item, i) => ({ ...item, position: i + 1 })),
                           },
                           "sets",
-                        )
-                      }
+                        );
+                      }}
                     >
-                      <option value="working">{t("Рабочий")}</option>
-                      <option value="warmup">{t("Разминочный")}</option>
-                    </select>
-                  </label>
-                  <label className="min-w-0 space-y-1 text-xs">
-                    <span>{t("Тип нагрузки")}</span>
-                    <select
-                      aria-label={t("Тип нагрузки {number}", { number: index + 1 })}
-                      className="h-10 w-full rounded-md border border-input bg-background px-2"
-                      value={set.load_type}
-                      onChange={(event) =>
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      aria-label={t("Переместить подход вниз")}
+                      disabled={locked || index === fields.sets.length - 1}
+                      onClick={() => {
+                        const sets = [...fields.sets];
+                        const after = sets[index + 1]!;
+                        sets[index + 1] = sets[index]!;
+                        sets[index] = after;
                         update(
                           {
                             ...fields,
-                            sets: fields.sets.map((item, i) =>
-                              i === index
-                                ? {
-                                    ...item,
-                                    load_type: event.target.value as WorkoutSetFields["load_type"],
-                                  }
-                                : item,
-                            ),
+                            sets: sets.map((item, i) => ({ ...item, position: i + 1 })),
                           },
                           "sets",
-                        )
-                      }
+                        );
+                      }}
                     >
-                      <option value="external">{t("Внешнее отягощение")}</option>
-                      <option value="bodyweight">{t("Собственный вес + отягощение")}</option>
-                    </select>
-                  </label>
-                </div>
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                {!focusMode && (
+                  <div className="col-span-5 grid grid-cols-2 gap-2">
+                    <label className="min-w-0 space-y-1 text-xs">
+                      <span>{t("Тип подхода")}</span>
+                      <select
+                        aria-label={t("Тип подхода {number}", { number: index + 1 })}
+                        className="h-10 w-full rounded-md border border-input bg-background px-2"
+                        value={set.set_type}
+                        onChange={(event) =>
+                          update(
+                            {
+                              ...fields,
+                              sets: fields.sets.map((item, i) =>
+                                i === index
+                                  ? {
+                                      ...item,
+                                      set_type: event.target.value as WorkoutSetFields["set_type"],
+                                    }
+                                  : item,
+                              ),
+                            },
+                            "sets",
+                          )
+                        }
+                      >
+                        <option value="working">{t("Рабочий")}</option>
+                        <option value="warmup">{t("Разминочный")}</option>
+                      </select>
+                    </label>
+                    <label className="min-w-0 space-y-1 text-xs">
+                      <span>{t("Тип нагрузки")}</span>
+                      <select
+                        aria-label={t("Тип нагрузки {number}", { number: index + 1 })}
+                        className="h-10 w-full rounded-md border border-input bg-background px-2"
+                        value={set.load_type}
+                        onChange={(event) =>
+                          update(
+                            {
+                              ...fields,
+                              sets: fields.sets.map((item, i) =>
+                                i === index
+                                  ? {
+                                      ...item,
+                                      load_type: event.target
+                                        .value as WorkoutSetFields["load_type"],
+                                    }
+                                  : item,
+                              ),
+                            },
+                            "sets",
+                          )
+                        }
+                      >
+                        <option value="external">{t("Внешнее отягощение")}</option>
+                        <option value="bodyweight">{t("Собственный вес + отягощение")}</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
               </div>
             ))}
           </div>
           {focusMode && (
             <Button
               type="button"
-              className="h-12 w-full"
-              onClick={recordFocusSet}
-              disabled={locked}
+              className="h-14 w-full text-base font-bold"
+              onClick={() => {
+                if (draftRef.current.operation) void save();
+                else recordFocusSet();
+              }}
+              disabled={
+                saving ||
+                blocked ||
+                (!draft.operation &&
+                  !error &&
+                  !!activeSet &&
+                  draft.recordedSetIds.includes(activeSet.id))
+              }
             >
-              {draft.recordedSetIds.includes(fields.sets[activeSetIndex]?.id ?? "")
-                ? t("Подход записан · далее")
-                : t("Записать подход · далее")}
+              {saving
+                ? t("Сохранение…")
+                : draft.operation
+                  ? t("Повторить сохранение")
+                  : t("Записать подход")}
             </Button>
           )}
         </section>
-        <div className="space-y-2">
-          <Label htmlFor="notes">{t("Заметки")}</Label>
-          <Textarea
-            id="notes"
-            maxLength={1000}
-            value={fields.notes}
-            onChange={(event) => update({ ...fields, notes: event.target.value }, "notes")}
-            rows={2}
-          />
-        </div>
+        {!focusMode && (
+          <div className="space-y-2">
+            <Label htmlFor="notes">{t("Заметки")}</Label>
+            <Textarea
+              id="notes"
+              maxLength={1000}
+              value={fields.notes}
+              onChange={(event) => update({ ...fields, notes: event.target.value }, "notes")}
+              rows={2}
+            />
+          </div>
+        )}
       </fieldset>
-      <Button
-        type="submit"
-        disabled={saving || blocked}
-        className="h-14 w-full text-base font-bold"
-      >
-        {saving ? t("Сохранение…") : draft.operation ? t("Повторить сохранение") : t("Сохранить")}
-      </Button>
+      {!focusMode && (
+        <Button
+          type="submit"
+          disabled={saving || blocked}
+          className="h-14 w-full text-base font-bold"
+        >
+          {saving ? t("Сохранение…") : draft.operation ? t("Повторить сохранение") : t("Сохранить")}
+        </Button>
+      )}
     </form>
   );
 }

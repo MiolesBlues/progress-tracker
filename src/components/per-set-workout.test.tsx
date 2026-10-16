@@ -9,6 +9,7 @@ import { WorkoutPage } from "@/components/workout-page";
 const USER = "11111111-1111-4111-8111-111111111111";
 const DAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const EXERCISE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const SECOND_EXERCISE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 let client: QueryClient;
 
 beforeEach(() => {
@@ -102,6 +103,21 @@ function mount() {
   return view;
 }
 
+function addSecondExercise() {
+  fake.state.rows.program_exercises.push({
+    id: SECOND_EXERCISE,
+    user_id: USER,
+    day_id: DAY,
+    name: "Тяга",
+    position: 1,
+    target_sets: 3,
+    target_reps: "8",
+    working_weight: 30,
+    example_reps: [8, 8, 8],
+    archived_at: null,
+  });
+}
+
 it("prefills each set independently and submits independent weight, reps, and nullable RIR", async () => {
   mount();
   await screen.findByLabelText("Вес подхода 1");
@@ -181,55 +197,98 @@ it("allows explicit warm-up and bodyweight-load selection on a per-set basis", a
   expect(screen.getByLabelText("Тип нагрузки 3")).toHaveValue("bodyweight");
 });
 
-it("uses the same draft in Focus Mode and restores recorded-set progress after reload", async () => {
+it("starts a separate Focus Mode and hides the preparation controls without losing the draft", async () => {
   const view = mount();
   await screen.findByLabelText("Вес подхода 1");
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
-  fireEvent.click(screen.getByRole("button", { name: "Focus Mode" }));
-  expect(screen.getByRole("region", { name: "Текущее упражнение" })).toHaveTextContent("Жим");
-  fireEvent.click(screen.getByRole("button", { name: "Записать подход · далее" }));
+  expect(screen.getByLabelText("Тренировочный день")).toBeInTheDocument();
+  expect(screen.getByLabelText("Дата")).toBeInTheDocument();
+  expect(screen.getByLabelText("Упражнение")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
+  expect(screen.getByRole("region", { name: "Focus Mode" })).toHaveTextContent("Жим");
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 1" }));
+  expect(screen.queryByLabelText("Тренировочный день")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Упражнение")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Тип подхода 1")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Тип нагрузки 1")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
   expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
     "aria-valuenow",
     "33.33333333333333",
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Обычный режим" }));
+  fireEvent.click(screen.getByRole("button", { name: "Вернуться в обычный режим" }));
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
   view.unmount();
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Focus Mode" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByRole("progressbar", { name: "Прогресс подходов" })).toHaveAttribute(
     "aria-valuenow",
     "33.33333333333333",
   );
 });
 
-it("allows reordering the Focus Mode exercise queue without changing the program order", async () => {
-  fake.state.rows.program_exercises.push({
-    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    user_id: USER,
-    day_id: DAY,
-    name: "Тяга",
-    position: 1,
-    target_sets: 3,
-    target_reps: "8",
-    working_weight: 30,
-    example_reps: [8, 8, 8],
-    archived_at: null,
-  });
+it("keeps program order on skip and lets the user return to an unfinished exercise", async () => {
+  addSecondExercise();
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Focus Mode" }));
-  expect(screen.getByRole("region", { name: "Текущее упражнение" })).toHaveTextContent(
-    "Упражнение 1 из 2",
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "Переместить упражнение для выполнения ниже" }),
-  );
-  expect(JSON.parse(localStorage.getItem(`workout:focus-order:v1:${USER}`)!)[DAY]).toEqual([
-    "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    EXERCISE,
-  ]);
+  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  expect(screen.getByText("Жим")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Скип" }));
+  expect(screen.getByRole("heading", { name: "Тяга" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Упражнения · 0 из 2" }));
+  fireEvent.click(screen.getByRole("button", { name: /Жим/ }));
+  expect(screen.getByRole("heading", { name: "Жим" })).toBeInTheDocument();
   expect(fake.state.rows.program_exercises.map((exercise) => exercise.position)).toEqual([0, 1]);
+});
+
+it("keeps each Focus Mode set's manual values independent while navigating and resizing the plan", async () => {
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  await screen.findByLabelText("Вес подхода 1");
+  fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "51.25" } });
+  fireEvent.change(screen.getByLabelText("Повторения подхода 1"), { target: { value: "9" } });
+  fireEvent.change(screen.getByLabelText("RIR подхода 1"), { target: { value: "2" } });
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  fireEvent.change(screen.getByLabelText("Вес подхода 2"), { target: { value: "62.5" } });
+  fireEvent.change(screen.getByLabelText("Повторения подхода 2"), { target: { value: "7" } });
+  fireEvent.change(screen.getByLabelText("RIR подхода 2"), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 1" }));
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("51.25");
+  expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("9");
+  expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("2");
+  fireEvent.click(screen.getByRole("button", { name: "Добавить подход" }));
+  expect(screen.getByLabelText("Вес подхода 4")).toHaveValue("");
+  fireEvent.click(screen.getByRole("button", { name: "Убрать последний подход" }));
+  fireEvent.click(screen.getByRole("button", { name: "Выбрать подход 2" }));
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("62.5");
+  expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue("7");
+  expect(screen.getByLabelText("RIR подхода 2")).toHaveValue("1");
+});
+
+it("saves once after the final set, offers the next unfinished exercise, and finishes without another save", async () => {
+  addSecondExercise();
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Начать тренировку" }));
+  await screen.findByLabelText("Вес подхода 1");
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  await screen.findByRole("heading", { name: "Тяга" });
+  expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Упражнения · 1 из 2" }));
+  expect(screen.getByRole("button", { name: /Жим/ })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Упражнения · 1 из 2" }));
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
+  await screen.findByRole("heading", { name: "Тренировка завершена" });
+  expect(fake.state.saveRpc).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: "Завершить и вернуться" }));
+  expect(screen.getByLabelText("Упражнение")).toBeInTheDocument();
+  expect(fake.state.saveRpc).toHaveBeenCalledTimes(2);
 });

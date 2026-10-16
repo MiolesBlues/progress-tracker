@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Target } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { daysQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { useWorkoutPreferences } from "@/lib/archive-preferences";
@@ -26,17 +26,6 @@ export function WorkoutPage() {
   const programResult = useQuery(programQuery(userId));
   const daysResult = useQuery(daysQuery(userId));
   const selectionKey = `workout:selection:v1:${userId}`;
-  const focusOrderKey = `workout:focus-order:v1:${userId}`;
-  const [focusOrder, setFocusOrder] = useState<Record<string, string[]>>(() => {
-    try {
-      const value: unknown = JSON.parse(localStorage.getItem(focusOrderKey) ?? "{}");
-      return value && typeof value === "object" && !Array.isArray(value)
-        ? (value as Record<string, string[]>)
-        : {};
-    } catch {
-      return {};
-    }
-  });
   const [selection, setSelection] = useState<{ dayId: string; exerciseId: string }>(() => {
     try {
       const value = JSON.parse(localStorage.getItem(selectionKey) ?? "null") as unknown;
@@ -66,6 +55,7 @@ export function WorkoutPage() {
   });
   const [completedDay, setCompletedDay] = useState<{ dayId: string; date: string } | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [focusListOpen, setFocusListOpen] = useState(false);
   const [savedExercises, setSavedExercises] = useState<Record<string, string[]>>({});
   const days = useMemo(
     () => daysResult.data?.filter((day) => !day.archived_at) ?? [],
@@ -79,21 +69,13 @@ export function WorkoutPage() {
   const exercises = activeExercises
     .filter((exercise) => exercise.day_id === day?.id)
     .sort((a, b) => a.position - b.position);
-  const focusExercises = [...exercises].sort((a, b) => {
-    const order = focusOrder[day?.id ?? ""] ?? [];
-    const ai = order.indexOf(a.id);
-    const bi = order.indexOf(b.id);
-    return (
-      (ai < 0 ? Number.MAX_SAFE_INTEGER : ai) - (bi < 0 ? Number.MAX_SAFE_INTEGER : bi) ||
-      a.position - b.position
-    );
-  });
   const current =
     exercises.find((exercise) => exercise.id === selection.exerciseId) ?? exercises[0];
-  const executionExercises = focusMode ? focusExercises : exercises;
-  const currentIndex = current
-    ? executionExercises.findIndex((exercise) => exercise.id === current.id)
-    : -1;
+  const currentIndex = current ? exercises.findIndex((exercise) => exercise.id === current.id) : -1;
+  const focusSessionKey = `${day?.id ?? ""}:${workoutDate}`;
+  const completedExerciseIds = new Set(savedExercises[focusSessionKey] ?? []);
+  const allExercisesCompleted =
+    exercises.length > 0 && exercises.every((item) => completedExerciseIds.has(item.id));
 
   useEffect(() => {
     if (!daysResult.isSuccess || !programResult.isSuccess) return;
@@ -133,6 +115,18 @@ export function WorkoutPage() {
   function afterSaved(exerciseId: string, dayId: string, date: string) {
     const selectedExerciseId = selection.exerciseId || exercises[0]?.id;
     if (selection.dayId !== dayId || selectedExerciseId !== exerciseId) return false;
+    if (focusMode) {
+      const sessionKey = `${dayId}:${date}`;
+      const nextCompletedIds = new Set(savedExercises[sessionKey] ?? []);
+      nextCompletedIds.add(exerciseId);
+      const nextIds = [...nextCompletedIds];
+      setSavedExercises((current) => ({ ...current, [sessionKey]: nextIds }));
+      const index = exercises.findIndex((item) => item.id === exerciseId);
+      const orderedCandidates = [...exercises.slice(index + 1), ...exercises.slice(0, index)];
+      const next = orderedCandidates.find((item) => !nextCompletedIds.has(item.id));
+      if (next) select(dayId, next.id);
+      return true;
+    }
     if (!autoAdvance) return false;
     const sessionKey = `${dayId}:${date}`;
     const completedIds = new Set(savedExercises[sessionKey] ?? []);
@@ -141,8 +135,8 @@ export function WorkoutPage() {
       ...current,
       [sessionKey]: [...new Set([...(current[sessionKey] ?? []), exerciseId])],
     }));
-    const index = executionExercises.findIndex((exercise) => exercise.id === exerciseId);
-    const next = index >= 0 ? executionExercises[index + 1] : undefined;
+    const index = exercises.findIndex((exercise) => exercise.id === exerciseId);
+    const next = index >= 0 ? exercises[index + 1] : undefined;
     if (next) {
       const nextSelection = { dayId, exerciseId: next.id };
       setSelection(nextSelection);
@@ -166,18 +160,17 @@ export function WorkoutPage() {
       /* The current session keeps its date even if optional persistence is unavailable. */
     }
   }
-  function moveFocusExercise(direction: -1 | 1) {
+  function nextUnfinishedExercise(fromIndex: number) {
+    if (!exercises.length) return undefined;
+    const candidates = [...exercises.slice(fromIndex + 1), ...exercises.slice(0, fromIndex + 1)];
+    return candidates.find((item) => !completedExerciseIds.has(item.id));
+  }
+  function skipCurrentExercise() {
     if (!day || currentIndex < 0) return;
-    const ids = focusExercises.map((exercise) => exercise.id);
-    const target = currentIndex + direction;
-    if (target < 0 || target >= ids.length) return;
-    [ids[currentIndex], ids[target]] = [ids[target]!, ids[currentIndex]!];
-    const next = { ...focusOrder, [day.id]: ids };
-    setFocusOrder(next);
-    try {
-      localStorage.setItem(focusOrderKey, JSON.stringify(next));
-    } catch {
-      /* The current order remains available for this view. */
+    const next = nextUnfinishedExercise(currentIndex);
+    if (next && next.id !== current?.id) {
+      select(day.id, next.id);
+      setFocusListOpen(false);
     }
   }
   if (programResult.isError || daysResult.isError)
@@ -195,60 +188,51 @@ export function WorkoutPage() {
     return <Loading>{t("Загрузка программы…")}</Loading>;
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
-        <Button
-          type="button"
-          variant={focusMode ? "default" : "outline"}
-          aria-pressed={focusMode}
-          onClick={() => setFocusMode((enabled) => !enabled)}
-        >
-          <Target aria-hidden="true" className="h-4 w-4" />
-          {focusMode ? t("Обычный режим") : t("Focus Mode")}
-        </Button>
-      </div>
-      <div className="min-w-0 space-y-2">
-        <label id="training-day-label" className="block text-sm font-medium">
-          {t("Тренировочный день")}
-        </label>
-        <Select
-          value={day?.id ?? ""}
-          onValueChange={(dayId) => select(dayId, "")}
-          disabled={!days.length}
-        >
-          <SelectTrigger
-            aria-label={t("Тренировочный день")}
-            aria-labelledby="training-day-label"
-            className="h-12 min-w-0 bg-card text-foreground"
+      <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
+      {!focusMode && (
+        <div className="min-w-0 space-y-2">
+          <label id="training-day-label" className="block text-sm font-medium">
+            {t("Тренировочный день")}
+          </label>
+          <Select
+            value={day?.id ?? ""}
+            onValueChange={(dayId) => select(dayId, "")}
+            disabled={!days.length}
           >
-            <SelectValue placeholder={t("Нет активных дней")} />
-          </SelectTrigger>
-          <SelectContent
-            position="popper"
-            side="bottom"
-            align="start"
-            collisionPadding={8}
-            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
-          >
-            {days.map((item) => {
-              const count = activeExercises.filter(
-                (exercise) => exercise.day_id === item.id,
-              ).length;
-              return (
-                <SelectItem
-                  key={item.id}
-                  value={item.id}
-                  className="h-auto min-h-10 whitespace-normal py-2"
-                >
-                  <span className="block min-w-0 whitespace-normal break-words leading-snug">
-                    {item.name} · {exerciseCount(count, language)}
-                  </span>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-      </div>
+            <SelectTrigger
+              aria-label={t("Тренировочный день")}
+              aria-labelledby="training-day-label"
+              className="h-12 min-w-0 bg-card text-foreground"
+            >
+              <SelectValue placeholder={t("Нет активных дней")} />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              side="bottom"
+              align="start"
+              collisionPadding={8}
+              className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+            >
+              {days.map((item) => {
+                const count = activeExercises.filter(
+                  (exercise) => exercise.day_id === item.id,
+                ).length;
+                return (
+                  <SelectItem
+                    key={item.id}
+                    value={item.id}
+                    className="h-auto min-h-10 whitespace-normal py-2"
+                  >
+                    <span className="block min-w-0 whitespace-normal break-words leading-snug">
+                      {item.name} · {exerciseCount(count, language)}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {!day && (
         <p>
           {t("Нет активных дней.")}{" "}
@@ -265,98 +249,160 @@ export function WorkoutPage() {
           </Link>
         </p>
       )}
-      {current && day && (
-        <>
-          {focusMode ? (
-            <section
-              key={current.id}
-              className="space-y-3 rounded-2xl bg-card p-4 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
-              aria-label={t("Текущее упражнение")}
-            >
-              <p className="text-xs text-muted-foreground">
-                {day.name} ·{" "}
-                {t("Упражнение {number} из {count}", {
-                  number: currentIndex + 1,
-                  count: focusExercises.length,
-                })}
-              </p>
-              <h2 className="break-words text-xl font-bold">{current.name}</h2>
-              <div className="flex justify-between gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={currentIndex <= 0}
-                  onClick={() => select(day.id, focusExercises[currentIndex - 1]!.id)}
-                >
-                  {t("Предыдущее упражнение")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={currentIndex < 0 || currentIndex >= focusExercises.length - 1}
-                  onClick={() => select(day.id, focusExercises[currentIndex + 1]!.id)}
-                >
-                  {t("Следующее упражнение")}
-                </Button>
-              </div>
-              <div className="flex justify-end gap-1">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={t("Переместить упражнение для выполнения выше")}
-                  disabled={currentIndex <= 0}
-                  onClick={() => moveFocusExercise(-1)}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={t("Переместить упражнение для выполнения ниже")}
-                  disabled={currentIndex >= focusExercises.length - 1}
-                  onClick={() => moveFocusExercise(1)}
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-              </div>
-            </section>
-          ) : (
-            <label className="block space-y-2 text-sm">
-              {t("Упражнение")}
-              <select
-                aria-label={t("Упражнение")}
-                className="h-12 w-full min-w-0 rounded-md border border-input bg-card px-3"
-                value={current.id}
-                onChange={(event) => select(day.id, event.target.value)}
-              >
-                {exercises.map((exercise) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {exercise.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {completedDay?.dayId === day.id && completedDay.date === workoutDate && (
-            <p role="status" className="text-xs text-muted-foreground">
-              {t(
-                "Все упражнения этого дня пройдены. Можно выбрать упражнение для дополнительной сессии.",
-              )}
-            </p>
-          )}
-          <WorkoutForm
-            key={`${userId}:${current.id}:${day.id}`}
-            exercise={current}
-            dayId={day.id}
-            initialDate={workoutDate}
-            onDateChange={changeDate}
-            onSaved={afterSaved}
-            focusMode={focusMode}
-          />
-        </>
+      {!focusMode && current && day && (
+        <label className="block space-y-2 text-sm">
+          {t("Упражнение")}
+          <select
+            aria-label={t("Упражнение")}
+            className="h-12 w-full min-w-0 rounded-md border border-input bg-card px-3"
+            value={current.id}
+            onChange={(event) => select(day.id, event.target.value)}
+          >
+            {exercises.map((exercise) => (
+              <option key={exercise.id} value={exercise.id}>
+                {exercise.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
+      {!focusMode && current && day && (
+        <WorkoutForm
+          key={`${userId}:${current.id}:${day.id}`}
+          exercise={current}
+          dayId={day.id}
+          initialDate={workoutDate}
+          onDateChange={changeDate}
+          onSaved={afterSaved}
+          onStartFocus={() => {
+            setFocusMode(true);
+            setFocusListOpen(false);
+          }}
+        />
+      )}
+      {focusMode && current && day && (
+        <section
+          key={`focus:${day.id}:${current.id}`}
+          className="overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-sm animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none sm:p-5"
+          aria-label={t("Focus Mode")}
+        >
+          {allExercisesCompleted ? (
+            <div className="space-y-4 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Check aria-hidden="true" className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">{t("Тренировка завершена")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("Все упражнения записаны")}</p>
+              </div>
+              <Button className="h-12 w-full" onClick={() => setFocusMode(false)}>
+                {t("Завершить и вернуться")}
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">
+                    {day.name} ·{" "}
+                    {t("Упражнение {number} из {count}", {
+                      number: currentIndex + 1,
+                      count: exercises.length,
+                    })}
+                  </p>
+                  <h2 className="mt-1 break-words text-xl font-bold">{current.name}</h2>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 shrink-0 px-3"
+                  disabled={
+                    exercises.filter((item) => !completedExerciseIds.has(item.id)).length <= 1
+                  }
+                  onClick={skipCurrentExercise}
+                >
+                  {t("Скип")}
+                </Button>
+              </div>
+              <div className="mt-3 border-b border-border pb-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-9 w-full justify-between px-2 text-sm"
+                  aria-expanded={focusListOpen}
+                  onClick={() => setFocusListOpen((open) => !open)}
+                >
+                  <span>
+                    {t("Упражнения · {done} из {total}", {
+                      done: completedExerciseIds.size,
+                      total: exercises.length,
+                    })}
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`h-4 w-4 transition-transform duration-200 motion-reduce:transition-none ${focusListOpen ? "rotate-180" : ""}`}
+                  />
+                </Button>
+                {focusListOpen && (
+                  <div className="mt-2 space-y-1" aria-label={t("Все упражнения тренировки")}>
+                    {exercises.map((item, index) => {
+                      const done = completedExerciseIds.has(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-current={item.id === current.id ? "step" : undefined}
+                          disabled={done}
+                          className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                          onClick={() => {
+                            select(day.id, item.id);
+                            setFocusListOpen(false);
+                          }}
+                        >
+                          <span className="num w-6 text-xs text-muted-foreground">{index + 1}</span>
+                          <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                          {done && (
+                            <Check aria-label={t("Выполнено")} className="h-4 w-4 text-primary" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <WorkoutForm
+                key={`${userId}:${current.id}:${day.id}`}
+                exercise={current}
+                dayId={day.id}
+                initialDate={workoutDate}
+                onDateChange={changeDate}
+                onSaved={afterSaved}
+                focusMode
+              />
+              <div className="mt-4 border-t border-border pt-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10 w-full"
+                  onClick={() => setFocusMode(false)}
+                >
+                  {t("Вернуться в обычный режим")}
+                </Button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+      {completedDay &&
+        completedDay.dayId === day?.id &&
+        completedDay.date === workoutDate &&
+        !focusMode && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {t(
+              "Все упражнения этого дня пройдены. Можно выбрать упражнение для дополнительной сессии.",
+            )}
+          </p>
+        )}
     </div>
   );
 }
