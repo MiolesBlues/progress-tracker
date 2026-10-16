@@ -28,6 +28,7 @@ for (const width of [320, 375, 390, 430]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 844 });
+    await page.addInitScript(() => localStorage.setItem("app:theme:v1", "dark"));
     await page.clock.setFixedTime(new Date("2026-10-15T12:00:00Z"));
     const backend = await mockSupabase(page);
     await page.goto("/auth");
