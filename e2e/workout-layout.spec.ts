@@ -8,7 +8,7 @@ const productionCss = readFileSync(join(".output/public/assets", cssFile), "utf8
 
 for (const width of [320, 375, 390, 768, 1280]) {
   for (const theme of ["light", "dark"]) {
-    test(`Дата и тренировочный день остаются в одной строке: ${width}px, ${theme}`, async ({
+    test(`Дата и тренировочный день выровнены в одной строке: ${width}px, ${theme}`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 844 });
@@ -17,21 +17,23 @@ for (const width of [320, 375, 390, 768, 1280]) {
           <head><style>${productionCss}</style></head>
           <body>
             <main class="mx-auto min-h-dvh max-w-md bg-background px-4 text-foreground">
-              <div id="date-day-row" class="grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-end gap-2">
+              <div id="date-day-row" class="grid min-w-0 grid-cols-[minmax(0,42fr)_minmax(0,58fr)] items-end gap-2.5">
                 <div id="date-cell" class="min-w-0 space-y-1">
                   <label for="date" class="text-xs font-medium leading-none">Дата</label>
-                  <input id="date" type="date" value="2026-10-16" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors box-border h-10 min-w-0 max-w-full px-1 sm:px-2" />
+                  <div class="relative min-w-0">
+                    <input id="date" type="date" value="2026-10-16" class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors box-border h-11 min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:opacity-0" />
+                    <span id="date-icon" class="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2">▦</span>
+                  </div>
                 </div>
                 <div id="day-cell" class="min-w-0 space-y-1">
                   <label for="day" class="text-xs font-medium leading-none">Тренировочный день</label>
-                  <button id="day" class="flex h-9 w-full min-w-0 items-center justify-between rounded-md border border-input bg-card px-2 text-foreground h-10">Силовой день</button>
+                  <button id="day" class="flex h-9 w-full min-w-0 items-center justify-between whitespace-nowrap rounded-md border border-input bg-card px-3 text-foreground h-11"><span class="min-w-0 truncate">День 1 · 2 упражнения</span><span id="day-arrow" class="h-4 w-4 shrink-0">⌄</span></button>
                 </div>
               </div>
             </main>
           </body>
         </html>
       `);
-
       const geometry = await page.evaluate(() => {
         const date = document.querySelector<HTMLInputElement>("#date")!;
         const day = document.querySelector<HTMLButtonElement>("#day")!;
@@ -54,17 +56,36 @@ for (const width of [320, 375, 390, 768, 1280]) {
           viewportWidth: window.innerWidth,
           themeBackground: getComputedStyle(document.querySelector("main")!).backgroundColor,
           dayBackground: getComputedStyle(day).backgroundColor,
+          dateHeight: date.getBoundingClientRect().height,
+          dayHeight: day.getBoundingClientRect().height,
+          dateRadius: getComputedStyle(date).borderRadius,
+          dayRadius: getComputedStyle(day).borderRadius,
+          datePaddingRight: getComputedStyle(date).paddingRight,
+          dayPaddingRight: getComputedStyle(day).paddingRight,
+          dayArrowRight: document.querySelector("#day-arrow")!.getBoundingClientRect().right,
+          dateIconRight: document.querySelector("#date-icon")!.getBoundingClientRect().right,
+          dayArrowInset:
+            day.getBoundingClientRect().right -
+            document.querySelector("#day-arrow")!.getBoundingClientRect().right,
         };
       });
 
       expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewportWidth);
-      expect(geometry.date.width).toBeGreaterThan(geometry.day.width);
+      expect(geometry.date.width / (geometry.date.width + geometry.day.width)).toBeCloseTo(0.42, 1);
+      expect(geometry.day.width).toBeGreaterThan(geometry.date.width);
       expect(geometry.date.top).toBe(geometry.day.top);
       expect(geometry.date.left).toBeGreaterThanOrEqual(geometry.row.left);
       expect(geometry.day.right).toBeLessThanOrEqual(geometry.row.right + 1);
       expect(geometry.date.right).toBeLessThanOrEqual(geometry.day.left);
       expect(geometry.date.width).toBeGreaterThan(0);
       expect(geometry.day.width).toBeGreaterThan(0);
+      expect(geometry.dateHeight).toBe(44);
+      expect(geometry.dayHeight).toBe(44);
+      expect(geometry.dateRadius).toBe(geometry.dayRadius);
+      expect(geometry.datePaddingRight).toBe(geometry.dayPaddingRight);
+      expect(geometry.dayArrowRight).toBeLessThanOrEqual(geometry.day.right - 10);
+      expect(geometry.dateIconRight).toBeCloseTo(geometry.date.right - 13, 0);
+      expect(geometry.dayArrowInset).toBeCloseTo(13, 0);
       expect(geometry.themeBackground).not.toBe(geometry.dayBackground);
     });
   }

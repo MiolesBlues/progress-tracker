@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Minus, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { prefillFor } from "@/lib/workout";
@@ -118,7 +118,7 @@ function LegacyRetry({
   return (
     <div className="space-y-3">
       <div
-        className="grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-end gap-2"
+        className="grid min-w-0 grid-cols-[minmax(0,42fr)_minmax(0,58fr)] items-end gap-2.5"
         role="group"
         aria-label={t("Дата и тренировочный день")}
       >
@@ -126,13 +126,19 @@ function LegacyRetry({
           <Label htmlFor="legacy-retry-date" className="text-xs">
             {t("Дата")}
           </Label>
-          <Input
-            id="legacy-retry-date"
-            type="date"
-            value={initialDate}
-            className="box-border h-10 w-full min-w-0 max-w-full px-1 sm:px-2"
-            disabled
-          />
+          <div className="relative min-w-0">
+            <Input
+              id="legacy-retry-date"
+              type="date"
+              value={initialDate}
+              className="box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:opacity-0"
+              disabled
+            />
+            <CalendarDays
+              aria-hidden="true"
+              className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            />
+          </div>
         </div>
         {trainingDaySelector}
       </div>
@@ -504,7 +510,7 @@ function PerSetWorkoutForm({
       {!focusMode && (
         <>
           <div
-            className="grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-end gap-2"
+            className="grid min-w-0 grid-cols-[minmax(0,42fr)_minmax(0,58fr)] items-end gap-2.5"
             role="group"
             aria-label={t("Дата и тренировочный день")}
           >
@@ -512,15 +518,21 @@ function PerSetWorkoutForm({
               <Label htmlFor="date" className="text-xs">
                 {t("Дата")}
               </Label>
-              <Input
-                id="date"
-                type="date"
-                value={fields.date}
-                onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
-                className="box-border h-10 w-full min-w-0 max-w-full px-1 sm:px-2"
-                required
-                disabled={locked}
-              />
+              <div className="relative min-w-0">
+                <Input
+                  id="date"
+                  type="date"
+                  value={fields.date}
+                  onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
+                  className="box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  required
+                  disabled={locked}
+                />
+                <CalendarDays
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </div>
             </div>
             {trainingDaySelector}
           </div>

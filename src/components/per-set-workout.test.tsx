@@ -127,7 +127,8 @@ it("prefills each set independently and submits independent weight, reps, and nu
   expect(screen.queryByLabelText(/Тип нагрузки/)).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
   const dateDayRow = screen.getByRole("group", { name: "Дата и тренировочный день" });
-  expect(dateDayRow.className).toContain("grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]");
+  expect(dateDayRow.className).toContain("grid-cols-[minmax(0,42fr)_minmax(0,58fr)]");
+  expect(dateDayRow.className).toContain("gap-2.5");
   expect(screen.getByLabelText("Дата").closest('[role="group"]')).toBe(dateDayRow);
   expect(
     screen.getByRole("combobox", { name: "Тренировочный день" }).closest('[role="group"]'),

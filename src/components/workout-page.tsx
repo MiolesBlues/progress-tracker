@@ -193,7 +193,7 @@ export function WorkoutPage() {
         <SelectTrigger
           aria-label={t("Тренировочный день")}
           aria-labelledby="training-day-label"
-          className={`${focusMode ? "h-12" : "h-10"} w-full min-w-0 bg-card text-foreground`}
+          className={`${focusMode ? "h-12" : "h-11"} w-full min-w-0 bg-card px-3 text-foreground`}
         >
           <SelectValue placeholder={t("Нет активных дней")} />
         </SelectTrigger>
