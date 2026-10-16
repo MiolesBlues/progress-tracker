@@ -13,8 +13,10 @@ type PendingRpc =
   | "delete_archived_program_exercise";
 
 export function pendingRpc(name: PendingRpc, args: Record<string, unknown>) {
-  return (supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => ReturnType<typeof supabase.rpc>)(
-    name,
-    args,
-  );
+  return (
+    supabase.rpc as unknown as (
+      n: string,
+      a: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>
+  )(name, args);
 }
