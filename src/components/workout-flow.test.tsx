@@ -13,6 +13,7 @@ import { userKeys } from "@/lib/queries";
 import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
 import { LanguageProvider } from "@/lib/i18n-provider";
+import { ThemeProvider } from "@/lib/theme";
 import { SettingsDialog } from "@/components/settings-dialog";
 
 vi.mock("@tanstack/react-router", async (original) => ({
@@ -368,9 +369,11 @@ it("keeps the exercise selected with auto-advance off and adds separate historic
   mount(
     <>
       <WorkoutPage />
-      <LanguageProvider>
-        <SettingsDialog />
-      </LanguageProvider>
+      <ThemeProvider>
+        <LanguageProvider>
+          <SettingsDialog />
+        </LanguageProvider>
+      </ThemeProvider>
     </>,
   );
   await ready();
