@@ -740,65 +740,6 @@ function PerSetWorkoutForm({
                     </Button>
                   </div>
                 )}
-                {!focusMode && (
-                  <div className="col-span-5 grid grid-cols-2 gap-2">
-                    <label className="min-w-0 space-y-1 text-xs">
-                      <span>{t("Тип подхода")}</span>
-                      <select
-                        aria-label={t("Тип подхода {number}", { number: index + 1 })}
-                        className="h-10 w-full rounded-md border border-input bg-background px-2"
-                        value={set.set_type}
-                        onChange={(event) =>
-                          update(
-                            {
-                              ...fields,
-                              sets: fields.sets.map((item, i) =>
-                                i === index
-                                  ? {
-                                      ...item,
-                                      set_type: event.target.value as WorkoutSetFields["set_type"],
-                                    }
-                                  : item,
-                              ),
-                            },
-                            "sets",
-                          )
-                        }
-                      >
-                        <option value="working">{t("Рабочий")}</option>
-                        <option value="warmup">{t("Разминочный")}</option>
-                      </select>
-                    </label>
-                    <label className="min-w-0 space-y-1 text-xs">
-                      <span>{t("Тип нагрузки")}</span>
-                      <select
-                        aria-label={t("Тип нагрузки {number}", { number: index + 1 })}
-                        className="h-10 w-full rounded-md border border-input bg-background px-2"
-                        value={set.load_type}
-                        onChange={(event) =>
-                          update(
-                            {
-                              ...fields,
-                              sets: fields.sets.map((item, i) =>
-                                i === index
-                                  ? {
-                                      ...item,
-                                      load_type: event.target
-                                        .value as WorkoutSetFields["load_type"],
-                                    }
-                                  : item,
-                              ),
-                            },
-                            "sets",
-                          )
-                        }
-                      >
-                        <option value="external">{t("Внешнее отягощение")}</option>
-                        <option value="bodyweight">{t("Собственный вес + отягощение")}</option>
-                      </select>
-                    </label>
-                  </div>
-                )}
               </div>
             ))}
           </div>

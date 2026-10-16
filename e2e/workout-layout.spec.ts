@@ -69,3 +69,39 @@ for (const width of [320, 375, 390, 768, 1280]) {
     });
   }
 }
+
+for (const width of [320, 375, 390]) {
+  test(`Обычная строка подхода помещается на экран ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.setContent(`
+      <html><head><style>${productionCss}</style></head>
+      <body>
+        <main class="mx-auto max-w-md px-4">
+          <div id="set-row" class="grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2">
+            <span class="pb-3 text-xs">#1</span>
+            <label class="min-w-0 space-y-1 text-xs"><span>Вес, кг</span><input class="num h-11 min-w-0 w-full px-1" value="40" /></label>
+            <label class="min-w-0 space-y-1 text-xs"><span>Повторения</span><input class="num h-11 min-w-0 w-full px-1" value="10" /></label>
+            <label class="min-w-0 space-y-1 text-xs"><span>RIR</span><input class="num h-11 min-w-0 w-full px-1" value="2" /></label>
+            <div class="flex flex-col gap-1"><button aria-label="Переместить подход вверх">↑</button><button aria-label="Переместить подход вниз">↓</button></div>
+          </div>
+        </main>
+      </body></html>
+    `);
+    const result = await page.evaluate(() => {
+      const row = document.querySelector<HTMLElement>("#set-row")!;
+      const inputs = [...row.querySelectorAll("input")];
+      const boxes = inputs.map((input) => input.getBoundingClientRect());
+      return {
+        viewportWidth: window.innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        row: row.getBoundingClientRect().toJSON(),
+        inputRows: boxes.map(({ top }) => top),
+        inputWidths: boxes.map(({ width }) => width),
+      };
+    });
+    expect(result.documentWidth).toBeLessThanOrEqual(result.viewportWidth);
+    expect(new Set(result.inputRows).size).toBe(1);
+    expect(result.inputWidths.every((inputWidth) => inputWidth > 0)).toBe(true);
+    expect(result.row.right).toBeLessThanOrEqual(result.viewportWidth);
+  });
+}

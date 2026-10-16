@@ -5,6 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authEvent, fake, resetFake } from "@/test/supabase-mock";
 import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { WorkoutPage } from "@/components/workout-page";
+import { perSetDraftKey } from "@/lib/workout-draft";
+import { toISO } from "@/lib/workout";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 const DAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -121,6 +123,8 @@ function addSecondExercise() {
 it("prefills each set independently and submits independent weight, reps, and nullable RIR", async () => {
   mount();
   await screen.findByLabelText("Вес подхода 1");
+  expect(screen.queryByLabelText(/Тип подхода/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/Тип нагрузки/)).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
   const dateDayRow = screen.getByRole("group", { name: "Дата и тренировочный день" });
   expect(dateDayRow.className).toContain("grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)]");
@@ -164,6 +168,13 @@ it("adds a set using the prior matching set as a non-overwriting fallback", asyn
   fireEvent.change(screen.getByLabelText("Вес подхода 4"), { target: { value: "45" } });
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalled());
+  const args = fake.state.saveRpc.mock.calls[0]?.[0];
+  expect((args?.["_sets"] as { set_type: string; load_type: string }[])[3]).toMatchObject({
+    set_type: "working",
+    load_type: "external",
+  });
 });
 
 it("persists a frozen retry and sends identical set values after a lost response", async () => {
@@ -197,14 +208,46 @@ it("restores the user's per-set draft after remount without replacing neighborin
   expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("0");
 });
 
-it("allows explicit warm-up and bodyweight-load selection on a per-set basis", async () => {
+it("hides set/load type controls and preserves existing metadata while editing a set", async () => {
+  const date = toISO(new Date());
+  localStorage.setItem(
+    perSetDraftKey(USER, EXERCISE),
+    JSON.stringify({
+      version: 2,
+      userId: USER,
+      exerciseId: EXERCISE,
+      id: randomUUID(),
+      fields: {
+        date,
+        notes: "",
+        sets: [
+          {
+            id: randomUUID(),
+            position: 1,
+            weight: "20",
+            reps: "8",
+            rir: "2",
+            set_type: "warmup",
+            load_type: "bodyweight",
+          },
+        ],
+      },
+      recordedSetIds: [],
+      dirty: { date: false, sets: true, notes: false },
+      operation: null,
+    }),
+  );
   mount();
   await screen.findByLabelText("Вес подхода 1");
-  fireEvent.change(screen.getByLabelText("Тип подхода 2"), { target: { value: "warmup" } });
-  fireEvent.change(screen.getByLabelText("Тип нагрузки 3"), { target: { value: "bodyweight" } });
-  expect(screen.getByLabelText("Доп. вес, кг")).toBeInTheDocument();
-  expect(screen.getByLabelText("Тип подхода 2")).toHaveValue("warmup");
-  expect(screen.getByLabelText("Тип нагрузки 3")).toHaveValue("bodyweight");
+  expect(screen.queryByLabelText(/Тип подхода/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/Тип нагрузки/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "22.5" } });
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalled());
+  const args = fake.state.saveRpc.mock.calls[0]?.[0];
+  expect(
+    (args?.["_sets"] as { weight: string; set_type: string; load_type: string }[])[0],
+  ).toMatchObject({ weight: "22.5", set_type: "warmup", load_type: "bodyweight" });
 });
 
 it("starts a separate Focus Mode and hides the preparation controls without losing the draft", async () => {
