@@ -99,7 +99,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(()=>{try{const s=localStorage.getItem("app:theme:v1");const m=s==="light"||s==="dark"?s:"system";const d=m==="dark"||(m==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);const r=document.documentElement;r.dataset.theme=d?"dark":"light";r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";const t=document.querySelector('meta[name="theme-color"]');if(t)t.content=d?"#16171c":"#f5f7f2"}catch(e){}})();`,
+            __html: `(()=>{try{const s=localStorage.getItem("app:theme:v1");const m=s==="light"||s==="dark"?s:"system";const d=m==="dark"||(m==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);const r=document.documentElement;r.dataset.theme=d?"dark":"light";r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";const t=document.querySelector('meta[name="theme-color"]');if(t)t.content=d?"#16171c":"#F7FAFF"}catch(e){}})();`,
           }}
         />
         <HeadContent />
