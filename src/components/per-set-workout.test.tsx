@@ -122,6 +122,10 @@ it("prefills each set independently and submits independent weight, reps, and nu
   mount();
   await screen.findByLabelText("Вес подхода 1");
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  expect(
+    screen.queryByText(/План 3×6–8|Предыдущая тренировка загружена по подходам/),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Прошлые результаты по подходам")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("8");
   expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("");
 
@@ -213,6 +217,10 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
   expect(screen.queryByLabelText("Вес подхода 1")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   expect(screen.getByRole("region", { name: "Focus Mode" })).toHaveTextContent("Жим");
+  expect(
+    screen.queryByText(/План 3×6–8|Предыдущая тренировка загружена по подходам/),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Прошлые результаты по подходам")).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
     target: { value: "1" },
   });

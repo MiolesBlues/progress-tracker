@@ -407,11 +407,6 @@ function PerSetWorkoutForm({
 
   const fields = draft.fields;
   const locked = saving || !!draft.operation || blocked;
-  const plan =
-    exercise.target_sets !== null && exercise.target_reps
-      ? `${exercise.target_sets}×${exercise.target_reps.replace(/-/g, "–")}`
-      : "";
-  const previous = lastResult.data;
   const activeSet = fields.sets[activeSetIndex];
   const visibleSets = focusMode
     ? fields.sets[activeSetIndex]
@@ -460,24 +455,6 @@ function PerSetWorkoutForm({
             "Не удалось загрузить предыдущую тренировку. Черновик сохранён; можно заполнить форму вручную.",
           )}
         </LoadError>
-      )}
-      {lastResult.isSuccess && lastResult.isFetchedAfterMount && !lastResult.isFetching && (
-        <div className="space-y-2 text-xs text-muted-foreground">
-          <p>
-            {plan && <>{t("План {plan}", { plan })} · </>}
-            {previous ? t("Предыдущая тренировка загружена по подходам") : t("Истории нет")}
-          </p>
-          {previous?.sets?.length ? (
-            <ul aria-label={t("Прошлые результаты по подходам")} className="space-y-1">
-              {previous.sets.map((set) => (
-                <li key={set.position}>
-                  {t("Подход {number}", { number: set.position })}: {set.weight} {t("кг")} ×{" "}
-                  {set.reps} · RIR {set.rir ?? "—"}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
       )}
       {error && (
         <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
