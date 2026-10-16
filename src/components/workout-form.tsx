@@ -38,7 +38,7 @@ export function WorkoutForm({
   onDateChange,
   onSaved,
 }: WorkoutFormProps) {
-  const { t, language } = useI18n();
+  const { t, language, date } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
   const qc = useQueryClient();
   const defaults = (): WorkoutFields => {
@@ -259,7 +259,7 @@ export function WorkoutForm({
         <div role="status" className="space-y-2 text-sm text-muted-foreground">
           <p>
             {t("Есть незавершённый черновик за {date}. Текущая дата сохранена.", {
-              date: initial.other.fields.date,
+              date: date(initial.other.fields.date),
             })}
           </p>
           <Button
@@ -270,7 +270,7 @@ export function WorkoutForm({
               if (initial.other) change("date", initial.other.fields.date);
             }}
           >
-            {t("Открыть черновик за {date}", { date: initial.other.fields.date })}
+            {t("Открыть черновик за {date}", { date: date(initial.other.fields.date) })}
           </Button>
         </div>
       )}

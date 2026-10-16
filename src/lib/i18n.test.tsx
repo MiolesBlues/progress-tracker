@@ -1,6 +1,8 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { renderToString } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import { authEvent, resetFake } from "@/test/supabase-mock";
 import { SessionProvider } from "./session";
 import {
@@ -70,13 +72,16 @@ it("persists each account's language through reload and never borrows another ac
   act(() => authEvent("SIGNED_IN", "A"));
   fireEvent.click(screen.getByRole("button", { name: "English" }));
   expect(readLanguage("A")).toBe("en");
+  expect(document.cookie).toContain("app_display_language=en");
   act(() => authEvent("SIGNED_OUT", null));
   expect(screen.getByRole("heading")).toHaveTextContent("Программа");
+  expect(document.cookie).toContain("app_display_language=ru");
   act(() => authEvent("SIGNED_IN", "B"));
   expect(screen.getByRole("heading")).toHaveTextContent("Программа");
   expect(readLanguage("B")).toBe("ru");
   act(() => authEvent("SIGNED_IN", "A"));
   expect(screen.getByRole("heading")).toHaveTextContent("Program");
+  expect(document.cookie).toContain("app_display_language=en");
   cleanup();
   client.clear();
   mount();
@@ -96,4 +101,32 @@ it("translates validation errors and handles unavailable storage safely", () => 
   localStorage.setItem("app:language:v1:existing", "ru");
   rememberSignupLanguage("existing", "en");
   expect(readLanguage("existing")).toBe("ru");
+});
+
+it("hydrates the same Russian markup before applying a saved English guest preference", async () => {
+  localStorage.setItem("app:language:v1:guest", "en");
+  client = new QueryClient();
+  const tree = (
+    <QueryClientProvider client={client}>
+      <SessionProvider onIdentityChange={() => {}}>
+        <LanguageProvider>
+          <Probe />
+        </LanguageProvider>
+      </SessionProvider>
+    </QueryClientProvider>
+  );
+  const container = document.createElement("div");
+  container.innerHTML = renderToString(tree);
+  expect(container.querySelector("h1")).toHaveTextContent("Программа");
+  document.body.append(container);
+  const onRecoverableError = vi.fn();
+  let root: ReturnType<typeof hydrateRoot>;
+  await act(async () => {
+    root = hydrateRoot(container, tree, { onRecoverableError });
+  });
+  expect(container.querySelector("h1")).toHaveTextContent("Program");
+  expect(document.cookie).toContain("app_display_language=en");
+  expect(onRecoverableError).not.toHaveBeenCalled();
+  act(() => root.unmount());
+  container.remove();
 });

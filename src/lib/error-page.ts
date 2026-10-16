@@ -1,9 +1,12 @@
-export function renderErrorPage(): string {
+import { translate, type Language } from "./i18n";
+
+export function renderErrorPage(language: Language = "ru"): string {
+  const t = (key: Parameters<typeof translate>[1]) => translate(language, key);
   return `<!doctype html>
-<html lang="ru">
+<html lang="${language}">
   <head>
     <meta charset="utf-8" />
-    <title>Не удалось загрузить страницу — Прогресс Трекер</title>
+    <title>${t("Не удалось загрузить страницу")} — ${t("Прогресс Трекер")}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       * { box-sizing: border-box; }
@@ -19,13 +22,24 @@ export function renderErrorPage(): string {
   </head>
   <body>
     <div class="card">
-      <h1>Не удалось загрузить страницу</h1>
-      <p>Повторите загрузку или вернитесь на главную. Сохранённые тренировки останутся в вашем аккаунте.</p>
+      <h1>${t("Не удалось загрузить страницу")}</h1>
+      <p>${t("Повторите загрузку или вернитесь на главную. Сохранённые тренировки останутся в вашем аккаунте.")}</p>
       <div class="actions">
-        <button class="primary" onclick="location.reload()">Повторить</button>
-        <a class="secondary" href="/">На главную</a>
+        <button class="primary" onclick="location.reload()">${t("Повторить")}</button>
+        <a class="secondary" href="/">${t("На главную")}</a>
       </div>
     </div>
   </body>
 </html>`;
+}
+
+export function errorPageResponse(language: Language): Response {
+  return new Response(renderErrorPage(language), {
+    status: 500,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "content-language": language,
+      "cache-control": "no-store",
+    },
+  });
 }

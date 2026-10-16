@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useSession } from "./session";
 import { LanguageContext, readLanguage, STORAGE_PREFIX, translate, type Language } from "./i18n";
+import { DISPLAY_LANGUAGE_COOKIE } from "./ssr-language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { userId } = useSession();
@@ -31,6 +32,12 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [userId]);
   useEffect(() => {
     document.documentElement.lang = language;
+    try {
+      // Only the active display preference crosses the SSR boundary, never auth or user IDs.
+      document.cookie = `${DISPLAY_LANGUAGE_COOKIE}=${language}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
+    } catch {
+      // With cookies blocked the standalone error page uses Accept-Language, then Russian.
+    }
     const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (manifest)
       manifest.href = language === "en" ? "/manifest.en.webmanifest" : "/manifest.webmanifest";

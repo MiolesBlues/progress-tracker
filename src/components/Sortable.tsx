@@ -18,6 +18,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import type { ReactNode } from "react";
+import { useI18n } from "@/lib/i18n";
 
 /** Vertical drag-and-drop list (touch-friendly). Calls onReorder with the new id order. */
 export function SortableList<T extends { id: string }>({
@@ -35,6 +36,9 @@ export function SortableList<T extends { id: string }>({
   draggingClassName?: string;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
+  const position = (id: string | number) => items.findIndex((item) => item.id === String(id)) + 1;
+  const values = (id: string | number) => ({ position: position(id), count: items.length });
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
@@ -46,7 +50,32 @@ export function SortableList<T extends { id: string }>({
     onReorder(arrayMove(ids, ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id))));
   }
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={end}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={end}
+      accessibility={{
+        screenReaderInstructions: {
+          draggable: t(
+            "Для перемещения нажмите пробел или Enter. Используйте стрелки для выбора позиции. Снова нажмите пробел или Enter, чтобы завершить, или Escape, чтобы отменить.",
+          ),
+        },
+        announcements: {
+          onDragStart: ({ active }) =>
+            t("Выбран элемент на позиции {position} из {count}.", values(active.id)),
+          onDragOver: ({ over }) =>
+            over
+              ? t("Элемент перемещён на позицию {position} из {count}.", values(over.id))
+              : t("Элемент находится вне области перемещения."),
+          onDragEnd: ({ over }) =>
+            over
+              ? t("Перемещение завершено. Позиция {position} из {count}.", values(over.id))
+              : t("Перемещение завершено. Позиция не изменилась."),
+          onDragCancel: ({ active }) =>
+            t("Перемещение отменено. Исходная позиция {position} из {count}.", values(active.id)),
+        },
+      }}
+    >
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
         <ul className="space-y-2">
           {items.map((it) => (
@@ -54,7 +83,7 @@ export function SortableList<T extends { id: string }>({
               key={it.id}
               id={it.id}
               disabled={disabled}
-              handleLabel={handleLabel?.(it) ?? "Перетащить"}
+              handleLabel={handleLabel?.(it) ?? t("Перетащить")}
               {...(draggingClassName ? { draggingClassName } : {})}
             >
               {(h) => render(it, h)}
@@ -79,9 +108,11 @@ function Item({
   draggingClassName?: string;
   disabled: boolean;
 }) {
+  const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled,
+    attributes: { roleDescription: t("Перемещаемый элемент") },
   });
   const handle = (
     <button
@@ -89,6 +120,7 @@ function Item({
       {...attributes}
       {...listeners}
       aria-label={handleLabel}
+      data-sortable-dragging={isDragging ? "true" : undefined}
       disabled={disabled}
       className="touch-none cursor-grab p-1.5 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
     >

@@ -10,6 +10,24 @@ export const english = {
   "Прогресс Трекер": "Progress Tracker",
   Настройки: "Settings",
   Закрыть: "Close",
+  Уведомления: "Notifications",
+  "Закрыть уведомление": "Close notification",
+  Перетащить: "Drag",
+  "Перемещаемый элемент": "Draggable item",
+  "Для перемещения нажмите пробел или Enter. Используйте стрелки для выбора позиции. Снова нажмите пробел или Enter, чтобы завершить, или Escape, чтобы отменить.":
+    "To pick up an item, press Space or Enter. Use the arrow keys to choose a position. Press Space or Enter again to drop, or Escape to cancel.",
+  "Выбран элемент на позиции {position} из {count}.":
+    "Picked up item at position {position} of {count}.",
+  "Элемент перемещён на позицию {position} из {count}.":
+    "Item moved to position {position} of {count}.",
+  "Элемент находится вне области перемещения.": "Item is outside the drop area.",
+  "Перемещение завершено. Позиция {position} из {count}.":
+    "Item dropped at position {position} of {count}.",
+  "Перемещение завершено. Позиция не изменилась.": "Item dropped. Position unchanged.",
+  "Перемещение отменено. Исходная позиция {position} из {count}.":
+    "Drag cancelled. Original position {position} of {count}.",
+  "Повторите загрузку или вернитесь на главную. Сохранённые тренировки останутся в вашем аккаунте.":
+    "Reload the page or return home. Saved workouts will remain in your account.",
   "Язык интерфейса": "Interface language",
   "Управление данными": "Data management",
   "Разрешить полное удаление": "Enable permanent deletion",
@@ -453,6 +471,20 @@ export const LanguageContext = createContext<{
   setLanguage: (language: Language) => void;
 } | null>(null);
 
+export function formatDisplayDate(iso: string, language: Language) {
+  const [year, month, day] = iso.split("-").map(Number);
+  const parsed = new Date(year!, month! - 1, day!);
+  // Old drafts can contain incomplete input; displaying them must not throw or normalize it.
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(iso) ||
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month! - 1 ||
+    parsed.getDate() !== day
+  )
+    return iso;
+  return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-GB").format(parsed);
+}
+
 export function useI18n() {
   const context = useContext(LanguageContext);
   const language = context?.language ?? "ru";
@@ -463,12 +495,7 @@ export function useI18n() {
       translate(language, key, values),
     number: (value: number, maximumFractionDigits = 1) =>
       value.toLocaleString(language === "ru" ? "ru-RU" : "en-GB", { maximumFractionDigits }),
-    date: (iso: string) => {
-      const [year, month, day] = iso.split("-").map(Number);
-      return new Intl.DateTimeFormat(language === "ru" ? "ru-RU" : "en-GB").format(
-        new Date(year!, month! - 1, day!),
-      );
-    },
+    date: (iso: string) => formatDisplayDate(iso, language),
   };
 }
 

@@ -13,7 +13,7 @@
 
 # Project rules
 
-- UI is Russian-only, mobile-first, dark single theme — target audience is iPhone users.
+- UI supports Russian and English through the existing i18n dictionary, including accessibility labels; user-authored names/notes are never translated. Mobile-first, dark single theme — target audience is iPhone users.
 - Data access goes through the browser client with strict per-user RLS (`auth.uid() = user_id`); no shared/global training data — users must be fully isolated.
 - The user creates 1–7 personal active days via `setup_program` after signup. Days use `program_days.id`, exercises use `day_id`. Upper/Lower is an optional four-day template, never a fixed domain model; there is no automatic signup seed trigger after migration 0002.
 - Signed-in pages live under `src/routes/_authenticated/` (client-only gate) — session is in localStorage.

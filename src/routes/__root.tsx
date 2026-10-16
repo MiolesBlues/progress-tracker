@@ -118,13 +118,13 @@ function RootComponent() {
         <LanguageProvider>
           <LocalizedDocumentTitle />
           <Outlet />
+          <Toaster
+            position="bottom-center"
+            offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+            mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+          />
         </LanguageProvider>
       </SessionProvider>
-      <Toaster
-        position="bottom-center"
-        offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-        mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-      />
     </QueryClientProvider>
   );
 }

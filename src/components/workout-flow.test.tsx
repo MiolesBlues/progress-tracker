@@ -1027,6 +1027,42 @@ it("keeps the session date on auto-advance past a pristine draft of another date
   expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
 });
 
+it("displays an older English draft as en-GB while preserving ISO storage and save payload", async () => {
+  localStorage.setItem(`app:language:v1:${A}`, "en");
+  const old = newDraft(A, EX, {
+    date: "2026-10-01",
+    weight: "22.5",
+    reps: ["5", "4"],
+    rir: "3",
+    notes: "Моя заметка — Push",
+  });
+  old.dirty.notes = true;
+  writeDraft(old);
+  mount(
+    <LanguageProvider>
+      <WorkoutPage />
+    </LanguageProvider>,
+  );
+  const open = await screen.findByRole("button", { name: "Open draft for 01/10/2026" });
+  expect(
+    screen.getByText("There is an unfinished draft for 01/10/2026. The current date was kept."),
+  ).toBeVisible();
+  expect(readDraft(A, EX)).toEqual(old);
+  fireEvent.click(open);
+  expect(screen.getByLabelText("Date")).toHaveValue("2026-10-01");
+  expect(screen.getByLabelText("Notes")).toHaveValue("Моя заметка — Push");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
+  expect(fake.state.saveRpc.mock.calls[0]![0]).toMatchObject({
+    _id: old.id,
+    _performed_on: "2026-10-01",
+    _weight: 22.5,
+    _reps: [5, 4],
+    _rir: 3,
+    _notes: "Моя заметка — Push",
+  });
+});
+
 it.each([false, true])(
   "restores an older edited draft explicitly, preserving both dates and pending=%s",
   async (pending) => {
@@ -1052,7 +1088,7 @@ it.each([false, true])(
     const current = readDraft(A, EX2)!;
     expect(current.id).not.toBe(old.id);
     expect(readDraft(A, EX2, "2026-10-01")).toEqual(old);
-    fireEvent.click(screen.getByRole("button", { name: "Открыть черновик за 2026-10-01" }));
+    fireEvent.click(screen.getByRole("button", { name: "Открыть черновик за 01.10.2026" }));
     expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("22,5");
     expect(screen.getByLabelText("Подход 2")).toHaveValue("4");
