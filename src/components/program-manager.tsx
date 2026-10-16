@@ -134,10 +134,10 @@ export function ProgramManager() {
     try {
       const result =
         kind === "day"
-          ? await supabase.rpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
-          : await supabase
-              .rpc("delete_archived_program_exercise", { _exercise_id: id })
-              .abortSignal(signal);
+          ? await pendingRpc("delete_archived_program_day", { _day_id: id }).abortSignal(signal)
+          : await pendingRpc("delete_archived_program_exercise", { _exercise_id: id }).abortSignal(
+              signal,
+            );
       if (!isCurrent()) return false;
       if (result.error || result.data !== true) throw new Error("Deletion failed");
       if (kind === "day") {
@@ -562,8 +562,9 @@ export function ProgramManager() {
           handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
           onReorder={(ids) =>
             void run(() =>
-              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids })
-                .abortSignal(signal),
+              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids }).abortSignal(
+                signal,
+              ),
             )
           }
           render={(ex, handle) => compactRow(ex, handle)}
