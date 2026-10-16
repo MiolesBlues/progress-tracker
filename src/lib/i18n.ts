@@ -92,6 +92,14 @@ export const english = {
     "You can change the number of days later in Program.",
   "С чего начать?": "Where would you like to start?",
   "Пустая программа": "Empty program",
+  "Загружаем готовые шаблоны…": "Loading ready-made templates…",
+  "Готовые шаблоны сейчас недоступны. Можно создать пустую программу.":
+    "Ready-made templates are currently unavailable. You can create an empty program.",
+  "Для выбранного числа дней нет готовых шаблонов. Можно создать пустую программу.":
+    "There are no ready-made templates for the selected number of days. You can create an empty program.",
+  "Для семидневного режима подтвердите лёгкий день": "Confirm the light day for the seven-day mode",
+  "Я выбираю ежедневный режим и понимаю, что седьмой день лёгкий":
+    "I choose daily training and understand that day seven is light",
   "Сами добавите упражнения в каждый день.": "Add exercises to each day yourself.",
   "Шаблон Upper/Lower": "Upper/Lower template",
   "4 дня, 25 упражнений со стартовыми весами. Всё редактируется.":
@@ -185,6 +193,7 @@ export const english = {
     "Each field is one set. Fill or explicitly remove an empty set.",
   "Подход {number}": "Set {number}",
   "RIR (необязательно)": "RIR (optional)",
+  "RIR {min}–{max}": "RIR {min}–{max}",
   Заметки: "Notes",
   "Сохранение…": "Saving…",
   "Повторить сохранение": "Retry save",

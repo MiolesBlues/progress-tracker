@@ -401,11 +401,19 @@ export function ProgramManager() {
     );
 
   function summary(ex: Exercise) {
-    if (ex.target_sets && ex.target_reps)
-      return `${ex.target_sets} × ${ex.target_reps.replace("-", "–")}`;
-    if (ex.target_sets) return t("{count} подх.", { count: ex.target_sets });
-    if (ex.target_reps) return t("{count} повт.", { count: ex.target_reps.replace("-", "–") });
-    return t("Цель не задана");
+    const goal =
+      ex.target_sets && ex.target_reps
+        ? `${ex.target_sets} × ${ex.target_reps.replace("-", "–")}`
+        : ex.target_sets
+          ? t("{count} подх.", { count: ex.target_sets })
+          : ex.target_reps
+            ? t("{count} повт.", { count: ex.target_reps.replace("-", "–") })
+            : t("Цель не задана");
+    const rir =
+      ex.target_rir_min !== null && ex.target_rir_max !== null
+        ? t("RIR {min}–{max}", { min: ex.target_rir_min, max: ex.target_rir_max })
+        : null;
+    return rir ? `${goal} · ${rir}` : goal;
   }
   function compactRow(ex: Exercise, handle?: ReactNode) {
     return (

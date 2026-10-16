@@ -14,6 +14,8 @@ export type Exercise = {
   position: number;
   target_sets: number | null;
   target_reps: string | null;
+  target_rir_min: number | null;
+  target_rir_max: number | null;
   working_weight: number | null;
   example_reps: number[] | null;
   archived_at: string | null;
@@ -59,7 +61,7 @@ export const programQuery = (userId: string) =>
           supabase
             .from("program_exercises")
             .select(
-              "id, day_id, name, position, target_sets, target_reps, working_weight, example_reps, archived_at",
+              "id, day_id, name, position, target_sets, target_reps, target_rir_min, target_rir_max, working_weight, example_reps, archived_at",
               { count: "exact" },
             )
             .eq("user_id", userId)
@@ -73,6 +75,8 @@ export const programQuery = (userId: string) =>
       return data.map((e) => ({
         ...e,
         working_weight: e.working_weight === null ? null : Number(e.working_weight),
+        target_rir_min: e.target_rir_min === null ? null : Number(e.target_rir_min),
+        target_rir_max: e.target_rir_max === null ? null : Number(e.target_rir_max),
       }));
     },
   });

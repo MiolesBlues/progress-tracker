@@ -19,6 +19,9 @@ export async function mockSupabase(page: Page) {
     deleteReplyStatus: null as number | null,
     failReorder: false,
     failPatch: false,
+    trainingLibraryAvailable: true,
+    failNextTemplateApply: false,
+    loseNextTemplateApplyResponse: false,
     archiveDayOnInsert: false,
     delayProgramUpdate: null as { id: string; promise: Promise<void> } | null,
     saveCalls: [] as string[],
@@ -91,6 +94,72 @@ export async function mockSupabase(page: Page) {
     if (url.pathname.includes("/rpc/")) {
       const args = json ?? {};
       state.rpcCalls.push({ name: url.pathname.split("/").at(-1)!, userId: id, args });
+      if (url.pathname.endsWith("/list_training_templates")) {
+        if (!state.trainingLibraryAvailable)
+          return respond({ code: "PGRST202", message: "Function not found" }, 404);
+        const count = Number(args["_days_per_week"]);
+        return respond([
+          {
+            template_key: `strength_${count}d_v1`,
+            version: 1,
+            title_ru: `Шаблон ${count} дней`,
+            days_per_week: count,
+            metadata: {},
+          },
+        ]);
+      }
+      if (url.pathname.endsWith("/apply_training_template")) {
+        if (state.failNextTemplateApply) {
+          state.failNextTemplateApply = false;
+          return respond({ code: "22023", message: "Simulated template failure" }, 400);
+        }
+        const names = args["_names"] as string[];
+        const applicationId = String(args["_application_id"]);
+        const templateKey = String(args["_template_key"]);
+        if (
+          rows["program_days"]!.some(
+            (row) => row["user_id"] === id && row["template_application_id"] === applicationId,
+          )
+        )
+          return respond(null);
+        names.forEach((name, position) => {
+          const dayId = randomUUID();
+          rows["program_days"]!.push({
+            id: dayId,
+            user_id: id,
+            name,
+            position,
+            archived_at: null,
+            created_at: createdAt(),
+            template_application_id: applicationId,
+            template_day_key: `${templateKey}_d${String(position + 1).padStart(2, "0")}`,
+          });
+          rows["program_exercises"]!.push({
+            id: randomUUID(),
+            user_id: id,
+            day_id: dayId,
+            day: `${templateKey}_d${String(position + 1).padStart(2, "0")}`,
+            position: 0,
+            name: `Упражнение ${position + 1}`,
+            working_weight: null,
+            target_sets: 3,
+            target_reps: "8-12",
+            target_rir_min: 2,
+            target_rir_max: 3,
+            archived_at: null,
+            created_at: createdAt(),
+            template_application_id: applicationId,
+            template_slot_key: `${templateKey}_d${String(position + 1).padStart(2, "0")}_e01`,
+            template_exercise_key: `exercise_${position + 1}`,
+          });
+        });
+        if (state.loseNextTemplateApplyResponse) {
+          state.loseNextTemplateApplyResponse = false;
+          await route.abort("failed");
+          return;
+        }
+        return respond(null);
+      }
       if (url.pathname.endsWith("/setup_program")) {
         (args["_names"] as string[]).forEach((name, position) =>
           rows["program_days"]!.push({

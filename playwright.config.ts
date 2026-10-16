@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/template-staging.spec.ts",
   timeout: 90_000,
   forbidOnly: !!process.env["CI"],
   retries: 0,

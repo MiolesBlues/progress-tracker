@@ -23,6 +23,8 @@ const exercise = (id: string, day_id: string | null, position = 0): Row => ({
   archived_at: null,
   target_sets: 3,
   target_reps: "8-12",
+  target_rir_min: null,
+  target_rir_max: null,
   working_weight: 50,
   example_reps: null,
 });
@@ -126,6 +128,17 @@ it("adds a named day after registration, renames, archives and restores it", asy
       .filter((call) => call.operation === "update")
       .every((call) => call.filters.user_id === "A"),
   ).toBe(true);
+});
+
+it("shows the target RIR copied from a template in the exercise summary", async () => {
+  const firstDayId = "Первый";
+  const firstDay = day(firstDayId);
+  fake.state.rows.program_days = [firstDay];
+  fake.state.rows.program_exercises = [
+    { ...exercise("Присед", firstDayId), target_rir_min: 2, target_rir_max: 3 },
+  ];
+  mount();
+  expect(await screen.findByText("3 × 8–12 · RIR 2–3")).toBeInTheDocument();
 });
 
 it("reorders the first day to the last with the keyboard handle and keeps the saved position", async () => {

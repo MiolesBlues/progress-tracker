@@ -35,6 +35,8 @@ const exercise = (id: string, user_id = A): Row => ({
   position: id === EX ? 0 : 1,
   target_sets: 4,
   target_reps: "6-8",
+  target_rir_min: null,
+  target_rir_max: null,
   working_weight: 30,
   example_reps: [8, 8, 7, 6],
   archived_at: null,

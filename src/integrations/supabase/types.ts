@@ -21,6 +21,8 @@ export type Database = {
           id: string
           name: string
           position: number
+          template_application_id: string | null
+          template_day_key: string | null
           user_id: string
         }
         Insert: {
@@ -29,6 +31,8 @@ export type Database = {
           id?: string
           name: string
           position?: number
+          template_application_id?: string | null
+          template_day_key?: string | null
           user_id?: string
         }
         Update: {
@@ -37,6 +41,8 @@ export type Database = {
           id?: string
           name?: string
           position?: number
+          template_application_id?: string | null
+          template_day_key?: string | null
           user_id?: string
         }
         Relationships: []
@@ -53,8 +59,13 @@ export type Database = {
           position: number
           target_reps: string | null
           target_sets: number | null
+          target_rir_min: number | null
+          target_rir_max: number | null
           user_id: string
           working_weight: number | null
+          template_application_id: string | null
+          template_slot_key: string | null
+          template_exercise_key: string | null
         }
         Insert: {
           archived_at?: string | null
@@ -67,8 +78,13 @@ export type Database = {
           position?: number
           target_reps?: string | null
           target_sets?: number | null
+          target_rir_min?: number | null
+          target_rir_max?: number | null
           user_id?: string
           working_weight?: number | null
+          template_application_id?: string | null
+          template_slot_key?: string | null
+          template_exercise_key?: string | null
         }
         Update: {
           archived_at?: string | null
@@ -81,8 +97,13 @@ export type Database = {
           position?: number
           target_reps?: string | null
           target_sets?: number | null
+          target_rir_min?: number | null
+          target_rir_max?: number | null
           user_id?: string
           working_weight?: number | null
+          template_application_id?: string | null
+          template_slot_key?: string | null
+          template_exercise_key?: string | null
         }
         Relationships: [
           {
@@ -161,6 +182,36 @@ export type Database = {
           },
         ]
       }
+      training_exercise_catalog: {
+        Row: { exercise_key: string; name_ru: string; metadata: Json; content_sha256: string; created_at: string }
+        Insert: { exercise_key: string; name_ru: string; metadata?: Json; content_sha256: string; created_at?: string }
+        Update: { exercise_key?: string; name_ru?: string; metadata?: Json; content_sha256?: string; created_at?: string }
+        Relationships: []
+      }
+      training_templates: {
+        Row: { template_key: string; version: number; title_ru: string; days_per_week: number; metadata: Json; content_sha256: string; created_at: string }
+        Insert: { template_key: string; version: number; title_ru: string; days_per_week: number; metadata?: Json; content_sha256: string; created_at?: string }
+        Update: { template_key?: string; version?: number; title_ru?: string; days_per_week?: number; metadata?: Json; content_sha256?: string; created_at?: string }
+        Relationships: []
+      }
+      training_template_days: {
+        Row: { template_key: string; version: number; day_key: string; day_order: number; weekday: number; session_type: string; title_ru: string; metadata: Json }
+        Insert: { template_key: string; version: number; day_key: string; day_order: number; weekday: number; session_type: string; title_ru: string; metadata?: Json }
+        Update: { template_key?: string; version?: number; day_key?: string; day_order?: number; weekday?: number; session_type?: string; title_ru?: string; metadata?: Json }
+        Relationships: []
+      }
+      training_template_slots: {
+        Row: { template_key: string; version: number; day_key: string; slot_key: string; exercise_key: string; slot_order: number; prescription: Json }
+        Insert: { template_key: string; version: number; day_key: string; slot_key: string; exercise_key: string; slot_order: number; prescription: Json }
+        Update: { template_key?: string; version?: number; day_key?: string; slot_key?: string; exercise_key?: string; slot_order?: number; prescription?: Json }
+        Relationships: []
+      }
+      training_template_applications: {
+        Row: { application_id: string; user_id: string; template_key: string; version: number; created_at: string }
+        Insert: { application_id: string; user_id?: string; template_key: string; version: number; created_at?: string }
+        Update: { application_id?: string; user_id?: string; template_key?: string; version?: number; created_at?: string }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -202,6 +253,18 @@ export type Database = {
       setup_program: {
         Args: { _names: string[]; _template?: string }
         Returns: undefined
+      }
+      apply_training_template: {
+        Args: { _application_id: string; _template_key: string; _version: number; _names: string[]; _daily_opt_in?: boolean }
+        Returns: undefined
+      }
+      list_training_templates: {
+        Args: { _days_per_week: number; _experience?: string | null }
+        Returns: { template_key: string; version: number; title_ru: string; days_per_week: number; metadata: Json }[]
+      }
+      upsert_training_library: {
+        Args: { _bundle: Json; _content_sha256: string }
+        Returns: Json
       }
     }
     Enums: {

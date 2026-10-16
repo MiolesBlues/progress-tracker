@@ -24,6 +24,8 @@ const exercise = (
   position: 0,
   target_sets: null,
   target_reps: null,
+  target_rir_min: null,
+  target_rir_max: null,
   working_weight: null,
   example_reps: null,
 });
