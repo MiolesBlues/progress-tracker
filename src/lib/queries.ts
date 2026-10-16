@@ -128,10 +128,36 @@ export const entriesQuery = (
         throw new Error(
           "В истории есть некорректные старые результаты. Расчёты остановлены; данные требуют отдельной проверки.",
         );
+      const setsByEntry = new Map<string, NonNullable<HistoryEntry["sets"]>>();
+      const ids = data.map((entry) => entry.id);
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const { data: setRows, error } = await supabase
+          .from("workout_entry_sets")
+          .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type")
+          .eq("user_id", userId)
+          .in("workout_entry_id", ids.slice(offset, offset + 100))
+          .order("workout_entry_id")
+          .order("position")
+          .abortSignal(signal);
+        if (error) throw error;
+        for (const row of setRows ?? []) {
+          const sets = setsByEntry.get(row.workout_entry_id) ?? [];
+          sets.push({
+            position: row.position,
+            weight: Number(row.weight),
+            reps: row.reps,
+            rir: row.rir === null ? null : Number(row.rir),
+            set_type: row.set_type,
+            load_type: row.load_type,
+          });
+          setsByEntry.set(row.workout_entry_id, sets);
+        }
+      }
       return data.map((e) => ({
         ...e,
         weight: Number(e.weight),
         rir: e.rir === null ? null : Number(e.rir),
+        ...(setsByEntry.has(e.id) ? { sets: setsByEntry.get(e.id)! } : {}),
       }));
     },
   });
@@ -199,7 +225,7 @@ export const lastEntryQuery = (
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
-        .select("performed_on, weight, reps, rir")
+        .select("id, performed_on, weight, reps, rir")
         .eq("user_id", userId)
         .eq("exercise_id", exerciseId)
         .lte("performed_on", onOrBefore)
@@ -210,6 +236,22 @@ export const lastEntryQuery = (
         .abortSignal(signal)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!data) return data;
+      const { data: sets, error: setsError } = await supabase
+        .from("workout_entry_sets")
+        .select("position, weight, reps, rir, set_type, load_type")
+        .eq("user_id", userId)
+        .eq("workout_entry_id", data.id)
+        .order("position")
+        .abortSignal(signal);
+      if (setsError) throw setsError;
+      return {
+        ...data,
+        sets: (sets ?? []).map((set) => ({
+          ...set,
+          weight: String(set.weight),
+          rir: set.rir === null ? null : String(set.rir),
+        })),
+      };
     },
   });

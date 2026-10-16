@@ -3,7 +3,7 @@ import { Fragment, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
-import { toISO } from "@/lib/workout";
+import { effectiveSets, toISO, workoutMetrics } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
 import { useI18n, setsCount } from "@/lib/i18n";
@@ -198,8 +198,14 @@ function ExerciseEntries({
     b.created_at.localeCompare(a.created_at) ||
     b.id.localeCompare(a.id);
   const records = [...filtered].sort((a, b) => {
-    if (sort === "weight-desc") return b.weight - a.weight || recentOrder(a, b);
-    if (sort === "weight-asc") return a.weight - b.weight || recentOrder(a, b);
+    if (sort === "weight-desc")
+      return (
+        workoutMetrics(b).maxWorkingWeight - workoutMetrics(a).maxWorkingWeight || recentOrder(a, b)
+      );
+    if (sort === "weight-asc")
+      return (
+        workoutMetrics(a).maxWorkingWeight - workoutMetrics(b).maxWorkingWeight || recentOrder(a, b)
+      );
     return recentOrder(a, b);
   });
   const pages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
@@ -308,8 +314,10 @@ function ExerciseEntries({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{exerciseName}</span>
                   <span className="block truncate text-xs text-muted-foreground tabular-nums">
-                    {setsCount(entry.reps.length, language)} ·{" "}
-                    {t("Рабочий вес {weight}", { weight: `${number(entry.weight, 2)} ${t("кг")}` })}
+                    {setsCount(effectiveSets(entry).length, language)} ·{" "}
+                    {t("Макс. рабочий вес {weight}", {
+                      weight: `${number(workoutMetrics(entry).maxWorkingWeight, 2)} ${t("кг")}`,
+                    })}
                   </span>
                 </span>
                 <span className="max-w-[35%] truncate text-right text-xs text-muted-foreground">
@@ -334,15 +342,18 @@ function ExerciseEntries({
                     <span className="text-muted-foreground">{t("WEIGHT")}</span>
                     <span className="text-muted-foreground">{t("REPS")}</span>
                     <span className="text-muted-foreground">RIR</span>
-                    {entry.reps.map((reps, index) => (
-                      <Fragment key={index}>
-                        <span className="tabular-nums">{index + 1}</span>
+                    {effectiveSets(entry).map((set) => (
+                      <Fragment key={`${entry.id}:${set.position}`}>
                         <span className="tabular-nums">
-                          {number(entry.weight, 2)} {t("кг")}
+                          {set.position}
+                          {set.set_type === "warmup" ? " · W" : ""}
                         </span>
-                        <span className="tabular-nums">{reps}</span>
                         <span className="tabular-nums">
-                          {entry.rir === null ? "—" : number(entry.rir)}
+                          {number(set.weight, 2)} {t("кг")}
+                        </span>
+                        <span className="tabular-nums">{set.reps}</span>
+                        <span className="tabular-nums">
+                          {set.rir === null ? "—" : number(set.rir)}
                         </span>
                       </Fragment>
                     ))}

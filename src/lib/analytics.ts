@@ -1,4 +1,12 @@
-import { dailySeries, entryValue, toISO, weekRange, type EntryLike, type Metric } from "./workout";
+import {
+  dailySeries,
+  effectiveSets,
+  toISO,
+  weekRange,
+  workoutMetrics,
+  type EntryLike,
+  type Metric,
+} from "./workout";
 
 export interface HistoryEntry extends EntryLike {
   id: string;
@@ -51,20 +59,49 @@ export function compareSessions(selected: HistoryEntry, previous: HistoryEntry |
     compareEntries(previous, selected) >= 0
   )
     return null;
-  const weightDelta = selected.weight - previous.weight;
+  const selectedMetrics = workoutMetrics(selected);
+  const previousMetrics = workoutMetrics(previous);
+  const currentSets = effectiveSets(selected).filter((set) => set.set_type === "working");
+  const previousSets = effectiveSets(previous).filter((set) => set.set_type === "working");
   const warnings: string[] = [];
-  // Any set-count change affects volume; >=2 RIR is a material effort difference.
-  if (selected.reps.length !== previous.reps.length)
+  if (currentSets.length !== previousSets.length)
     warnings.push("Разное число подходов: условия несопоставимы.");
-  if (selected.rir !== null && previous.rir !== null && Math.abs(selected.rir - previous.rir) >= 2)
-    warnings.push("RIR отличается на 2 или больше: условия несопоставимы.");
-  if (selected.rir === null || previous.rir === null)
+  if (currentSets.some((set, index) => set.rir === null || previousSets[index]?.rir === null))
     warnings.push("RIR указан не в обеих записях; усилие нельзя сопоставить полностью.");
+  if (
+    currentSets.some((set, index) => {
+      const old = previousSets[index];
+      return !!old && set.rir !== null && old.rir !== null && Math.abs(set.rir - old.rir) >= 2;
+    })
+  )
+    warnings.push("RIR отличается на 2 или больше: условия несопоставимы.");
+  const comparable =
+    currentSets.length === previousSets.length &&
+    currentSets.every((set, index) => {
+      const old = previousSets[index];
+      return (
+        !!old &&
+        set.position === old.position &&
+        set.load_type === old.load_type &&
+        set.rir !== null &&
+        old.rir !== null &&
+        Math.abs(set.rir - old.rir) < 2
+      );
+    });
+  if (!comparable && !warnings.length)
+    warnings.push("Рабочие подходы или усилие отличаются: вывод о прогрессии ограничен.");
+  const weightDelta = selectedMetrics.maxWorkingWeight - previousMetrics.maxWorkingWeight;
   return {
+    comparable,
     weightDelta,
-    weightPct: previous.weight === 0 ? null : (weightDelta / previous.weight) * 100,
-    repsDelta: entryValue(selected, "reps") - entryValue(previous, "reps"),
-    volumeDelta: entryValue(selected, "volume") - entryValue(previous, "volume"),
+    weightPct:
+      previousMetrics.maxWorkingWeight === 0
+        ? null
+        : (weightDelta / previousMetrics.maxWorkingWeight) * 100,
+    repsDelta: selectedMetrics.workingReps - previousMetrics.workingReps,
+    volumeDelta: selectedMetrics.workingVolume - previousMetrics.workingVolume,
+    bestSetVolumeDelta:
+      (selectedMetrics.bestWorkingSet?.volume ?? 0) - (previousMetrics.bestWorkingSet?.volume ?? 0),
     warnings,
   };
 }

@@ -121,7 +121,43 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   await waitFor(() => expect(screen.getByLabelText("Упражнение записей")).toHaveValue("squat"));
   expect(
     (await screen.findByRole("region", { name: "Дневник записей упражнения" })).querySelector("li"),
-  ).toHaveTextContent("1 подход · Рабочий вес 80 кг");
+  ).toHaveTextContent("1 подход · Макс. рабочий вес 80 кг");
+});
+
+it("renders independent set weights, reps, RIR, and warm-up type from set history", async () => {
+  fake.state.rows.workout_entries = [entry("set-entry", dateDaysAgo(0), 80, [8, 6])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "set-1",
+      user_id: "A",
+      workout_entry_id: "set-entry",
+      position: 1,
+      weight: "40.00",
+      reps: 8,
+      rir: "2.0",
+      set_type: "working",
+      load_type: "external",
+    },
+    {
+      id: "set-2",
+      user_id: "A",
+      workout_entry_id: "set-entry",
+      position: 2,
+      weight: "42.50",
+      reps: 6,
+      rir: null,
+      set_type: "warmup",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const item = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(item).getByRole("button"));
+  expect(item).toHaveTextContent("40 кг");
+  expect(item).toHaveTextContent("42,5 кг");
+  expect(item).toHaveTextContent("2");
+  expect(item).toHaveTextContent("W");
 });
 
 it("keeps multiple workout records open and preserves set order and missing RIR", async () => {

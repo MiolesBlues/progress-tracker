@@ -36,22 +36,68 @@ export interface EntryLike {
   performed_on: string; // YYYY-MM-DD
   weight: number;
   reps: number[];
+  rir?: number | null;
+  sets?: {
+    position: number;
+    weight: number;
+    reps: number;
+    rir: number | null;
+    set_type: "working" | "warmup";
+    load_type: "external" | "bodyweight";
+  }[];
 }
 
-const sum = (a: number[]) => a.reduce((s, x) => s + x, 0);
+export function effectiveSets(e: EntryLike) {
+  return e.sets?.length
+    ? e.sets
+    : e.reps.map((reps, index) => ({
+        position: index + 1,
+        weight: e.weight,
+        reps,
+        rir: e.rir ?? null,
+        set_type: "working" as const,
+        load_type: "external" as const,
+      }));
+}
+
+export function workoutMetrics(e: EntryLike) {
+  const working = effectiveSets(e).filter((set) => set.set_type === "working");
+  const totalVolume = working.reduce((total, set) => total + set.weight * set.reps, 0);
+  return {
+    maxWorkingWeight: working.length ? Math.max(...working.map((set) => set.weight)) : 0,
+    bestWorkingSet: working.reduce<{
+      position: number;
+      weight: number;
+      reps: number;
+      volume: number;
+    } | null>((best, set) => {
+      const candidate = {
+        position: set.position,
+        weight: set.weight,
+        reps: set.reps,
+        volume: set.weight * set.reps,
+      };
+      return !best || candidate.volume > best.volume ? candidate : best;
+    }, null),
+    workingVolume: totalVolume,
+    workingSets: working.length,
+    workingReps: working.reduce((total, set) => total + set.reps, 0),
+    rirHistory: working.map((set) => set.rir),
+  };
+}
 
 export function entryValue(e: EntryLike, m: Metric): number {
-  const r = sum(e.reps);
-  if (m === "weight") return Number(e.weight);
-  if (m === "reps") return r;
-  return Number(e.weight) * r;
+  const metrics = workoutMetrics(e);
+  if (m === "weight") return metrics.maxWorkingWeight;
+  if (m === "reps") return metrics.workingReps;
+  return metrics.workingVolume;
 }
 
 /** Aggregate a set of entries: weight = max, reps/volume = total. Null when empty. */
 export function aggregate(entries: EntryLike[], m: Metric): number | null {
   if (entries.length === 0) return null;
   const vals = entries.map((e) => entryValue(e, m));
-  return m === "weight" ? Math.max(...vals) : sum(vals);
+  return m === "weight" ? Math.max(...vals) : vals.reduce((total, value) => total + value, 0);
 }
 
 export function toISO(d: Date): string {
