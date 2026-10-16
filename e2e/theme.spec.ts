@@ -74,7 +74,7 @@ test("theme preference applies across the main mobile screens", async ({ page, b
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   expect(hydrationWarnings).toEqual([]);
   await page.getByRole("button", { name: "Настройки" }).click();
-  await page.getByRole("button", { name: "Системная" }).click();
+  await page.getByRole("button", { name: "Авто" }).click();
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.emulateMedia({ colorScheme: "dark" });

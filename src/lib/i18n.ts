@@ -10,7 +10,7 @@ export const english = {
   "Прогресс Трекер": "Progress Tracker",
   Настройки: "Settings",
   "Тема оформления": "Appearance",
-  Системная: "System",
+  Авто: "Auto",
   Светлая: "Light",
   Тёмная: "Dark",
   Закрыть: "Close",
