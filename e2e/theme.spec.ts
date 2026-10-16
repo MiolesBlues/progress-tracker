@@ -14,10 +14,75 @@ test("theme preference applies across the main mobile screens", async ({ page, b
   await page.goto("/auth");
   await expect(page.getByRole("heading", { name: "С возвращением!" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const darkPalette = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return ["--background", "--primary", "--success"].map((token) =>
+      style.getPropertyValue(token).trim(),
+    );
+  });
+  expect(darkPalette).toEqual(["oklch(14.5% .005 260)", "oklch(88% .2 128)", "oklch(80% .17 150)"]);
   await page.screenshot({ path: "test-results/theme-dark-auth.png", fullPage: true });
   await page.evaluate(() => localStorage.setItem("app:theme:v1", "light"));
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const lightPalette = await page.evaluate(() => {
+    const root = document.documentElement;
+    const style = getComputedStyle(root);
+    return {
+      background: style.getPropertyValue("--background").trim(),
+      card: style.getPropertyValue("--card").trim(),
+      primary: style.getPropertyValue("--primary").trim(),
+      hover: style.getPropertyValue("--primary-hover").trim(),
+      foreground: style.getPropertyValue("--foreground").trim(),
+      muted: style.getPropertyValue("--muted-foreground").trim(),
+      border: style.getPropertyValue("--border").trim(),
+    };
+  });
+  expect(lightPalette).toEqual({
+    background: "#f7faff",
+    card: "#fff",
+    primary: "#268beb",
+    hover: "#1672cd",
+    foreground: "#17243a",
+    muted: "#64748b",
+    border: "#e3ebf5",
+  });
+  const contrast = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    let pixel = 0;
+    const rgb = (token: string) => {
+      context.fillStyle = style.getPropertyValue(token).trim();
+      context.fillRect(pixel, 0, 1, 1);
+      const color = [...context.getImageData(pixel++, 0, 1, 1).data].slice(0, 3);
+      return color.map((channel) => {
+        const value = channel! / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+    };
+    const ratio = (foreground: string, background: string) => {
+      const a = rgb(foreground).reduce(
+        (sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!,
+        0,
+      );
+      const b = rgb(background).reduce(
+        (sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!,
+        0,
+      );
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    };
+    return {
+      body: ratio("--foreground", "--background"),
+      muted: ratio("--muted-foreground", "--card"),
+      link: ratio("--primary-text", "--background"),
+      button: ratio("--primary-foreground", "--primary"),
+      hoveredButton: ratio("--primary-hover-foreground", "--primary-hover"),
+    };
+  });
+  for (const value of Object.values(contrast)) expect(value).toBeGreaterThanOrEqual(4.5);
   await page.screenshot({ path: "test-results/theme-light-auth.png", fullPage: true });
   await page.evaluate(() => localStorage.removeItem("app:theme:v1"));
   await page.emulateMedia({ colorScheme: "dark" });

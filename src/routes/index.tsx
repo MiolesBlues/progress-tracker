@@ -44,7 +44,7 @@ function Index() {
         <h1 className="mt-8 text-4xl font-extrabold leading-tight tracking-tight">
           {t("Каждый подход —")}
           <br />
-          <span className="text-primary">{t("в цифрах.")}</span>
+          <span className="text-primary-text">{t("в цифрах.")}</span>
         </h1>
         <p className="mt-4 text-muted-foreground">
           {t(

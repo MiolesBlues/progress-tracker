@@ -200,7 +200,7 @@ export function WorkoutPage() {
       {!day && (
         <p>
           {t("Нет активных дней.")}{" "}
-          <Link to="/program" className="text-primary">
+          <Link to="/program" className="text-primary-text">
             {t("Добавьте или восстановите день")}
           </Link>
         </p>
@@ -208,7 +208,7 @@ export function WorkoutPage() {
       {day && !current && (
         <p>
           {t("В этом дне нет активных упражнений.")}{" "}
-          <Link to="/program" className="text-primary">
+          <Link to="/program" className="text-primary-text">
             {t("Добавьте упражнение")}
           </Link>
         </p>

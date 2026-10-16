@@ -53,7 +53,7 @@ it("highlights only the registration action with the primary theme color", () =>
   expect(registrationButton).toHaveClass("min-h-11", "focus-visible:ring-2");
   expect(screen.getByText("Зарегистрироваться", { exact: true })).toHaveClass(
     "font-semibold",
-    "text-primary",
+    "text-primary-text",
   );
   expect(registrationButton).toHaveTextContent("Нет аккаунта?");
   fireEvent.click(registrationButton);
@@ -61,9 +61,9 @@ it("highlights only the registration action with the primary theme color", () =>
   expect(loginButton).toHaveClass("min-h-11", "focus-visible:ring-2");
   expect(screen.getByText("Войти", { exact: true })).toHaveClass(
     "font-semibold",
-    "text-primary",
-    "group-hover:text-primary/90",
-    "group-active:text-primary/80",
+    "text-primary-text",
+    "group-hover:text-primary-text-hover",
+    "group-active:text-primary-text-active",
   );
   expect(loginButton).toHaveTextContent("Уже есть аккаунт?");
 });
