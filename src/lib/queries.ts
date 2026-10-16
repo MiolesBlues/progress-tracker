@@ -27,6 +27,8 @@ export const userKeys = {
   days: (userId: string) => ["user", userId, "days"] as const,
   program: (userId: string) => ["user", userId, "program"] as const,
   entries: (userId: string, exerciseId: string) => ["user", userId, "entries", exerciseId] as const,
+  entrySets: (userId: string, entryIds: string[]) =>
+    ["user", userId, "entry-sets", ...[...entryIds].sort()] as const,
   lastEntry: (userId: string, exerciseId: string) =>
     ["user", userId, "last-entry", exerciseId] as const,
 };
@@ -133,6 +135,55 @@ export const entriesQuery = (
       }));
     },
   });
+
+/** Authoritative per-set history. Numeric values stay decimal strings for exact editing. */
+export type WorkoutEntrySet = {
+  id: string;
+  workout_entry_id: string;
+  user_id: string;
+  position: number;
+  weight: string;
+  reps: number;
+  rir: string | null;
+  set_type: "warmup" | "working";
+  load_type: "external" | "bodyweight";
+  legacy_snapshot: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export const entrySetsQuery = (userId: string, entryIds: string[]) => {
+  const ids = [...new Set(entryIds)].sort();
+  return queryOptions({
+    queryKey: userKeys.entrySets(userId, ids),
+    enabled: !!userId && ids.length > 0,
+    queryFn: async ({ signal }): Promise<WorkoutEntrySet[]> => {
+      if (!ids.length) return [];
+      const data = await loadAllPages(
+        (from, to) =>
+          supabase
+            .from("workout_entry_sets")
+            .select(
+              "id, workout_entry_id, user_id, position, weight, reps, rir, set_type, load_type, legacy_snapshot, created_at, updated_at",
+              { count: "exact" },
+            )
+            .eq("user_id", userId)
+            .in("workout_entry_id", ids)
+            .order("workout_entry_id")
+            .order("position")
+            .order("id")
+            .range(from, to)
+            .abortSignal(signal),
+        signal,
+      );
+      return data.map((row) => ({
+        ...row,
+        weight: String(row.weight),
+        rir: row.rir === null ? null : String(row.rir),
+      }));
+    },
+  });
+};
 
 export const lastEntryQuery = (
   userId: string,

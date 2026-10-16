@@ -71,6 +71,13 @@
       "when": 1792153200000,
       "tag": "20261016150000_training_template_library",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792176210000,
+      "tag": "20261016204330_per_set_workout_v4",
+      "breakpoints": true
     }
   ]
 }

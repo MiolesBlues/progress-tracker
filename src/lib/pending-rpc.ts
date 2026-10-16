@@ -5,7 +5,15 @@ import { supabase } from "@/integrations/supabase/client";
  * backend (awaiting user approval), so generated types do not list them yet.
  * Remove this helper once the migrations are applied and types regenerate.
  */
-type PendingRpc = "reorder_program_days" | "reorder_program_exercises" | "save_workout_entry";
+type PendingRpc =
+  | "reorder_program_days"
+  | "reorder_program_exercises"
+  | "save_workout_entry"
+  | "save_workout_entry_sets"
+  | "add_workout_entry_set"
+  | "update_workout_entry_set"
+  | "delete_workout_entry_set"
+  | "reorder_workout_entry_sets";
 
 export function pendingRpc(name: PendingRpc, args: Record<string, unknown>) {
   return (

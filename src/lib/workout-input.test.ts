@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { validateWorkout, MAX_REPS } from "@/lib/workout-input";
+import { validateWorkout, validatePerSetWorkout, MAX_REPS } from "@/lib/workout-input";
 import { prefillFor } from "@/lib/workout";
 const fields = {
   date: "2026-10-13",
@@ -54,4 +54,103 @@ it("prefill has exactly the planned set count even with an older shorter example
   expect(
     prefillFor({ target_sets: 4, example_reps: [8, 8], working_weight: 50 }, null).reps,
   ).toEqual(["8", "8", "", ""]);
+});
+
+it("validates per-set values independently and preserves exact numeric strings and NULL RIR", () => {
+  const result = validatePerSetWorkout(
+    {
+      date: "2026-10-13",
+      notes: "",
+      sets: [
+        {
+          id: "10000000-0000-4000-8000-000000000001",
+          position: 1,
+          weight: "52,55",
+          reps: "8",
+          rir: "2,5",
+          set_type: "working",
+          load_type: "external",
+        },
+        {
+          id: "10000000-0000-4000-8000-000000000002",
+          position: 2,
+          weight: "0",
+          reps: "0",
+          rir: "",
+          set_type: "warmup",
+          load_type: "bodyweight",
+        },
+      ],
+    },
+    "ex",
+    "day",
+  );
+  expect(result.sets).toEqual([
+    {
+      id: "10000000-0000-4000-8000-000000000001",
+      position: 1,
+      weight: "52.55",
+      reps: 8,
+      rir: "2.5",
+      set_type: "working",
+      load_type: "external",
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      position: 2,
+      weight: "0",
+      reps: 0,
+      rir: null,
+      set_type: "warmup",
+      load_type: "bodyweight",
+    },
+  ]);
+});
+
+it("rejects duplicate stable set IDs, invalid decimal precision and noncontiguous order", () => {
+  const base = {
+    date: "2026-10-13",
+    notes: "",
+    sets: [
+      {
+        id: "10000000-0000-4000-8000-000000000001",
+        position: 1,
+        weight: "52.55",
+        reps: "8",
+        rir: "",
+        set_type: "working" as const,
+        load_type: "external" as const,
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        position: 2,
+        weight: "52.5",
+        reps: "8",
+        rir: "",
+        set_type: "working" as const,
+        load_type: "external" as const,
+      },
+    ],
+  };
+  expect(() =>
+    validatePerSetWorkout(
+      { ...base, sets: [{ ...base.sets[0]!, id: base.sets[1]!.id }, base.sets[1]!] },
+      "ex",
+      "day",
+    ),
+  ).toThrow("уникальными");
+  expect(() =>
+    validatePerSetWorkout(
+      { ...base, sets: [{ ...base.sets[0]!, weight: "52.555" }, base.sets[1]!] },
+      "ex",
+      "day",
+    ),
+  ).toThrow("знаков");
+  expect(() =>
+    validatePerSetWorkout(
+      { ...base, sets: [{ ...base.sets[0]!, position: 2 }, base.sets[1]!] },
+      "ex",
+      "day",
+    ),
+  ).toThrow("последовательным");
 });
