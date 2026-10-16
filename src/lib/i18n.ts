@@ -76,6 +76,7 @@ export const english = {
   Вход: "Sign in",
   "Настройка программы": "Program setup",
   "Тренировочный день": "Training day",
+  "Дата и тренировочный день": "Date and training day",
   Упражнение: "Exercise",
   Повторить: "Retry",
   Назад: "Back",

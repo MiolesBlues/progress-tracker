@@ -177,6 +177,68 @@ export function WorkoutPage() {
       setFocusListOpen(false);
     }
   }
+  const trainingDaySelector = (
+    <div className={focusMode ? "min-w-0 space-y-2" : "min-w-0 space-y-1"}>
+      <label
+        id="training-day-label"
+        className={focusMode ? "block text-sm font-medium" : "block text-xs font-medium"}
+      >
+        {t("Тренировочный день")}
+      </label>
+      <Select
+        value={day?.id ?? ""}
+        onValueChange={(dayId) => select(dayId, "")}
+        disabled={!days.length}
+      >
+        <SelectTrigger
+          aria-label={t("Тренировочный день")}
+          aria-labelledby="training-day-label"
+          className={`${focusMode ? "h-12" : "h-10"} w-full min-w-0 bg-card text-foreground`}
+        >
+          <SelectValue placeholder={t("Нет активных дней")} />
+        </SelectTrigger>
+        <SelectContent
+          position="popper"
+          side="bottom"
+          align="start"
+          collisionPadding={8}
+          className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+        >
+          {days.map((item) => {
+            const count = activeExercises.filter((exercise) => exercise.day_id === item.id).length;
+            return (
+              <SelectItem
+                key={item.id}
+                value={item.id}
+                className="h-auto min-h-10 whitespace-normal py-2"
+              >
+                <span className="block min-w-0 whitespace-normal break-words leading-snug">
+                  {item.name} · {exerciseCount(count, language)}
+                </span>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+  const exerciseSelector = current && day && (
+    <label className="block min-w-0 space-y-1 text-sm">
+      {t("Упражнение")}
+      <select
+        aria-label={t("Упражнение")}
+        className="h-10 w-full min-w-0 rounded-md border border-input bg-card px-3"
+        value={current.id}
+        onChange={(event) => select(day.id, event.target.value)}
+      >
+        {exercises.map((exercise) => (
+          <option key={exercise.id} value={exercise.id}>
+            {exercise.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   if (programResult.isError || daysResult.isError)
     return (
       <LoadError
@@ -191,7 +253,7 @@ export function WorkoutPage() {
   if (programResult.isPending || daysResult.isPending)
     return <Loading>{t("Загрузка программы…")}</Loading>;
   return (
-    <div className="space-y-5">
+    <div className={focusMode ? "space-y-5" : "space-y-4"}>
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
       {!activeFocus && (
         <div
@@ -225,50 +287,7 @@ export function WorkoutPage() {
           </Button>
         </div>
       )}
-      {!activeFocus && (
-        <div className="min-w-0 space-y-2">
-          <label id="training-day-label" className="block text-sm font-medium">
-            {t("Тренировочный день")}
-          </label>
-          <Select
-            value={day?.id ?? ""}
-            onValueChange={(dayId) => select(dayId, "")}
-            disabled={!days.length}
-          >
-            <SelectTrigger
-              aria-label={t("Тренировочный день")}
-              aria-labelledby="training-day-label"
-              className="h-12 min-w-0 bg-card text-foreground"
-            >
-              <SelectValue placeholder={t("Нет активных дней")} />
-            </SelectTrigger>
-            <SelectContent
-              position="popper"
-              side="bottom"
-              align="start"
-              collisionPadding={8}
-              className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
-            >
-              {days.map((item) => {
-                const count = activeExercises.filter(
-                  (exercise) => exercise.day_id === item.id,
-                ).length;
-                return (
-                  <SelectItem
-                    key={item.id}
-                    value={item.id}
-                    className="h-auto min-h-10 whitespace-normal py-2"
-                  >
-                    <span className="block min-w-0 whitespace-normal break-words leading-snug">
-                      {item.name} · {exerciseCount(count, language)}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      {!activeFocus && (focusMode || !day || !current) && trainingDaySelector}
       {!day && (
         <p>
           {t("Нет активных дней.")}{" "}
@@ -286,23 +305,6 @@ export function WorkoutPage() {
         </p>
       )}
       {!focusMode && current && day && (
-        <label className="block space-y-2 text-sm">
-          {t("Упражнение")}
-          <select
-            aria-label={t("Упражнение")}
-            className="h-12 w-full min-w-0 rounded-md border border-input bg-card px-3"
-            value={current.id}
-            onChange={(event) => select(day.id, event.target.value)}
-          >
-            {exercises.map((exercise) => (
-              <option key={exercise.id} value={exercise.id}>
-                {exercise.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      {!focusMode && current && day && (
         <WorkoutForm
           key={`${userId}:${current.id}:${day.id}`}
           exercise={current}
@@ -310,6 +312,8 @@ export function WorkoutPage() {
           initialDate={workoutDate}
           onDateChange={changeDate}
           onSaved={afterSaved}
+          trainingDaySelector={trainingDaySelector}
+          exerciseSelector={exerciseSelector}
         />
       )}
       {focusMode && !focusStarted && day && (

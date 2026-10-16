@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
@@ -42,6 +42,8 @@ type WorkoutFormProps = {
   onDateChange: (date: string) => void;
   onSaved: (exerciseId: string, dayId: string, date: string) => boolean;
   focusMode?: boolean;
+  trainingDaySelector?: ReactNode;
+  exerciseSelector?: ReactNode;
 };
 
 function newSet(position: number, weight = "", reps = "", rir = ""): WorkoutSetFields {
@@ -76,6 +78,8 @@ function LegacyRetry({
   dayId,
   initialDate,
   onSaved,
+  trainingDaySelector,
+  exerciseSelector,
   draft,
   onCompleted,
 }: WorkoutFormProps & { draft: WorkoutDraft; onCompleted: () => void }) {
@@ -112,21 +116,48 @@ function LegacyRetry({
     }
   }
   return (
-    <section className="space-y-4" aria-label={t("Повтор сохранения старой записи")}>
-      <p role="status" className="text-sm text-muted-foreground">
-        {t(
-          "Восстановлена незавершённая операция старого формата. Повтор отправит сохранённые значения без изменений.",
-        )}
-      </p>
-      {error && (
-        <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
-          {error}
+    <div className="space-y-3">
+      <div
+        className="grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-end gap-2"
+        role="group"
+        aria-label={t("Дата и тренировочный день")}
+      >
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="legacy-retry-date" className="text-xs">
+            {t("Дата")}
+          </Label>
+          <Input
+            id="legacy-retry-date"
+            type="date"
+            value={initialDate}
+            className="box-border h-10 w-full min-w-0 max-w-full px-1 sm:px-2"
+            disabled
+          />
+        </div>
+        {trainingDaySelector}
+      </div>
+      {exerciseSelector}
+      <section className="space-y-4" aria-label={t("Повтор сохранения старой записи")}>
+        <p role="status" className="text-sm text-muted-foreground">
+          {t(
+            "Восстановлена незавершённая операция старого формата. Повтор отправит сохранённые значения без изменений.",
+          )}
         </p>
-      )}
-      <Button type="button" disabled={saving} onClick={() => void retry()} className="h-14 w-full">
-        {saving ? t("Сохранение…") : t("Повторить сохранение")}
-      </Button>
-    </section>
+        {error && (
+          <p role="alert" className="rounded-xl border border-destructive p-3 text-sm">
+            {error}
+          </p>
+        )}
+        <Button
+          type="button"
+          disabled={saving}
+          onClick={() => void retry()}
+          className="h-14 w-full"
+        >
+          {saving ? t("Сохранение…") : t("Повторить сохранение")}
+        </Button>
+      </section>
+    </div>
   );
 }
 
@@ -136,6 +167,8 @@ function PerSetWorkoutForm({
   initialDate,
   onDateChange,
   onSaved,
+  trainingDaySelector,
+  exerciseSelector,
   legacyDraft,
   focusMode = false,
 }: WorkoutFormProps & { legacyDraft: WorkoutDraft | null }) {
@@ -418,7 +451,7 @@ function PerSetWorkoutForm({
   return (
     <form
       onSubmit={save}
-      className={focusMode ? "space-y-4" : "space-y-5"}
+      className={focusMode ? "space-y-4" : "space-y-3"}
       aria-label={t("Запись тренировки")}
     >
       {storageError && (
@@ -468,20 +501,33 @@ function PerSetWorkoutForm({
           )}
         </p>
       )}
-      <fieldset disabled={locked} className={focusMode ? "space-y-4" : "space-y-5"}>
-        {!focusMode && (
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor="date">{t("Дата")}</Label>
-            <Input
-              id="date"
-              type="date"
-              value={fields.date}
-              onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
-              className="box-border h-12 w-full min-w-0 max-w-full px-2 sm:px-3"
-              required
-            />
+      {!focusMode && (
+        <>
+          <div
+            className="grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-end gap-2"
+            role="group"
+            aria-label={t("Дата и тренировочный день")}
+          >
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor="date" className="text-xs">
+                {t("Дата")}
+              </Label>
+              <Input
+                id="date"
+                type="date"
+                value={fields.date}
+                onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
+                className="box-border h-10 w-full min-w-0 max-w-full px-1 sm:px-2"
+                required
+                disabled={locked}
+              />
+            </div>
+            {trainingDaySelector}
           </div>
-        )}
+          {exerciseSelector}
+        </>
+      )}
+      <fieldset disabled={locked} className={focusMode ? "space-y-4" : "space-y-3"}>
         <section className="space-y-3" aria-label={t("Подходы")}>
           <div
             className={`flex items-center justify-between gap-2 ${focusMode ? "border-t border-border pt-3" : ""}`}
