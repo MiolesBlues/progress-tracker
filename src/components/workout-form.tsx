@@ -1,10 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, Minus, Plus } from "lucide-react";
+import { CalendarDays, Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
-import { prefillFor } from "@/lib/workout";
 import {
   MAX_SETS,
   MAX_REPS,
@@ -34,6 +33,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useI18n, translateKnown } from "@/lib/i18n";
+import { SortableList } from "@/components/Sortable";
 
 type WorkoutFormProps = {
   exercise: Exercise;
@@ -118,14 +118,14 @@ function LegacyRetry({
   return (
     <div className="space-y-3">
       <div
-        className="grid min-w-0 grid-cols-[minmax(0,42fr)_minmax(0,58fr)] items-end gap-2.5"
+        className="grid min-w-0 grid-cols-[minmax(0,45fr)_minmax(0,55fr)] items-start gap-2.5"
         role="group"
         aria-label={t("Дата и тренировочный день")}
       >
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="legacy-retry-date" className="text-xs">
+        <div className="flex min-w-0 flex-col gap-1">
+          <label htmlFor="legacy-retry-date" className="block text-xs font-medium">
             {t("Дата")}
-          </Label>
+          </label>
           <div className="relative min-w-0">
             <Input
               id="legacy-retry-date"
@@ -182,11 +182,11 @@ function PerSetWorkoutForm({
   const { userId, signal, isCurrent } = useUserSession();
   const qc = useQueryClient();
   const defaults = (): PerSetWorkoutFields => {
-    const prefill = prefillFor(exercise, null);
+    const plannedSets = exercise.target_sets ?? exercise.example_reps?.length ?? 3;
     return {
       date: initialDate,
       notes: "",
-      sets: prefill.reps.map((reps, index) => newSet(index + 1, prefill.weight, reps)),
+      sets: Array.from({ length: plannedSets }, (_, index) => newSet(index + 1)),
     };
   };
   const [initial] = useState(() => {
@@ -218,6 +218,7 @@ function PerSetWorkoutForm({
   const [saving, setSaving] = useState(false);
   const [activeSetIndex, setActiveSetIndex] = useState(0);
   const setWeightRef = useRef<HTMLInputElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const focusedSetId = draft.fields.sets[activeSetIndex]?.id;
   const running = useRef(false);
   const mounted = useRef(true);
@@ -256,32 +257,32 @@ function PerSetWorkoutForm({
     const current = draftRef.current;
     if (current.operation || current.dirty.sets) return;
     const previous = lastResult.data;
-    const base = prefillFor(exercise, null);
-    if (!previous) return;
-    const nextSets = current.fields.sets.map((set, index) => {
-      const old = previous.sets?.[index];
-      const oldReps = old?.reps ?? previous.reps?.[index];
-      return {
-        ...set,
-        weight: old ? String(old.weight) : String(Number(previous.weight)),
-        reps: oldReps === undefined ? (base.reps[index] ?? "") : String(oldReps),
-        rir: old ? (old.rir ?? "") : previous.rir == null ? "" : String(Number(previous.rir)),
-        set_type: old?.set_type ?? set.set_type,
-        load_type: old?.load_type ?? set.load_type,
-      };
-    });
-    if (!current.dirty.sets) commit({ ...current, fields: { ...current.fields, sets: nextSets } });
+    if (!previous || previous.performed_on !== current.fields.date) return;
+    const savedSets = previous.sets?.length
+      ? previous.sets.map((set, index) => ({
+          ...newSet(index + 1, set.weight, String(set.reps), set.rir ?? ""),
+          set_type: set.set_type,
+          load_type: set.load_type,
+        }))
+      : (Array.isArray(previous.reps) ? previous.reps : []).map((reps, index) =>
+          newSet(
+            index + 1,
+            String(Number(previous.weight)),
+            String(reps),
+            previous.rir == null ? "" : String(Number(previous.rir)),
+          ),
+        );
+    if (!savedSets.length) return;
+    commit({ ...current, fields: { ...current.fields, sets: savedSets } });
   }, [
     lastResult.isFetchedAfterMount,
     lastResult.isSuccess,
     lastResult.isFetching,
     lastResult.data,
-    exercise,
     blocked,
     signal,
     commit,
   ]);
-
   function update(nextFields: PerSetWorkoutFields, dirty: "date" | "sets" | "notes") {
     if (draftRef.current.operation || blocked) return;
     const current = draftRef.current;
@@ -454,6 +455,105 @@ function PerSetWorkoutForm({
     : fields.sets.map((set, index) => ({ set, index }));
   const recordedCount = fields.sets.filter((set) => draft.recordedSetIds.includes(set.id)).length;
   const focusProgress = fields.sets.length ? (recordedCount / fields.sets.length) * 100 : 0;
+
+  function renderSetRow(set: WorkoutSetFields, index: number, handle?: ReactNode) {
+    return (
+      <div
+        key={set.id}
+        className={
+          focusMode
+            ? "grid grid-cols-3 items-end gap-2 py-1 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
+            : "grid grid-cols-[3rem_repeat(3,minmax(0,1fr))] items-end gap-2 rounded-xl bg-card p-1"
+        }
+      >
+        {!focusMode && (
+          <div className="flex items-center gap-0.5 pb-3">
+            {handle}
+            <span className="text-xs text-muted-foreground">#{index + 1}</span>
+          </div>
+        )}
+        <label className="min-w-0 space-y-1 text-xs">
+          <span>
+            {focusMode
+              ? t("Вес")
+              : set.load_type === "bodyweight"
+                ? t("Доп. вес, кг")
+                : t("Вес, кг")}
+          </span>
+          <Input
+            ref={focusMode && index === activeSetIndex ? setWeightRef : undefined}
+            aria-label={t("Вес подхода {number}", { number: index + 1 })}
+            inputMode="decimal"
+            value={set.weight}
+            placeholder="0"
+            onChange={(event) =>
+              update(
+                {
+                  ...fields,
+                  sets: fields.sets.map((item, i) =>
+                    i === index ? { ...item, weight: event.target.value } : item,
+                  ),
+                },
+                "sets",
+              )
+            }
+            className="num h-11 min-w-0 px-1 sm:px-2"
+          />
+        </label>
+        <label className="min-w-0 space-y-1 text-xs">
+          <span>{t("Повторения")}</span>
+          <Input
+            aria-label={t("Повторения подхода {number}", { number: index + 1 })}
+            inputMode="numeric"
+            value={set.reps}
+            onChange={(event) =>
+              update(
+                {
+                  ...fields,
+                  sets: fields.sets.map((item, i) =>
+                    i === index ? { ...item, reps: event.target.value } : item,
+                  ),
+                },
+                "sets",
+              )
+            }
+            className="num h-11 min-w-0 px-1 sm:px-2"
+          />
+        </label>
+        <label className="min-w-0 space-y-1 text-xs">
+          <span>RIR</span>
+          <Input
+            aria-label={t("RIR подхода {number}", { number: index + 1 })}
+            inputMode="decimal"
+            value={set.rir}
+            placeholder="—"
+            onChange={(event) =>
+              update(
+                {
+                  ...fields,
+                  sets: fields.sets.map((item, i) =>
+                    i === index ? { ...item, rir: event.target.value } : item,
+                  ),
+                },
+                "sets",
+              )
+            }
+            className="num h-11 min-w-0 px-1 sm:px-2"
+          />
+        </label>
+      </div>
+    );
+  }
+
+  function reorderSets(ids: string[]) {
+    const setsById = new Map(fields.sets.map((set) => [set.id, set]));
+    const sets = ids
+      .map((id) => setsById.get(id))
+      .filter((set): set is WorkoutSetFields => set !== undefined)
+      .map((set, index) => ({ ...set, position: index + 1 }));
+    if (sets.length === fields.sets.length) update({ ...fields, sets }, "sets");
+  }
+
   return (
     <form
       onSubmit={save}
@@ -510,28 +610,43 @@ function PerSetWorkoutForm({
       {!focusMode && (
         <>
           <div
-            className="grid min-w-0 grid-cols-[minmax(0,42fr)_minmax(0,58fr)] items-end gap-2.5"
+            className="grid min-w-0 grid-cols-[minmax(0,45fr)_minmax(0,55fr)] items-start gap-2.5"
             role="group"
             aria-label={t("Дата и тренировочный день")}
           >
-            <div className="min-w-0 space-y-1">
-              <Label htmlFor="date" className="text-xs">
+            <div className="flex min-w-0 flex-col gap-1">
+              <label htmlFor="date" className="block text-xs font-medium">
                 {t("Дата")}
-              </Label>
+              </label>
               <div className="relative min-w-0">
                 <Input
+                  ref={dateInputRef}
                   id="date"
                   type="date"
                   value={fields.date}
                   onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
-                  className="box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:opacity-0"
+                  className="box-border h-11 w-full min-w-0 max-w-full appearance-none rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:hidden"
                   required
                   disabled={locked}
                 />
-                <CalendarDays
-                  aria-hidden="true"
-                  className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                />
+                <button
+                  type="button"
+                  aria-label={t("Открыть календарь")}
+                  disabled={locked}
+                  onClick={() => {
+                    const input = dateInputRef.current;
+                    if (!input) return;
+                    try {
+                      if (typeof input.showPicker === "function") input.showPicker();
+                      else input.click();
+                    } catch {
+                      input.click();
+                    }
+                  }}
+                  className="absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-md text-muted-foreground touch-manipulation focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                >
+                  <CalendarDays aria-hidden="true" className="h-4 w-4" />
+                </button>
               </div>
             </div>
             {trainingDaySelector}
@@ -576,17 +691,7 @@ function PerSetWorkoutForm({
                   update(
                     {
                       ...fields,
-                      sets: [
-                        ...fields.sets,
-                        focusMode
-                          ? newSet(fields.sets.length + 1)
-                          : newSet(
-                              fields.sets.length + 1,
-                              fields.sets.at(-1)?.weight ?? "",
-                              fields.sets.at(-1)?.reps ?? "",
-                              fields.sets.at(-1)?.rir ?? "",
-                            ),
-                      ],
+                      sets: [...fields.sets, newSet(fields.sets.length + 1)],
                     },
                     "sets",
                   );
@@ -622,139 +727,24 @@ function PerSetWorkoutForm({
               <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
             </div>
           )}
-          <div className="space-y-2">
-            {visibleSets.map(({ set, index }) => (
-              <div
-                key={set.id}
-                className={
-                  focusMode
-                    ? "grid grid-cols-3 items-end gap-2 py-1 animate-in fade-in slide-in-from-right-2 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
-                    : "grid grid-cols-[2rem_repeat(3,minmax(0,1fr))_auto] items-end gap-2 rounded-xl bg-card p-2"
-                }
-              >
-                {!focusMode && (
-                  <span className="pb-3 text-xs text-muted-foreground">#{index + 1}</span>
-                )}
-                <label className="min-w-0 space-y-1 text-xs">
-                  <span>
-                    {focusMode
-                      ? t("Вес")
-                      : set.load_type === "bodyweight"
-                        ? t("Доп. вес, кг")
-                        : t("Вес, кг")}
-                  </span>
-                  <Input
-                    ref={focusMode && index === activeSetIndex ? setWeightRef : undefined}
-                    aria-label={t("Вес подхода {number}", { number: index + 1 })}
-                    inputMode="decimal"
-                    value={set.weight}
-                    placeholder="0"
-                    onChange={(event) =>
-                      update(
-                        {
-                          ...fields,
-                          sets: fields.sets.map((item, i) =>
-                            i === index ? { ...item, weight: event.target.value } : item,
-                          ),
-                        },
-                        "sets",
-                      )
-                    }
-                    className="num h-11 min-w-0 px-1 sm:px-2"
-                  />
-                </label>
-                <label className="min-w-0 space-y-1 text-xs">
-                  <span>{t("Повторения")}</span>
-                  <Input
-                    aria-label={t("Повторения подхода {number}", { number: index + 1 })}
-                    inputMode="numeric"
-                    value={set.reps}
-                    onChange={(event) =>
-                      update(
-                        {
-                          ...fields,
-                          sets: fields.sets.map((item, i) =>
-                            i === index ? { ...item, reps: event.target.value } : item,
-                          ),
-                        },
-                        "sets",
-                      )
-                    }
-                    className="num h-11 min-w-0 px-1 sm:px-2"
-                  />
-                </label>
-                <label className="min-w-0 space-y-1 text-xs">
-                  <span>RIR</span>
-                  <Input
-                    aria-label={t("RIR подхода {number}", { number: index + 1 })}
-                    inputMode="decimal"
-                    value={set.rir}
-                    placeholder="—"
-                    onChange={(event) =>
-                      update(
-                        {
-                          ...fields,
-                          sets: fields.sets.map((item, i) =>
-                            i === index ? { ...item, rir: event.target.value } : item,
-                          ),
-                        },
-                        "sets",
-                      )
-                    }
-                    className="num h-11 min-w-0 px-1 sm:px-2"
-                  />
-                </label>
-                {!focusMode && (
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      aria-label={t("Переместить подход вверх")}
-                      disabled={locked || index === 0}
-                      onClick={() => {
-                        const sets = [...fields.sets];
-                        const before = sets[index - 1]!;
-                        sets[index - 1] = sets[index]!;
-                        sets[index] = before;
-                        update(
-                          {
-                            ...fields,
-                            sets: sets.map((item, i) => ({ ...item, position: i + 1 })),
-                          },
-                          "sets",
-                        );
-                      }}
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      aria-label={t("Переместить подход вниз")}
-                      disabled={locked || index === fields.sets.length - 1}
-                      onClick={() => {
-                        const sets = [...fields.sets];
-                        const after = sets[index + 1]!;
-                        sets[index + 1] = sets[index]!;
-                        sets[index] = after;
-                        update(
-                          {
-                            ...fields,
-                            sets: sets.map((item, i) => ({ ...item, position: i + 1 })),
-                          },
-                          "sets",
-                        );
-                      }}
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {focusMode ? (
+            <div className="space-y-2">
+              {visibleSets.map(({ set, index }) => renderSetRow(set, index))}
+            </div>
+          ) : (
+            <SortableList
+              items={fields.sets}
+              onReorder={reorderSets}
+              handleLabel={(set) =>
+                t("Перетащить подход {number}", { number: fields.sets.indexOf(set) + 1 })
+              }
+              handleClassName="h-7 w-7 p-1 [&_svg]:h-4 [&_svg]:w-4"
+              listClassName="space-y-1"
+              disabled={locked}
+              draggingClassName="opacity-60 ring-1 ring-primary/40 rounded-xl"
+              render={(set, handle) => renderSetRow(set, fields.sets.indexOf(set), handle)}
+            />
+          )}
           {focusMode && (
             <Button
               type="button"

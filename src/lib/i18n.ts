@@ -17,6 +17,7 @@ export const english = {
   Уведомления: "Notifications",
   "Закрыть уведомление": "Close notification",
   Перетащить: "Drag",
+  "Перетащить подход {number}": "Drag set {number}",
   "Перемещаемый элемент": "Draggable item",
   "Для перемещения нажмите пробел или Enter. Используйте стрелки для выбора позиции. Снова нажмите пробел или Enter, чтобы завершить, или Escape, чтобы отменить.":
     "To pick up an item, press Space or Enter. Use the arrow keys to choose a position. Press Space or Enter again to drop, or Escape to cancel.",
@@ -189,6 +190,7 @@ export const english = {
     "All exercises for this day are done. You can choose any exercise for an extra session.",
   "Запись тренировки": "Workout entry",
   Дата: "Date",
+  "Открыть календарь": "Open calendar",
   "Рабочий вес, кг": "Working weight, kg",
   "Укажите вес": "Enter weight",
   "Повторения · подходов: {count}": "Repetitions · sets: {count}",
@@ -208,8 +210,6 @@ export const english = {
   "Вес подхода {number}": "Set {number} weight",
   "Повторения подхода {number}": "Set {number} reps",
   "RIR подхода {number}": "Set {number} RIR",
-  "Переместить подход вверх": "Move set up",
-  "Переместить подход вниз": "Move set down",
   "Тип подхода": "Set type",
   "Тип подхода {number}": "Set {number} type",
   Рабочий: "Working",
@@ -220,6 +220,8 @@ export const english = {
   "Собственный вес + отягощение": "Bodyweight + added load",
   "Доп. вес, кг": "Added weight, kg",
   "Focus Mode": "Focus Mode",
+  "Тренируйся без лишних отвлечений. Выполняй упражнения по очереди и записывай результаты сразу после каждого подхода.":
+    "Stay focused on your workout. Complete your sets one by one and log your results right after each set.",
   "Режим тренировки": "Workout mode",
   Обычный: "Standard",
   Фокус: "Focus",

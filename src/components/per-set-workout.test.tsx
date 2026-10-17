@@ -6,6 +6,7 @@ import { authEvent, fake, resetFake } from "@/test/supabase-mock";
 import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { WorkoutPage } from "@/components/workout-page";
 import { perSetDraftKey } from "@/lib/workout-draft";
+import { userKeys } from "@/lib/queries";
 import { toISO } from "@/lib/workout";
 
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -13,6 +14,12 @@ const DAY = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const EXERCISE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SECOND_EXERCISE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 let client: QueryClient;
+
+function offsetDate(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toISO(date);
+}
 
 beforeEach(() => {
   resetFake();
@@ -41,7 +48,7 @@ beforeEach(() => {
       id: "history",
       user_id: USER,
       exercise_id: EXERCISE,
-      performed_on: "2026-10-12",
+      performed_on: offsetDate(-1),
       created_at: "2026-10-12T10:00:00Z",
       weight: 40,
       reps: [8, 8, 6],
@@ -105,6 +112,37 @@ function mount() {
   return view;
 }
 
+function enterSet(index: number, weight: string, reps: string, rir = "") {
+  fireEvent.change(screen.getByLabelText(`Вес подхода ${index}`), { target: { value: weight } });
+  fireEvent.change(screen.getByLabelText(`Повторения подхода ${index}`), {
+    target: { value: reps },
+  });
+  fireEvent.change(screen.getByLabelText(`RIR подхода ${index}`), { target: { value: rir } });
+}
+
+function enterThreeSets() {
+  enterSet(1, "40.00", "8", "2.0");
+  enterSet(2, "42.50", "8", "1.0");
+  enterSet(3, "40.00", "6");
+}
+
+function enterFocusThreeSets() {
+  const values = [
+    ["40.00", "8", "2.0"],
+    ["42.50", "8", "1.0"],
+    ["40.00", "6", ""],
+  ];
+  values.forEach(([weight, reps, rir], index) => {
+    fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+      target: { value: String(index) },
+    });
+    enterSet(index + 1, weight!, reps!, rir!);
+  });
+  fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+    target: { value: "0" },
+  });
+}
+
 function addSecondExercise() {
   fake.state.rows.program_exercises.push({
     id: SECOND_EXERCISE,
@@ -120,14 +158,47 @@ function addSecondExercise() {
   });
 }
 
-it("prefills each set independently and submits independent weight, reps, and nullable RIR", async () => {
+function mockSetRects() {
+  return vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const item = this.closest("li");
+    const index = item ? Array.from(item.parentElement?.children ?? []).indexOf(item) : -1;
+    const top = index < 0 ? 0 : index * 64;
+    return {
+      x: 0,
+      y: top,
+      top,
+      left: 0,
+      right: 320,
+      bottom: top + 56,
+      width: 320,
+      height: index < 0 ? 500 : 56,
+      toJSON: () => ({}),
+    } as DOMRect;
+  });
+}
+
+it("starts a new workout with empty results and submits independent set values", async () => {
   mount();
-  await screen.findByLabelText("Вес подхода 1");
+  const firstWeightInput = await screen.findByLabelText("Вес подхода 1");
+  await waitFor(() =>
+    expect(
+      client.getQueryState([...userKeys.lastEntry(USER, EXERCISE), toISO(new Date())])?.status,
+    ).toBe("success"),
+  );
+  expect(firstWeightInput.closest("form")?.parentElement).toHaveClass(
+    "rounded-2xl",
+    "border-border",
+    "bg-card",
+    "p-4",
+    "shadow-sm",
+    "sm:p-5",
+  );
   expect(screen.queryByLabelText(/Тип подхода/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Тип нагрузки/)).not.toBeInTheDocument();
-  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
   const dateDayRow = screen.getByRole("group", { name: "Дата и тренировочный день" });
-  expect(dateDayRow.className).toContain("grid-cols-[minmax(0,42fr)_minmax(0,58fr)]");
+  expect(dateDayRow.className).toContain("grid-cols-[minmax(0,45fr)_minmax(0,55fr)]");
   expect(dateDayRow.className).toContain("gap-2.5");
   expect(screen.getByLabelText("Дата").closest('[role="group"]')).toBe(dateDayRow);
   expect(
@@ -137,12 +208,15 @@ it("prefills each set independently and submits independent weight, reps, and nu
     screen.queryByText(/План 3×6–8|Предыдущая тренировка загружена по подходам/),
   ).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Прошлые результаты по подходам")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("8");
-  expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("");
+  for (let index = 1; index <= 3; index++) {
+    expect(screen.getByLabelText(`Вес подхода ${index}`)).toHaveValue("");
+    expect(screen.getByLabelText(`Повторения подхода ${index}`)).toHaveValue("");
+    expect(screen.getByLabelText(`RIR подхода ${index}`)).toHaveValue("");
+  }
 
-  fireEvent.change(screen.getByLabelText("Вес подхода 1"), { target: { value: "41.25" } });
-  fireEvent.change(screen.getByLabelText("Повторения подхода 2"), { target: { value: "10" } });
-  fireEvent.change(screen.getByLabelText("RIR подхода 2"), { target: { value: "3" } });
+  enterSet(1, "41.25", "8", "2");
+  enterSet(2, "42.50", "10", "3");
+  enterSet(3, "40.00", "6");
   fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
   await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalled());
@@ -151,7 +225,7 @@ it("prefills each set independently and submits independent weight, reps, and nu
     _exercise_id: EXERCISE,
     _day_id: DAY,
     _sets: [
-      expect.objectContaining({ position: 1, weight: "41.25", reps: 8, rir: "2.0" }),
+      expect.objectContaining({ position: 1, weight: "41.25", reps: 8, rir: "2" }),
       expect.objectContaining({ position: 2, weight: "42.50", reps: 10, rir: "3" }),
       expect.objectContaining({ position: 3, weight: "40.00", reps: 6, rir: null }),
     ],
@@ -159,14 +233,114 @@ it("prefills each set independently and submits independent weight, reps, and nu
   expect(new Set((args?.["_sets"] as { id: string }[]).map((set) => set.id)).size).toBe(3);
 });
 
-it("adds a set using the prior matching set as a non-overwriting fallback", async () => {
+it("restores saved sets for the selected workout date, without importing an earlier day", async () => {
+  fake.state.rows.workout_entries[0]!["performed_on"] = toISO(new Date());
   mount();
   await screen.findByLabelText("Вес подхода 1");
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
+  expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("8");
+  expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("2.0");
+  expect(screen.getByLabelText("Вес подхода 3")).toHaveValue("40.00");
+  expect(screen.getByLabelText("Повторения подхода 3")).toHaveValue("6");
+  expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("");
+});
+
+it("opens the native date picker when the calendar icon is clicked", async () => {
+  const previous = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "showPicker");
+  const showPicker = vi.fn();
+  Object.defineProperty(HTMLInputElement.prototype, "showPicker", {
+    configurable: true,
+    value: showPicker,
+  });
+  try {
+    mount();
+    await screen.findByLabelText("Дата");
+    fireEvent.click(screen.getByRole("button", { name: "Открыть календарь" }));
+    expect(showPicker).toHaveBeenCalledOnce();
+  } finally {
+    if (previous) Object.defineProperty(HTMLInputElement.prototype, "showPicker", previous);
+    else
+      Object.defineProperty(HTMLInputElement.prototype, "showPicker", {
+        configurable: true,
+        value: undefined,
+      });
+  }
+});
+
+it("reorders sets by keyboard without separating stable IDs from their values", async () => {
+  mount();
+  await screen.findByLabelText("Вес подхода 1");
+  enterThreeSets();
+  const draft = JSON.parse(localStorage.getItem(perSetDraftKey(USER, EXERCISE))!) as {
+    fields: { sets: { id: string }[] };
+  };
+  const originalIds = draft.fields.sets.map((set) => set.id);
+
+  const rectSpy = mockSetRects();
+  try {
+    const handle = screen.getByRole("button", { name: "Перетащить подход 1" });
+    fireEvent.keyDown(handle, { key: "Space", code: "Space", keyCode: 32 });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    fireEvent.keyDown(handle, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+    fireEvent.keyDown(handle, { key: "Space", code: "Space", keyCode: 32 });
+
+    await waitFor(() => expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("42.50"));
+    expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("8");
+    expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("1.0");
+    expect(
+      screen.queryByRole("button", { name: "Переместить подход вверх" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Переместить подход вниз" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalled());
+    const args = fake.state.saveRpc.mock.calls[0]?.[0];
+    const submittedSets = args?.["_sets"] as { id: string }[];
+    expect(submittedSets.map((set) => set.id)).toEqual([
+      originalIds[1],
+      originalIds[0],
+      originalIds[2],
+    ]);
+    expect(args?.["_sets"]).toMatchObject([
+      expect.objectContaining({
+        id: expect.any(String),
+        position: 1,
+        weight: "42.50",
+        reps: 8,
+        rir: "1.0",
+      }),
+      expect.objectContaining({
+        id: expect.any(String),
+        position: 2,
+        weight: "40.00",
+        reps: 8,
+        rir: "2.0",
+      }),
+      expect.objectContaining({
+        id: expect.any(String),
+        position: 3,
+        weight: "40.00",
+        reps: 6,
+        rir: null,
+      }),
+    ]);
+  } finally {
+    rectSpy.mockRestore();
+  }
+});
+
+it("adds a new set with empty result fields", async () => {
+  mount();
+  await screen.findByLabelText("Вес подхода 1");
+  enterThreeSets();
   fireEvent.click(screen.getByRole("button", { name: "Добавить подход" }));
-  expect(screen.getByLabelText("Вес подхода 4")).toHaveValue("40.00");
-  expect(screen.getByLabelText("Повторения подхода 4")).toHaveValue("6");
-  fireEvent.change(screen.getByLabelText("Вес подхода 4"), { target: { value: "45" } });
+  expect(screen.getByLabelText("Вес подхода 4")).toHaveValue("");
+  expect(screen.getByLabelText("Повторения подхода 4")).toHaveValue("");
+  expect(screen.getByLabelText("RIR подхода 4")).toHaveValue("");
+  enterSet(4, "45", "6", "2");
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
   fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -176,6 +350,7 @@ it("adds a set using the prior matching set as a non-overwriting fallback", asyn
     set_type: "working",
     load_type: "external",
   });
+  expect((args?.["_sets"] as { weight: string }[])[3]?.weight).toBe("45");
 });
 
 it("persists a frozen retry and sends identical set values after a lost response", async () => {
@@ -188,7 +363,7 @@ it("persists a frozen retry and sends identical set values after a lost response
   });
   mount();
   await screen.findByLabelText("Вес подхода 1");
-  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
+  enterThreeSets();
   fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
   const retry = await screen.findByRole("button", { name: "Повторить сохранение" });
   fireEvent.click(retry);
@@ -199,13 +374,12 @@ it("persists a frozen retry and sends identical set values after a lost response
 it("restores the user's per-set draft after remount without replacing neighboring values", async () => {
   const view = mount();
   await screen.findByLabelText("Вес подхода 1");
-  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
   fireEvent.change(screen.getByLabelText("Вес подхода 2"), { target: { value: "47.25" } });
   fireEvent.change(screen.getByLabelText("RIR подхода 3"), { target: { value: "0" } });
   view.unmount();
   mount();
   await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("47.25"));
-  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("");
   expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("0");
 });
 
@@ -254,19 +428,38 @@ it("hides set/load type controls and preserves existing metadata while editing a
 it("starts a separate Focus Mode and hides the preparation controls without losing the draft", async () => {
   const view = mount();
   await screen.findByLabelText("Вес подхода 1");
-  await waitFor(() => expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50"));
-  expect(screen.getByRole("group", { name: "Режим тренировки" })).toBeInTheDocument();
+  const modeSwitcher = screen.getByRole("group", { name: "Режим тренировки" });
+  const workoutCard = modeSwitcher.closest("section");
+  expect(workoutCard).not.toBeNull();
+  expect(workoutCard).toContainElement(screen.getByLabelText("Дата"));
+  expect(modeSwitcher.compareDocumentPosition(screen.getByLabelText("Дата"))).toBe(
+    Node.DOCUMENT_POSITION_FOLLOWING,
+  );
   expect(screen.getByRole("button", { name: "Обычный" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "Фокус" })).toHaveAttribute("aria-pressed", "false");
   fireEvent.click(screen.getByRole("button", { name: "Фокус" }));
+  expect(screen.getAllByRole("group", { name: "Режим тренировки" })).toHaveLength(1);
+  expect(modeSwitcher.closest("section")).toBe(workoutCard);
   expect(screen.getByRole("button", { name: "Фокус" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByLabelText("Тренировочный день")).toBeInTheDocument();
-  expect(screen.getByLabelText("Дата")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Тренируйся без лишних отвлечений. Выполняй упражнения по очереди и записывай результаты сразу после каждого подхода.",
+    ),
+  ).toBeInTheDocument();
   expect(screen.queryByLabelText("Упражнение")).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Focus Mode" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Вес подхода 1")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
+  enterFocusThreeSets();
+  expect(modeSwitcher.closest("section")).toBe(workoutCard);
   expect(screen.getByRole("region", { name: "Focus Mode" })).toHaveTextContent("Жим");
+  expect(
+    screen.getByText(
+      "Тренируйся без лишних отвлечений. Выполняй упражнения по очереди и записывай результаты сразу после каждого подхода.",
+    ),
+  ).toBeInTheDocument();
   expect(
     screen.queryByText(/План 3×6–8|Предыдущая тренировка загружена по подходам/),
   ).not.toBeInTheDocument();
@@ -312,8 +505,11 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Обычный" }));
+  expect(screen.getAllByRole("group", { name: "Режим тренировки" })).toHaveLength(1);
+  expect(modeSwitcher.closest("section")).toBe(workoutCard);
   expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("40.00");
   expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("42.50");
+  expect(screen.queryByText(/Тренируйся без лишних отвлечений/)).not.toBeInTheDocument();
   view.unmount();
   mount();
   fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
@@ -322,6 +518,62 @@ it("starts a separate Focus Mode and hides the preparation controls without losi
     "aria-valuenow",
     "33.33333333333333",
   );
+});
+
+it("synchronizes the Focus training day with Standard mode and keeps the workout date", async () => {
+  const secondDay = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const secondExercise = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  fake.state.rows.program_days.push({
+    id: secondDay,
+    user_id: USER,
+    name: "Верх",
+    position: 1,
+    archived_at: null,
+  });
+  fake.state.rows.program_exercises.push({
+    id: secondExercise,
+    user_id: USER,
+    day_id: secondDay,
+    name: "Подтягивания",
+    position: 0,
+    target_sets: 3,
+    target_reps: "6-8",
+    working_weight: 0,
+    example_reps: [8, 8, 6],
+    archived_at: null,
+  });
+
+  mount();
+  const date = await screen.findByLabelText("Дата");
+  fireEvent.change(date, { target: { value: "2026-10-14" } });
+  fireEvent.click(screen.getByRole("button", { name: "Фокус" }));
+
+  const trainingDay = screen.getByRole("combobox", { name: "Тренировочный день" });
+  expect(trainingDay).toHaveTextContent("Силовой");
+  fireEvent.click(trainingDay);
+  fireEvent.click(await screen.findByRole("option", { name: /Верх/ }));
+  expect(trainingDay).toHaveTextContent("Верх");
+  expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
+  expect(screen.getByRole("heading", { name: "Подтягивания" })).toBeInTheDocument();
+  for (let index = 1; index <= 3; index++) {
+    fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
+      target: { value: String(index - 1) },
+    });
+    expect(screen.getByLabelText(`Вес подхода ${index}`)).toHaveValue("");
+    expect(screen.getByLabelText(`Повторения подхода ${index}`)).toHaveValue("");
+    expect(screen.getByLabelText(`RIR подхода ${index}`)).toHaveValue("");
+  }
+  expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Обычный" }));
+
+  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-14");
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("Верх");
+  expect(screen.queryByText(/Тренируйся без лишних отвлечений/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Фокус" }));
+  expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent("Верх");
+  expect(screen.queryByLabelText("Дата")).not.toBeInTheDocument();
 });
 
 it("keeps program order on skip and lets the user return to an unfinished exercise", async () => {
@@ -396,12 +648,14 @@ it("saves once after the final set, offers the next unfinished exercise, and fin
   fireEvent.click(await screen.findByRole("button", { name: "Фокус" }));
   fireEvent.click(screen.getByRole("button", { name: "Начать тренировку" }));
   await screen.findByLabelText("Вес подхода 1");
+  enterFocusThreeSets();
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));
   await screen.findByRole("heading", { name: "Тяга" });
   expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Упражнения · 1 из 2" }));
+  enterFocusThreeSets();
   expect(screen.getByRole("button", { name: /Жим/ })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Упражнения · 1 из 2" }));
   fireEvent.click(screen.getByRole("button", { name: "Записать подход" }));

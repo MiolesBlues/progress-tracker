@@ -21,6 +21,7 @@ import { updateWorkoutSet } from "@/lib/save-workout";
 import { toast } from "sonner";
 import type { HistoryEntry } from "@/lib/analytics";
 import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
+import { PageCard } from "@/components/ui/page-card";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -56,17 +57,23 @@ export function EntriesPage() {
   const [chosenExercise, setChosenExercise] = useState("");
   if (daysResult.isError || programResult.isError)
     return (
-      <LoadError
-        onRetry={() => {
-          void daysResult.refetch();
-          void programResult.refetch();
-        }}
-      >
-        {t("Не удалось загрузить программу для выбора записей.")}
-      </LoadError>
+      <PageCard>
+        <LoadError
+          onRetry={() => {
+            void daysResult.refetch();
+            void programResult.refetch();
+          }}
+        >
+          {t("Не удалось загрузить программу для выбора записей.")}
+        </LoadError>
+      </PageCard>
     );
   if (daysResult.isPending || programResult.isPending)
-    return <Loading>{t("Загрузка программы…")}</Loading>;
+    return (
+      <PageCard>
+        <Loading>{t("Загрузка программы…")}</Loading>
+      </PageCard>
+    );
 
   const dayNames = new Map(daysResult.data.map((day) => [day.id, day.name]));
   const days = showArchive ? daysResult.data : daysResult.data.filter((day) => !day.archived_at);
@@ -99,71 +106,73 @@ export function EntriesPage() {
   return (
     <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Записи")}</h1>
-      {!days.length && !hasUnassigned ? (
-        <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
-      ) : (
-        <>
-          <label className="block min-w-0 space-y-1 text-sm">
-            {t("Тренировочный день")}
-            <select
-              aria-label={t("День записей")}
-              className={selectCls}
-              value={dayId}
-              onChange={(event) => {
-                setChosenDay(event.target.value);
-                setChosenExercise("");
-              }}
-            >
-              {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
-              {days.map((day) => (
-                <option key={day.id} value={day.id}>
-                  {day.name}
-                  {day.archived_at ? t(" (архив)") : ""}
-                </option>
-              ))}
-              {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
-            </select>
-          </label>
-          {!dayId ? (
-            <p>{t("Выберите тренировочный день")}</p>
-          ) : !dayExercises.length ? (
-            <p>{t("В этом дне пока нет упражнений с записями.")}</p>
-          ) : (
-            <>
-              <label className="block min-w-0 space-y-1 text-sm">
-                {t("Упражнение")}
-                <select
-                  aria-label={t("Упражнение записей")}
-                  className={selectCls}
-                  value={exerciseId}
-                  onChange={(event) => setChosenExercise(event.target.value)}
-                >
-                  {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
-                  {dayExercises.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.name}
-                      {exercise.archived_at ? t(" (архив)") : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {exerciseId ? (
-                <ExerciseEntries
-                  key={`${userId}:${exerciseId}`}
-                  userId={userId}
-                  exerciseId={exerciseId}
-                  exerciseName={
-                    dayExercises.find((exercise) => exercise.id === exerciseId)?.name ?? ""
-                  }
-                  dayNames={dayNames}
-                />
-              ) : (
-                <p>{t("Выберите упражнение")}</p>
-              )}
-            </>
-          )}
-        </>
-      )}
+      <PageCard className="space-y-5">
+        {!days.length && !hasUnassigned ? (
+          <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
+        ) : (
+          <>
+            <label className="block min-w-0 space-y-1 text-sm">
+              {t("Тренировочный день")}
+              <select
+                aria-label={t("День записей")}
+                className={selectCls}
+                value={dayId}
+                onChange={(event) => {
+                  setChosenDay(event.target.value);
+                  setChosenExercise("");
+                }}
+              >
+                {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
+                {days.map((day) => (
+                  <option key={day.id} value={day.id}>
+                    {day.name}
+                    {day.archived_at ? t(" (архив)") : ""}
+                  </option>
+                ))}
+                {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
+              </select>
+            </label>
+            {!dayId ? (
+              <p>{t("Выберите тренировочный день")}</p>
+            ) : !dayExercises.length ? (
+              <p>{t("В этом дне пока нет упражнений с записями.")}</p>
+            ) : (
+              <>
+                <label className="block min-w-0 space-y-1 text-sm">
+                  {t("Упражнение")}
+                  <select
+                    aria-label={t("Упражнение записей")}
+                    className={selectCls}
+                    value={exerciseId}
+                    onChange={(event) => setChosenExercise(event.target.value)}
+                  >
+                    {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
+                    {dayExercises.map((exercise) => (
+                      <option key={exercise.id} value={exercise.id}>
+                        {exercise.name}
+                        {exercise.archived_at ? t(" (архив)") : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {exerciseId ? (
+                  <ExerciseEntries
+                    key={`${userId}:${exerciseId}`}
+                    userId={userId}
+                    exerciseId={exerciseId}
+                    exerciseName={
+                      dayExercises.find((exercise) => exercise.id === exerciseId)?.name ?? ""
+                    }
+                    dayNames={dayNames}
+                  />
+                ) : (
+                  <p>{t("Выберите упражнение")}</p>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </PageCard>
     </div>
   );
 }
