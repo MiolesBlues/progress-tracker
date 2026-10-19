@@ -8,21 +8,24 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import { SessionProvider } from "@/lib/session";
+import { useI18n } from "@/lib/i18n";
+import { useLocation } from "@tanstack/react-router";
 
 function NotFoundComponent() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Страница не найдена.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{t("Страница не найдена.")}</p>
         <Link to="/" className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          На главную
+          {t("На главную")}
         </Link>
       </div>
     </div>
@@ -30,6 +33,7 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
+  const { t } = useI18n();
   console.error(error);
   const router = useRouter();
   useEffect(() => {
@@ -38,12 +42,14 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-foreground">Не удалось загрузить страницу</h1>
+        <h1 className="text-xl font-semibold text-foreground">
+          {t("Не удалось загрузить страницу")}
+        </h1>
         <button
           onClick={() => { router.invalidate(); reset(); }}
           className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
         >
-          Повторить
+          {t("Повторить")}
         </button>
       </div>
     </div>
@@ -87,20 +93,40 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event === "SIGNED_OUT") queryClient.clear();
-      else queryClient.invalidateQueries();
-    });
-    return () => data.subscription.unsubscribe();
-  }, [router, queryClient]);
+  const onIdentityChange = useCallback(() => {
+    void router.invalidate();
+  }, [router]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster position="top-center" />
+      <SessionProvider onIdentityChange={onIdentityChange}>
+        <LocalizedDocumentTitle />
+        <Outlet />
+        <Toaster position="top-center" />
+      </SessionProvider>
     </QueryClientProvider>
   );
+}
+
+function LocalizedDocumentTitle() {
+  const path = useLocation({ select: (location) => location.pathname });
+  const { t } = useI18n();
+  useEffect(() => {
+    const section =
+      path === "/auth"
+        ? t("Вход")
+        : path === "/onboarding"
+          ? t("Настройка программы")
+          : path === "/workout"
+            ? t("Тренировка")
+            : path === "/program"
+              ? t("Программа")
+              : path === "/entries"
+                ? t("Записи")
+                : path === "/progress"
+                  ? t("Прогресс")
+                  : "";
+    document.title = section ? `${section} — ${t("Прогресс Трекер")}` : t("Прогресс Трекер");
+  }, [path, t]);
+  return null;
 }
