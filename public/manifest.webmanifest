@@ -1,6 +1,6 @@
 {
-  "name": "Workout Tracker",
-  "short_name": "Тренировки",
+  "name": "Прогресс Трекер",
+  "short_name": "Прогресс",
   "lang": "ru",
   "start_url": "/workout",
   "display": "standalone",

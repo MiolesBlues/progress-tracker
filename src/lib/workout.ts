@@ -1,5 +1,17 @@
 export const MAX_DAYS = 7;
-export const DAY_NAME_PRESETS = ["День A", "День B", "День C", "Full Body", "Push", "Pull", "Legs", "Upper 1", "Lower 1", "Upper 2", "Lower 2"];
+export const DAY_NAME_PRESETS = [
+  "День A",
+  "День B",
+  "День C",
+  "Full Body",
+  "Push",
+  "Pull",
+  "Legs",
+  "Upper 1",
+  "Lower 1",
+  "Upper 2",
+  "Lower 2",
+];
 export const UPPER_LOWER_NAMES = ["Upper 1", "Lower 1", "Upper 2", "Lower 2"];
 
 /** Onboarding is shown only to accounts that have never had any day (archived days count). */
@@ -7,7 +19,10 @@ export const needsOnboarding = (days: unknown[]) => days.length === 0;
 
 /** Default names for a fresh program of `count` days: День A, День B, … */
 export const defaultDayNames = (count: number) =>
-  Array.from({ length: Math.min(Math.max(count, 1), MAX_DAYS) }, (_, i) => `День ${String.fromCharCode(65 + i)}`);
+  Array.from(
+    { length: Math.min(Math.max(count, 1), MAX_DAYS) },
+    (_, i) => `День ${String.fromCharCode(65 + i)}`,
+  );
 
 export type Metric = "weight" | "reps" | "volume";
 export const METRICS: { id: Metric; label: string; unit: string }[] = [
@@ -21,26 +36,74 @@ export interface EntryLike {
   performed_on: string; // YYYY-MM-DD
   weight: number;
   reps: number[];
+  rir?: number | null;
+  sets?: {
+    id?: string;
+    weightExact?: string;
+    position: number;
+    weight: number;
+    reps: number;
+    rir: number | null;
+    set_type: "working" | "warmup";
+    load_type: "external" | "bodyweight";
+  }[];
 }
 
-const sum = (a: number[]) => a.reduce((s, x) => s + x, 0);
+export function effectiveSets(e: EntryLike) {
+  return e.sets?.length
+    ? e.sets
+    : e.reps.map((reps, index) => ({
+        position: index + 1,
+        weight: e.weight,
+        reps,
+        rir: e.rir ?? null,
+        set_type: "working" as const,
+        load_type: "external" as const,
+      }));
+}
+
+export function workoutMetrics(e: EntryLike) {
+  const working = effectiveSets(e).filter((set) => set.set_type === "working");
+  const totalVolume = working.reduce((total, set) => total + set.weight * set.reps, 0);
+  return {
+    maxWorkingWeight: working.length ? Math.max(...working.map((set) => set.weight)) : 0,
+    bestWorkingSet: working.reduce<{
+      position: number;
+      weight: number;
+      reps: number;
+      volume: number;
+    } | null>((best, set) => {
+      const candidate = {
+        position: set.position,
+        weight: set.weight,
+        reps: set.reps,
+        volume: set.weight * set.reps,
+      };
+      return !best || candidate.volume > best.volume ? candidate : best;
+    }, null),
+    workingVolume: totalVolume,
+    workingSets: working.length,
+    workingReps: working.reduce((total, set) => total + set.reps, 0),
+    rirHistory: working.map((set) => set.rir),
+  };
+}
 
 export function entryValue(e: EntryLike, m: Metric): number {
-  const r = sum(e.reps);
-  if (m === "weight") return Number(e.weight);
-  if (m === "reps") return r;
-  return Number(e.weight) * r;
+  const metrics = workoutMetrics(e);
+  if (m === "weight") return metrics.maxWorkingWeight;
+  if (m === "reps") return metrics.workingReps;
+  return metrics.workingVolume;
 }
 
 /** Aggregate a set of entries: weight = max, reps/volume = total. Null when empty. */
 export function aggregate(entries: EntryLike[], m: Metric): number | null {
   if (entries.length === 0) return null;
   const vals = entries.map((e) => entryValue(e, m));
-  return m === "weight" ? Math.max(...vals) : sum(vals);
+  return m === "weight" ? Math.max(...vals) : vals.reduce((total, value) => total + value, 0);
 }
 
 export function toISO(d: Date): string {
-  const y = d.getFullYear();
+  const y = String(d.getFullYear()).padStart(4, "0");
   const mo = String(d.getMonth() + 1).padStart(2, "0");
   const da = String(d.getDate()).padStart(2, "0");
   return `${y}-${mo}-${da}`;
@@ -48,7 +111,8 @@ export function toISO(d: Date): string {
 
 /** Monday-based calendar week containing `d`: [start, end] ISO dates inclusive. */
 export function weekRange(d: Date): [string, string] {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
   const dow = (x.getDay() + 6) % 7;
   const start = new Date(x);
   start.setDate(x.getDate() - dow);
@@ -61,7 +125,8 @@ export function weekComparison(entries: EntryLike[], m: Metric, today: Date) {
   const [cs, ce] = weekRange(today);
   const prevDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
   const [ps, pe] = weekRange(prevDay);
-  const inRange = (s: string, e: string) => entries.filter((x) => x.performed_on >= s && x.performed_on <= e);
+  const inRange = (s: string, e: string) =>
+    entries.filter((x) => x.performed_on >= s && x.performed_on <= e);
   const current = aggregate(inRange(cs, ce), m);
   const previous = aggregate(inRange(ps, pe), m);
   const delta = current !== null && previous !== null ? current - previous : null;
@@ -78,11 +143,15 @@ export function dailySeries(entries: EntryLike[], m: Metric) {
 
 /** Prefill for the log form: last logged session wins, else the program's starting weight/example reps. */
 export function prefillFor(
-  ex: { working_weight: number | null; example_reps: number[] | null; target_sets: number | null } | undefined,
+  ex:
+    | { working_weight: number | null; example_reps: number[] | null; target_sets: number | null }
+    | undefined,
   last: { weight: number | string; reps: number[] } | null | undefined,
 ): { weight: string; reps: string[] } {
   if (last) return { weight: String(Number(last.weight)), reps: last.reps.map(String) };
   const sets = ex?.target_sets ?? ex?.example_reps?.length ?? 3;
-  const reps = ex?.example_reps?.length ? ex.example_reps.map(String) : Array.from({ length: sets }, () => "");
+  const reps = Array.from({ length: sets }, (_, index) =>
+    ex?.example_reps?.[index] === undefined ? "" : String(ex.example_reps[index]),
+  );
   return { weight: ex?.working_weight == null ? "" : String(ex.working_weight), reps };
 }
