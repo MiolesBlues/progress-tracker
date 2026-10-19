@@ -280,18 +280,29 @@ export function resetFake() {
   fake.state.saveRpc.mockReset();
   fake.state.saveRpc.mockImplementation(async (args) => {
     const id = String(args["_id"]);
+    const sets = Array.isArray(args["_sets"]) ? (args["_sets"] as Row[]) : null;
     if (!fake.state.rows.workout_entries.some((row) => row.id === id)) {
       fake.state.rows.workout_entries.push({
         id,
         user_id: fake.state.userId ?? "",
         exercise_id: args["_exercise_id"],
+        day_id: String(args["_day_id"]),
         performed_on: args["_performed_on"],
         created_at: new Date().toISOString(),
-        weight: args["_weight"],
-        reps: args["_reps"],
-        rir: args["_rir"],
+        weight: sets ? Number(sets[0]?.["weight"] ?? 0) : args["_weight"],
+        reps: sets ? sets.map((set) => set["reps"]) : args["_reps"],
+        rir: sets ? (sets[0]?.["rir"] ?? null) : args["_rir"],
         notes: args["_notes"],
       });
+      if (sets)
+        fake.state.rows.workout_entry_sets.push(
+          ...sets.map((set) => ({
+            ...set,
+            user_id: fake.state.userId ?? "",
+            workout_entry_id: id,
+            legacy_snapshot: false,
+          })),
+        );
     }
     return { data: id, error: null };
   });

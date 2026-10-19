@@ -8,6 +8,34 @@ export const firstName = "Жим с длинным названием упраж
 export const secondName = "Тяга блока";
 export const longDay = "Силовой день с произвольным длинным названием";
 
+/** Clear native maxlength inputs before replacement (Chromium narrow-input insertText issue). */
+export async function replaceText(input: Locator, value: string) {
+  await input.fill("");
+  await input.fill(value);
+  await expect(input).toHaveValue(value);
+}
+
+export async function fillWorkout(page: Page, weight: string, reps: string[], rir = "") {
+  for (let index = 0; index < reps.length; index++) {
+    await replaceText(page.getByLabel(`Вес подхода ${index + 1}`, { exact: true }), weight);
+    await replaceText(
+      page.getByLabel(`Повторения подхода ${index + 1}`, { exact: true }),
+      reps[index]!,
+    );
+    await replaceText(page.getByLabel(`RIR подхода ${index + 1}`, { exact: true }), rir);
+  }
+}
+
+export async function sortRecords(page: Page, direction: "weight-asc" | "weight-desc") {
+  await page.getByRole("button", { name: "Сортировка записей", exact: true }).click();
+  await page
+    .getByRole("menuitemradio", {
+      name: direction === "weight-asc" ? "Вес: по возрастанию" : "Вес: по убыванию",
+      exact: true,
+    })
+    .click();
+}
+
 export async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -116,7 +144,7 @@ export function seedHistory(backend: Backend) {
 }
 export async function geometry(page: Page) {
   const date = await page.getByLabel("Дата", { exact: true }).boundingBox();
-  const weight = await page.getByLabel("Рабочий вес, кг", { exact: true }).boundingBox();
+  const weight = await page.getByLabel("Вес подхода 1", { exact: true }).boundingBox();
   expect(date).not.toBeNull();
   expect(weight).not.toBeNull();
   expect(
@@ -127,7 +155,7 @@ export async function geometry(page: Page) {
   ).toBe(true);
   for (const field of [
     page.getByLabel("Дата", { exact: true }),
-    page.getByLabel("Рабочий вес, кг", { exact: true }),
+    page.getByLabel("Вес подхода 1", { exact: true }),
   ]) {
     expect(
       await field.evaluate((input) => {

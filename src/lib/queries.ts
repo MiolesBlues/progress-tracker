@@ -227,7 +227,7 @@ export const lastEntryQuery = (
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
-        .select("id, performed_on, weight, reps, rir")
+        .select("id, performed_on, weight, reps, rir, notes")
         .eq("user_id", userId)
         .eq("exercise_id", exerciseId)
         .lte("performed_on", onOrBefore)

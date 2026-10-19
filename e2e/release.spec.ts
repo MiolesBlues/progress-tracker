@@ -14,6 +14,9 @@ import {
   firstName,
   secondName,
   longDay,
+  replaceText,
+  fillWorkout,
+  sortRecords,
 } from "./helpers";
 
 for (const [width, count] of [
@@ -69,7 +72,7 @@ for (const [width, count] of [
     await group
       .getByRole("button", { name: `Переименовать день: ${longDay}`, exact: true })
       .click();
-    await group.getByLabel("Название дня", { exact: true }).fill(`${longDay}!`);
+    await replaceText(group.getByLabel("Название дня", { exact: true }), `${longDay}!`);
     await group.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(dayDialog.getByLabel("Название дня", { exact: true })).toHaveCount(0);
     await expect.poll(() => firstDay["name"]).toBe(`${longDay}!`);
@@ -77,7 +80,7 @@ for (const [width, count] of [
     await renamed
       .getByRole("button", { name: `Переименовать день: ${longDay}!`, exact: true })
       .click();
-    await renamed.getByLabel("Название дня", { exact: true }).fill(longDay);
+    await replaceText(renamed.getByLabel("Название дня", { exact: true }), longDay);
     await renamed.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(dayDialog.getByLabel("Название дня", { exact: true })).toHaveCount(0);
     await dayDialog.getByRole("button", { name: "Готово", exact: true }).click();
@@ -116,30 +119,30 @@ for (const [width, count] of [
     await chooseDay(page, `${otherDay["name"]} · 0 упражнений`);
     await expect(page.getByText("В этом дне нет активных упражнений.")).toBeVisible();
     await chooseDay(page, `${longDay} · 2 упражнения`);
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("50");
-    await expect(page.getByLabel("Подход 4", { exact: true })).toHaveValue("6");
-    await expect(page.getByLabel("RIR (необязательно)", { exact: true })).toHaveValue("2");
-    await expect(page.getByText("План 4×8–12", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("50");
+    await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("6");
+    await expect(page.getByLabel("RIR подхода 1", { exact: true })).toHaveValue("2");
+    await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toBeVisible();
     await geometry(page);
-    await page.getByLabel("Рабочий вес, кг", { exact: true }).fill("52,5");
-    await page.getByLabel("Подход 4", { exact: true }).fill("7");
+    await fillWorkout(page, "52,5", ["8", "8", "7", "7"], "2");
+    await page.getByLabel("Повторения подхода 4", { exact: true }).fill("7");
     await page.getByLabel("Заметки", { exact: true }).fill("Черновик на устройстве");
     await page.reload();
     await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("Черновик на устройстве");
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("52,5");
-    await expect(page.getByLabel("Подход 4", { exact: true })).toHaveValue("7");
+    await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("52,5");
+    await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("7");
     backend.loseSaveResponse = true;
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await page.getByRole("button", { name: "Повторить сохранение", exact: true }).click();
     await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("70");
-    await expect(page.getByLabel("Подход 3", { exact: true })).toHaveValue("8");
-    await expect(page.getByLabel("Подход 4", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("");
+    await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Дата", { exact: true })).toHaveValue("2026-10-15");
     await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("");
     const toast = page.getByText("Ваша тренировка сохранена", { exact: true });
     await expect(toast).toBeVisible();
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toBeEnabled();
+    await expect(page.getByLabel("Вес подхода 1", { exact: true })).toBeEnabled();
     // Measure the whole toast after its entrance transition, not a moving text child.
     await expect
       .poll(async () => {
@@ -153,6 +156,7 @@ for (const [width, count] of [
     expect(
       backend.rows["workout_entries"]!.filter((row) => row.id === backend.saveCalls[0]),
     ).toHaveLength(1);
+    await fillWorkout(page, "70", ["10", "9", "8"], "2");
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await expect(page.getByText(/Все упражнения этого дня пройдены/)).toBeVisible();
     const lastSavedAt = Date.now();
@@ -160,9 +164,14 @@ for (const [width, count] of [
     await expect(toast).toBeHidden({ timeout: 5_000 });
     expect(Date.now() - lastSavedAt).toBeGreaterThanOrEqual(2_000);
     await expect(page.getByText("Сохранено", { exact: true })).toHaveCount(0);
+    const restoredRequest = page.waitForRequest(
+      (request) => request.url().includes("/workout_entries?") && request.url().includes(first.id),
+    );
     await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
-    await expect(page.getByLabel("Подход 4", { exact: true })).toHaveValue("7");
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("52.5");
+    expect(new URL((await restoredRequest).url()).searchParams.get("select")).toContain("notes");
+    await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("7");
+    await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("52.5");
+    await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("Черновик на устройстве");
     await page.getByRole("link", { name: "Записи", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Записи", exact: true })).toBeVisible();
     await page
@@ -183,11 +192,11 @@ for (const [width, count] of [
       await expect(diary.getByRole("listitem")).toHaveCount(records);
     }
     await expect(diary.getByText("Будущая запись", { exact: true })).toHaveCount(0);
-    await diary.getByLabel("Сортировка записей", { exact: true }).selectOption("weight-desc");
+    await sortRecords(page, "weight-desc");
     await expect(diary.getByRole("listitem").first()).toContainText("52,5 кг");
     await expect(diary.getByRole("listitem").nth(1)).toContainText("Ранняя сессия");
     await expect(diary.getByRole("listitem").nth(2)).toContainText("Вчерашняя запись");
-    await diary.getByLabel("Сортировка записей", { exact: true }).selectOption("weight-asc");
+    await sortRecords(page, "weight-asc");
     await expect(diary.getByRole("listitem").first()).toContainText("40 кг");
     await noOverflow(page);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
@@ -267,15 +276,15 @@ test("A → B → A isolates cache and restores only the owner's draft; network 
     notes: "История A",
   });
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("55");
-  await page.getByLabel("Рабочий вес, кг", { exact: true }).fill("61");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("55");
+  await page.getByLabel("Вес подхода 1", { exact: true }).fill("61");
   await page.getByLabel("Заметки", { exact: true }).fill("Секретный черновик A");
   await page.getByRole("button", { name: "Выйти", exact: true }).click();
   await register(page, "b@example.invalid", 2);
   await addExercise(page, "Упражнение B");
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
   await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
   await expect(page.getByRole("option", { name: firstName, exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Записи", exact: true }).click();
   await expect(page.getByText("За выбранный период записей нет.", { exact: true })).toBeVisible();
@@ -298,7 +307,7 @@ test("A → B → A isolates cache and restores only the owner's draft; network 
   );
   await page.getByLabel("Пароль", { exact: true }).press("Enter");
   await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("Секретный черновик A");
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("61");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("61");
 });
 
 test("stage 1 regressions: stale cached history, late reply, old next-exercise draft and date", async ({
@@ -311,9 +320,9 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   await addExercise(page, secondName, 3);
   const { first, second } = seedHistory(backend);
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
-  await expect(page.getByLabel("Подход 4", { exact: true })).toHaveValue("6");
+  await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("6");
   await page.getByLabel("Упражнение", { exact: true }).selectOption(second.id);
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("70");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
   const latest = backend.rows["workout_entries"]!.find(
     (row) => row["exercise_id"] === first.id && row["performed_on"] === "2026-10-15",
   )!;
@@ -321,8 +330,8 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   latest["reps"] = [9, 9, 8, 7];
   latest["rir"] = 1;
   await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("55");
-  await expect(page.getByLabel("Подход 1", { exact: true })).toHaveValue("9");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("55");
+  await expect(page.getByLabel("Повторения подхода 1", { exact: true })).toHaveValue("9");
   await page.getByLabel("Упражнение", { exact: true }).selectOption(second.id);
   let release!: () => void;
   backend.delayLastRead = {
@@ -333,10 +342,10 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   };
   await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
   await expect.poll(() => backend.delayLastRead).toBeNull();
-  await page.getByLabel("Рабочий вес, кг", { exact: true }).fill("62,5");
+  await page.getByLabel("Вес подхода 1", { exact: true }).fill("62,5");
   release();
-  await expect(page.getByText(/Было 55 кг/)).toBeVisible();
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("62,5");
+  await expect(page.getByText("Загрузка предыдущей тренировки…", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("62,5");
   await page.evaluate(
     ({ userId, exerciseId }) => {
       localStorage.setItem(
@@ -354,9 +363,10 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
     },
     { userId: first.user_id, exerciseId: second.id },
   );
+  await fillWorkout(page, "62,5", ["9", "9", "8", "7"], "1");
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue("2026-10-15");
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("70");
-  await expect(page.getByLabel("Подход 3", { exact: true })).toHaveValue("8");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("");
 });

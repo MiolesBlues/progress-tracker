@@ -227,6 +227,10 @@ export async function mockSupabase(page: Page) {
             }),
           );
         }
+        if (state.loseSaveResponse) {
+          state.loseSaveResponse = false;
+          return route.abort("failed");
+        }
         return respond(operation);
       }
       if (url.pathname.endsWith("/archive_deletion_capabilities"))

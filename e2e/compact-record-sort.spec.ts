@@ -46,7 +46,9 @@ test("compact record sorting menu fits mobile and desktop and preserves its sele
   await page.getByRole("link", { name: "Записи", exact: true }).click();
   const diary = page.getByRole("region", { name: "Дневник записей упражнения", exact: true });
   await expect(diary.getByRole("heading", { name: "Записи · 2", exact: true })).toBeVisible();
-  await expect(diary.getByText("60 кг · 6 / 6 / 6")).toBeVisible();
+  await expect(
+    diary.getByText("3 подхода · Макс. рабочий вес 60 кг", { exact: true }),
+  ).toBeVisible();
   const topRecord = diary.getByRole("listitem").first();
   await expect(topRecord.getByRole("button")).toContainText("60 кг");
   await topRecord.getByRole("button").click();

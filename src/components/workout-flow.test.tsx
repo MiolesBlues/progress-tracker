@@ -8,12 +8,10 @@ import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { WorkoutPage } from "@/components/workout-page";
 import { ProgramManager } from "@/components/program-manager";
 import { ProgressPage } from "@/components/progress-page";
-import { draftKey, newDraft, readDraft, writeDraft } from "@/lib/workout-draft";
+import { newDraft, writeDraft, perSetDraftKey, readPerSetDraft } from "@/lib/workout-draft";
 import { userKeys } from "@/lib/queries";
 import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
-import { LanguageProvider } from "@/lib/i18n-provider";
-import { SettingsDialog } from "@/components/settings-dialog";
 
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
@@ -74,13 +72,16 @@ async function chooseTrainingDay(name: RegExp | string) {
   fireEvent.click(await screen.findByRole("option", { name }));
 }
 const submit = () => fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
-const save = () => {
-  screen.getAllByLabelText(/^Подход \d+$/).forEach((input) => {
-    if ((input as HTMLInputElement).value === "")
-      fireEvent.change(input, { target: { value: "8" } });
+function change(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+}
+function fillSets(weight = "50") {
+  screen.getAllByLabelText(/^Вес подхода \d+$/).forEach((_, index) => {
+    change(`Вес подхода ${index + 1}`, weight);
+    change(`Повторения подхода ${index + 1}`, "8");
+    change(`RIR подхода ${index + 1}`, "2");
   });
-  submit();
-};
+}
 beforeEach(() => {
   resetFake();
   vi.mocked(toast).mockClear();
@@ -119,7 +120,6 @@ it("shows active days with exercise counts and filters exercises after selection
   fake.state.rows.program_exercises[1]!["day_id"] = DAY2;
   mount();
   await ready();
-  expect(screen.getByText("Было 50 кг × 8/8/7/6")).toBeVisible();
   expect(screen.getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
     "Силовой · 1 упражнение",
   );
@@ -229,61 +229,6 @@ it("shows a create-day empty state and wraps long custom names in the list", asy
   expect(longName).toHaveClass("whitespace-normal");
 });
 
-it("rejects empty weight without sending or losing input", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "" } });
-  save();
-  expect(await screen.findByText(/Пустое значение не равно нулю/)).toBeInTheDocument();
-  expect(fake.state.saveRpc).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("");
-});
-it.each([50, 0])(
-  "prefills weight, every rep and RIR from the last record, including weight %s",
-  async (weight) => {
-    fake.state.rows.workout_entries = [{ ...last(EX, weight), rir: 2 }];
-    mount();
-    await ready();
-    expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue(String(weight));
-    expect(
-      screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-    ).toEqual(["8", "8", "7", "6"]);
-    expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
-    expect(screen.getByLabelText("Заметки")).toHaveValue("");
-  },
-);
-it("uses program weight, target sets and example reps when exercise history is absent", async () => {
-  fake.state.rows.workout_entries = [];
-  mount();
-  await ready();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30");
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "7", "6"]);
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("");
-});
-it("leaves reps empty when there is no history and no example reps", async () => {
-  fake.state.rows.workout_entries = [];
-  fake.state.rows.program_exercises = [
-    { ...exercise(EX), target_sets: 2, working_weight: null, example_reps: null },
-  ];
-  mount();
-  await screen.findByText("Истории нет");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("");
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(2);
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["", ""]);
-});
-it("refreshes the suggested weight for the selected date and ignores future history", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-10" } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30"));
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50"));
-});
 it("preserves the native date input and its focus while changing session dates", async () => {
   mount();
   await ready();
@@ -293,510 +238,6 @@ it("preserves the native date input and its focus while changing session dates",
   await ready();
   expect(screen.getByLabelText("Дата")).toBe(input);
   expect(input).toHaveFocus();
-});
-it.each([
-  ["0", 0],
-  ["52,5", 52.5],
-] as const)("saves explicit weight %s and all four sets exactly", async (value, weight) => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value } });
-  save();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(fake.state.saveRpc).toHaveBeenCalledWith(
-    expect.objectContaining({ _weight: weight, _reps: [8, 8, 7, 6] }),
-  );
-  expect(fake.state.saveRpc.mock.calls[0]?.[0]).not.toHaveProperty("_day_name");
-  expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
-});
-it("advances after server confirmation and prefills the next exercise history", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "52,5" } });
-  fireEvent.change(screen.getByLabelText("Подход 1"), { target: { value: "10" } });
-  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "2" } });
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Первое упражнение" } });
-  save();
-
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Тяга");
-  expect(await screen.findByText("План 4×6–8")).toBeVisible();
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-13");
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "7", "6"]);
-  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
-  expect(screen.getByLabelText("Заметки")).toHaveValue("");
-  expect(toast.success).toHaveBeenCalledWith("Ваша тренировка сохранена", {
-    id: "workout-saved",
-    duration: 3000,
-    position: "bottom-center",
-    style: { pointerEvents: "none" },
-  });
-
-  for (let index = 1; index <= 4; index++)
-    fireEvent.change(screen.getByLabelText(`Подход ${index}`), { target: { value: "8" } });
-  save();
-  await screen.findByText(/Все упражнения этого дня пройдены/);
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-13");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toBeEnabled();
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "8", "8"]);
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("");
-  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
-  expect(toast.success).toHaveBeenCalledTimes(2);
-
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX));
-  expect(screen.getByRole("button", { name: "Сохранить" })).toBeEnabled();
-});
-
-it("keeps the exercise selected with auto-advance off and adds separate historical entries safely", async () => {
-  const idempotentSave = fake.state.saveRpc.getMockImplementation();
-  let attempts = 0;
-  fake.state.saveRpc.mockImplementation(async (args) => {
-    const result = await idempotentSave!(args);
-    attempts++;
-    if (attempts === 2) throw new TypeError("Failed to fetch");
-    return result;
-  });
-  mount(
-    <>
-      <WorkoutPage />
-      <LanguageProvider>
-        <SettingsDialog />
-      </LanguageProvider>
-    </>,
-  );
-  await ready();
-  fireEvent.click(screen.getByRole("button", { name: "Настройки" }));
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "Автоматически переходить к следующему упражнению" }),
-  );
-  expect(localStorage.getItem(`app:archive-settings:v1:${A}`)).toBe("4");
-  fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
-
-  const changeEntry = async (
-    date: string,
-    previousWeight: string,
-    weight: string,
-    reps: string[],
-  ) => {
-    fireEvent.change(screen.getByLabelText("Дата"), { target: { value: date } });
-    await waitFor(() => expect(screen.getByLabelText("Дата")).toHaveValue(date));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue(previousWeight),
-    );
-    expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-    fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: weight } });
-    for (let index = 0; index < reps.length; index++)
-      fireEvent.change(screen.getByLabelText(`Подход ${index + 1}`), {
-        target: { value: reps[index] },
-      });
-    if (screen.queryByLabelText(`Подход ${reps.length + 1}`))
-      fireEvent.click(screen.getByRole("button", { name: "Убрать подход" }));
-  };
-
-  await changeEntry("2026-09-01", "30", "50", ["8", "8", "8"]);
-  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "2" } });
-  const firstId = readDraft(A, EX)!.id;
-  submit();
-  await waitFor(() =>
-    expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
-      2,
-    ),
-  );
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-01");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50");
-  expect(screen.getByLabelText("Подход 3")).toHaveValue("8");
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
-  const secondId = readDraft(A, EX)!.id;
-  expect(secondId).not.toBe(firstId);
-  expect(readDraft(A, EX)?.operation).toBeNull();
-
-  await changeEntry("2026-09-05", "50", "52,5", ["8", "8", "7"]);
-  const retryId = readDraft(A, EX)!.id;
-  submit();
-  await screen.findByRole("button", { name: "Повторить сохранение" });
-  expect(readDraft(A, EX)?.operation?.id).toBe(retryId);
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-05");
-  fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
-  await waitFor(() => expect(readDraft(A, EX)?.id).not.toBe(retryId));
-  expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(fake.state.saveRpc.mock.calls[2]![0]);
-  expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
-    3,
-  );
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-05");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("52.5");
-
-  await changeEntry("2026-09-10", "52.5", "55", ["8", "7", "6"]);
-  const thirdId = readDraft(A, EX)!.id;
-  submit();
-  await waitFor(() =>
-    expect(fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX)).toHaveLength(
-      4,
-    ),
-  );
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-09-10");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("55");
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((field) => (field as HTMLInputElement).value),
-  ).toEqual(["8", "7", "6"]);
-  const entries = fake.state.rows.workout_entries.filter((row) => row["exercise_id"] === EX);
-  expect(entries.map((row) => row["performed_on"])).toEqual([
-    "2026-10-12",
-    "2026-09-01",
-    "2026-09-05",
-    "2026-09-10",
-  ]);
-  expect(entries.map((row) => row["weight"])).toEqual([50, 50, 52.5, 55]);
-  expect(new Set(entries.slice(1).map((row) => row.id)).size).toBe(3);
-  expect(thirdId).not.toBe(retryId);
-  expect(toast.success).toHaveBeenCalledTimes(3);
-});
-it("loads only the selected exercise's own recorded reps and RIR", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "7", "6"]);
-  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
-});
-it("saves only the edited fourth set and shows it as the latest result when returning", async () => {
-  fake.state.rows.workout_entries = [{ ...last(EX), rir: 2 }, last(EX2, 60)];
-  fake.state.saveRpc.mockImplementation(async (args) => {
-    const id = String(args["_id"]);
-    fake.state.rows.workout_entries.push({
-      id,
-      user_id: A,
-      exercise_id: args["_exercise_id"],
-      performed_on: args["_performed_on"],
-      created_at: "2026-10-14T12:00:00.000Z",
-      weight: args["_weight"],
-      reps: args["_reps"],
-      rir: args["_rir"],
-      notes: args["_notes"],
-    });
-    return { data: id, error: null };
-  });
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
-  save();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(fake.state.saveRpc).toHaveBeenCalledWith(
-    expect.objectContaining({ _reps: [8, 8, 7, 7], _rir: 2 }),
-  );
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50"));
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "7", "7"]);
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
-});
-it("does not let late next-exercise history overwrite a weight the user has started editing", async () => {
-  fake.state.rows.program_exercises[1]!["example_reps"] = [5, 5, 5, 5];
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX2 },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  mount();
-  await ready();
-  save();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30"));
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["5", "5", "5", "5"]);
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "72,5" } });
-  await act(async () => {
-    resolve({ data: last(EX2, 60), error: null });
-  });
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
-  await waitFor(() =>
-    expect(
-      screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-    ).toEqual(["8", "8", "7", "6"]),
-  );
-  await waitFor(() => expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("1"));
-});
-it.each(["", "8-8-7-6"])(
-  "keeps invalid approach %j visible instead of dropping/concatenating it",
-  async (value) => {
-    mount();
-    await ready();
-    fireEvent.change(screen.getByLabelText("Подход 1"), { target: { value: "8" } });
-    fireEvent.change(screen.getByLabelText("Подход 2"), { target: { value } });
-    submit();
-    await screen.findByRole("alert");
-    expect(fake.state.saveRpc).not.toHaveBeenCalled();
-    expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
-    expect(screen.getByLabelText("Подход 2")).toHaveValue(value);
-    if (value) expect(screen.getByRole("alert")).toHaveTextContent("четыре отдельных поля");
-  },
-);
-it("late last-entry only fills untouched fields, and subsequent refetch cannot overwrite the draft", async () => {
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  mount();
-  await screen.findByLabelText("Рабочий вес, кг");
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "72,5" } });
-  fireEvent.change(screen.getByLabelText("Подход 1"), { target: { value: "11" } });
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Не потерять" } });
-  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "2,5" } });
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-10" } });
-  await act(async () => {
-    resolve({ data: last(), error: null });
-  });
-  expect(await screen.findByText("План 4×6–8")).toBeVisible();
-  expect(screen.getByText("Истории нет")).toBeVisible();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
-  expect(screen.getByLabelText("Подход 1")).toHaveValue("11");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Не потерять");
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2,5");
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-10");
-  act(() => qc.setQueryData(["user", A, "last-entry", EX, "2026-10-10"], last(EX, 90)));
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
-});
-it("shows no invented plan values when an exercise has no targets", async () => {
-  fake.state.rows.program_exercises[0]!["target_sets"] = null;
-  fake.state.rows.program_exercises[0]!["target_reps"] = null;
-  fake.state.rows.workout_entries = [];
-  mount();
-  expect(await screen.findByText("Истории нет")).toBeVisible();
-  const summary = screen.getByText("Истории нет").parentElement;
-  expect(summary).not.toHaveTextContent("План");
-  expect(summary).not.toHaveTextContent("—");
-});
-it("a reply for previously selected exercise cannot change the current exercise", async () => {
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  mount();
-  await screen.findByLabelText("Упражнение");
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await ready();
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Второе упражнение" } });
-  await act(async () => {
-    resolve({ data: last(EX, 99), error: null });
-  });
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Второе упражнение");
-});
-it("double click submits once, including a second submit event before acknowledgement", async () => {
-  let resolve!: (response: { data: string; error: null }) => void;
-  fake.state.saveRpc.mockImplementation(
-    (args) =>
-      new Promise((done) => {
-        expect(readDraft(A, EX)?.operation?.id).toBe(args["_id"]);
-        resolve = done;
-      }),
-  );
-  mount();
-  await ready();
-  save();
-  fireEvent.submit(screen.getByRole("form", { name: "Запись тренировки" }));
-  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
-  const id = String(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
-  await act(async () => {
-    resolve({ data: id, error: null });
-  });
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
-  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
-});
-it("a timeout after INSERT and reopening the app retry the same UUID and immutable payload", async () => {
-  const server = new Map<string, unknown>();
-  let attempt = 0;
-  fake.state.saveRpc.mockImplementation(async (args) => {
-    const id = String(args["_id"]);
-    server.set(id, args);
-    return ++attempt === 1
-      ? { data: null, error: { code: "", message: "timeout" } }
-      : { data: id, error: null };
-  });
-  const view = mount();
-  await ready();
-  save();
-  await screen.findByText(/Результат сохранения не подтверждён/);
-  const initial = fake.state.saveRpc.mock.calls[0]![0];
-  expect(readDraft(A, EX)?.operation?.id).toBe(initial["_id"]);
-  expect(screen.getByLabelText("Рабочий вес, кг")).toBeDisabled();
-  view.unmount();
-  mount();
-  await screen.findByRole("button", { name: "Повторить сохранение" });
-  fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(initial);
-  expect(server.size).toBe(1);
-  expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
-});
-it("a definite INSERT failure retains editable input and retries with the same UUID", async () => {
-  fake.state.saveRpc.mockResolvedValueOnce({
-    data: null,
-    error: { code: "23514", message: "check" },
-  });
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Сохранить меня" } });
-  save();
-  await screen.findByText(/Запись отклонена/);
-  expect(toast.success).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Сохранить меня");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toBeEnabled();
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
-  const id = fake.state.saveRpc.mock.calls[0]![0]["_id"];
-  save();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(fake.state.saveRpc.mock.calls[1]![0]["_id"]).toBe(id);
-});
-it("an intentional second entry on the same date gets a new UUID", async () => {
-  fake.state.rows.program_exercises = [exercise(EX)];
-  mount();
-  await ready();
-  save();
-  await screen.findByText(/Все упражнения этого дня пройдены/);
-  for (let index = 1; index <= 4; index++)
-    fireEvent.change(screen.getByLabelText(`Подход ${index}`), { target: { value: "8" } });
-  save();
-  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
-  const [first, second] = fake.state.saveRpc.mock.calls;
-  expect(first![0]["_id"]).not.toBe(second![0]["_id"]);
-  expect(first![0]["_performed_on"]).toBe(second![0]["_performed_on"]);
-});
-it("restores the selected exercise and its raw draft after reopening", async () => {
-  const view = mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "67,5" } });
-  fireEvent.change(screen.getByLabelText("Подход 2"), { target: { value: "" } });
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Сырой черновик" } });
-  view.unmount();
-  mount();
-  await ready();
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("67,5");
-  expect(screen.getByLabelText("Подход 2")).toHaveValue("");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Сырой черновик");
-});
-it("success for previous exercise clears only that draft and leaves the new form intact", async () => {
-  let resolve!: (response: { data: string; error: null }) => void;
-  fake.state.saveRpc.mockImplementation(
-    () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
-  );
-  mount();
-  await ready();
-  save();
-  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
-  const id = String(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Другой черновик" } });
-  await act(async () => {
-    resolve({ data: id, error: null });
-  });
-  expect(localStorage.getItem(draftKey(A, EX))).toBeNull();
-  expect(readDraft(A, EX2)?.fields.notes).toBe("Другой черновик");
-  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Другой черновик");
-  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
-});
-it("account A → B → A never exposes A's draft to B and restores A's own draft", async () => {
-  const view = mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Секрет A" } });
-  fake.state.rows.program_days.push({
-    id: DAY,
-    user_id: B,
-    name: "День B",
-    position: 0,
-    archived_at: null,
-  });
-  fake.state.rows.program_exercises.push(exercise(EX2, B));
-  fake.state.rows.workout_entries.push(last(EX2, 80, B));
-  act(() => authEvent("SIGNED_IN", B));
-  view.rerender(tree(<WorkoutPage />, B));
-  await ready();
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80"));
-  expect(
-    screen.getAllByLabelText(/^Подход \d+$/).map((input) => (input as HTMLInputElement).value),
-  ).toEqual(["8", "8", "7", "6"]);
-  expect(screen.getByLabelText("Заметки")).toHaveValue("");
-  expect(screen.queryByDisplayValue("Секрет A")).not.toBeInTheDocument();
-  act(() => authEvent("SIGNED_IN", A));
-  view.rerender(tree(<WorkoutPage />, A));
-  await ready();
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Секрет A");
-});
-it("storage failure prevents network submission and preserves the visible fields", async () => {
-  mount();
-  await ready();
-  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-    throw new Error("quota");
-  });
-  save();
-  await screen.findByText(/Запрос не отправлен/);
-  expect(fake.state.saveRpc).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50");
-});
-it("a corrupt existing draft is preserved and cannot silently be overwritten", async () => {
-  localStorage.setItem(draftKey(A, EX), "broken-json");
-  mount();
-  await screen.findByText(/Не удалось прочитать черновик/);
-  expect(localStorage.getItem(draftKey(A, EX))).toBe("broken-json");
-  expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
-});
-it.each(["program_days", "program_exercises"])(
-  "a failed %s load is an error, and Retry recovers",
-  async (table) => {
-    fake.state.readErrors[table] = "denied";
-    mount();
-    await screen.findByRole("alert");
-    expect(screen.queryByText(/нет активных упражнений/i)).not.toBeInTheDocument();
-    delete fake.state.readErrors[table];
-    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
-    await ready();
-  },
-);
-it("failed last-entry load allows manual input and Retry preserves dirty fields", async () => {
-  fake.state.readErrors["workout_entries"] = "offline";
-  mount();
-  await screen.findByRole("alert");
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "77" } });
-  delete fake.state.readErrors["workout_entries"];
-  fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
-  await ready();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("77");
 });
 it("history load error is not empty history and Retry recovers", async () => {
   fake.state.rows.workout_entries = [];
@@ -844,38 +285,331 @@ it("loading, empty and success states are distinct from a load error", async () 
   await screen.findByText(/В этом дне нет активных упражнений/);
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
-it("a thrown transport error keeps a retryable operation and a Russian error", async () => {
-  fake.state.saveRpc.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+it.each([50, 0])("does not autofill new sets from historical weight %s", async (weight) => {
+  fake.state.rows.workout_entries = [{ ...last(EX, weight), rir: 2 }];
   mount();
   await ready();
-  save();
-  await screen.findByText(/Результат сохранения не подтверждён/);
-  expect(readDraft(A, EX)?.operation).not.toBeNull();
-  expect(screen.getByRole("button", { name: "Повторить сохранение" })).toBeEnabled();
+  await waitFor(() => expect(qc.isFetching()).toBe(0));
+  for (const input of screen.getAllByLabelText(/^(Вес|Повторения|RIR) подхода \d+$/))
+    expect(input).toHaveValue("");
 });
-it("an operation conflict preserves the frozen draft and asks to inspect history", async () => {
+
+it.each([2, 4])("keeps the planned %s sets without copying program results", async (count) => {
+  fake.state.rows.workout_entries = [];
+  fake.state.rows.program_exercises[0]!["target_sets"] = count;
+  mount();
+  await ready();
+  expect(screen.getAllByLabelText(/^Повторения подхода \d+$/)).toHaveLength(count);
+  for (const input of screen.getAllByLabelText(/^(Вес|Повторения|RIR) подхода \d+$/))
+    expect(input).toHaveValue("");
+});
+
+it("rejects empty weight without sending or losing manually entered reps", async () => {
+  mount();
+  await ready();
+  fillSets();
+  change("Вес подхода 2", "");
+  submit();
+  await screen.findByRole("alert");
+  expect(fake.state.saveRpc).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("");
+  expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue("8");
+});
+
+it.each(["", "8-8-7-6"])("keeps invalid per-set reps %j visible", async (value) => {
+  mount();
+  await ready();
+  fillSets();
+  change("Повторения подхода 2", value);
+  submit();
+  await screen.findByRole("alert");
+  expect(fake.state.saveRpc).not.toHaveBeenCalled();
+  expect(screen.getAllByLabelText(/^Повторения подхода \d+$/)).toHaveLength(4);
+  expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue(value);
+});
+
+it.each(["0", "52,5"])(
+  "saves explicit weight %s with independent sets and advances to empty fields",
+  async (value) => {
+    mount();
+    await ready();
+    fillSets(value);
+    submit();
+    await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+    const args = fake.state.saveRpc.mock.calls[0]![0];
+    expect(args["_sets"]).toMatchObject(
+      Array.from({ length: 4 }, (_, index) => ({
+        position: index + 1,
+        weight: value.replace(",", "."),
+        reps: 8,
+        rir: "2",
+      })),
+    );
+    expect(args).not.toHaveProperty("_weight");
+    expect(args).not.toHaveProperty("_day_name");
+    expect(readPerSetDraft(A, EX)).toBeNull();
+    expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("");
+    expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("");
+  },
+);
+
+it("double submission sends one operation and advances only after acknowledgement", async () => {
+  let resolve!: (result: { data: string; error: null }) => void;
+  fake.state.saveRpc.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  mount();
+  await ready();
+  fillSets();
+  submit();
+  fireEvent.submit(screen.getByRole("form", { name: "Запись тренировки" }));
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX);
+  const id = String(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
+  await act(async () => resolve({ data: id, error: null }));
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
+});
+
+it("a lost acknowledgement survives remount and retries one UUID with the immutable per-set payload", async () => {
+  const original = fake.state.saveRpc.getMockImplementation()!;
+  fake.state.saveRpc.mockImplementationOnce(async (args) => {
+    await original(args);
+    throw new TypeError("timeout");
+  });
+  const view = mount();
+  await ready();
+  fillSets();
+  submit();
+  await screen.findByRole("button", { name: "Повторить сохранение" });
+  const initial = fake.state.saveRpc.mock.calls[0]![0];
+  expect(readPerSetDraft(A, EX)?.operation?.id).toBe(initial["_id"]);
+  expect(screen.getByLabelText("Вес подхода 1")).toBeDisabled();
+  view.unmount();
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Повторить сохранение" }));
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(initial);
+  expect(fake.state.rows.workout_entries.filter((row) => row.id === initial["_id"])).toHaveLength(
+    1,
+  );
+});
+
+it("a definite rejection preserves editable per-set input and retries with the same UUID", async () => {
   fake.state.saveRpc.mockResolvedValueOnce({
     data: null,
-    error: { code: "22023", message: "different payload" },
+    error: { code: "23514", message: "check" },
   });
   mount();
   await ready();
-  save();
-  await screen.findByText(/Эта операция уже сохранена с другими значениями/);
-  expect(screen.getByLabelText("Рабочий вес, кг")).toBeDisabled();
-  expect(readDraft(A, EX)?.operation?.id).toBe(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
+  fillSets();
+  change("Заметки", "Сохранить меня");
+  submit();
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("Вес подхода 1")).toBeEnabled();
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Сохранить меня");
+  expect(readPerSetDraft(A, EX)?.operation).toBeNull();
+  const id = fake.state.saveRpc.mock.calls[0]![0]["_id"];
+  submit();
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
+  expect(fake.state.saveRpc.mock.calls[1]![0]["_id"]).toBe(id);
 });
-it("same-user token refresh preserves real workout fields and its operation UUID", async () => {
+
+it("an intentional second entry on one date gets a new operation UUID", async () => {
+  fake.state.rows.program_exercises = [exercise(EX)];
   mount();
   await ready();
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Черновик при refresh" } });
-  const id = readDraft(A, EX)?.id;
+  fillSets();
+  submit();
+  await screen.findByText(/Все упражнения этого дня пройдены/);
+  await waitFor(() => expect(readPerSetDraft(A, EX)?.operation).toBeNull());
+  change("Повторения подхода 4", "7");
+  submit();
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
+  expect(fake.state.saveRpc.mock.calls[0]![0]["_id"]).not.toBe(
+    fake.state.saveRpc.mock.calls[1]![0]["_id"],
+  );
+});
+
+it("storage failure prevents network submission and preserves the visible per-set input", async () => {
+  mount();
+  await ready();
+  fillSets();
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  submit();
+  await screen.findByText(/Запрос не отправлен/);
+  expect(fake.state.saveRpc).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("50");
+});
+
+it("a corrupt V2 draft is preserved and blocks overwriting and submission", async () => {
+  localStorage.setItem(perSetDraftKey(A, EX), "broken-json");
+  mount();
+  await screen.findByText(/Не удалось прочитать черновик подходов/);
+  expect(localStorage.getItem(perSetDraftKey(A, EX))).toBe("broken-json");
+  expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled();
+});
+
+it("failed last-entry load allows manual input and Retry preserves all dirty set values", async () => {
+  fake.state.readErrors["workout_entries"] = "offline";
+  mount();
+  await screen.findByRole("alert");
+  fillSets("77");
+  delete fake.state.readErrors["workout_entries"];
+  fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
+  await waitFor(() => expect(qc.isFetching()).toBe(0));
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("77");
+  expect(screen.getByLabelText("Повторения подхода 4")).toHaveValue("8");
+});
+
+it("a pending payload conflict remains frozen and retryable", async () => {
+  fake.state.saveRpc.mockResolvedValueOnce({
+    data: null,
+    error: { code: "22023", message: "conflict" },
+  });
+  mount();
+  await ready();
+  fillSets();
+  submit();
+  await screen.findByText(/Операция конфликтует/);
+  expect(screen.getByLabelText("Вес подхода 1")).toBeDisabled();
+  expect(readPerSetDraft(A, EX)?.operation?.id).toBe(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
+});
+
+it("same-user token refresh preserves real V2 fields and the operation UUID", async () => {
+  mount();
+  await ready();
+  fillSets();
+  change("Заметки", "Черновик при refresh");
+  const draft = readPerSetDraft(A, EX)!;
   act(() => authEvent("TOKEN_REFRESHED", A));
   expect(screen.getByLabelText("Заметки")).toHaveValue("Черновик при refresh");
-  expect(readDraft(A, EX)?.id).toBe(id);
+  expect(readPerSetDraft(A, EX)).toEqual(draft);
 });
-it("a late save for A does not clear B's persisted draft", async () => {
-  let resolve!: (response: { data: string; error: null }) => void;
+
+it("a late history response and cached refetch cannot autofill untouched sets or replace manual input", async () => {
+  let resolve!: (result: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  mount();
+  await ready();
+  change("Вес подхода 1", "72,5");
+  change("Повторения подхода 1", "11");
+  change("RIR подхода 1", "2,5");
+  change("Заметки", "Не потерять");
+  await act(async () => resolve({ data: last(), error: null }));
+  act(() =>
+    qc.setQueryData(
+      [...userKeys.lastEntry(A, EX), (screen.getByLabelText("Дата") as HTMLInputElement).value],
+      last(EX, 99),
+    ),
+  );
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("72,5");
+  expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("11");
+  expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("2,5");
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Не потерять");
+});
+
+it("late history for the previous exercise cannot change the selected exercise's draft", async () => {
+  let resolve!: (result: { data: Row; error: null }) => void;
+  fake.state.delaySelect = {
+    table: "workout_entries",
+    filters: { exercise_id: EX },
+    promise: new Promise((done) => {
+      resolve = done;
+    }),
+  };
+  mount();
+  await ready();
+  change("Упражнение", EX2);
+  await ready();
+  fillSets("67,5");
+  const draft = readPerSetDraft(A, EX2);
+  await act(async () => resolve({ data: last(EX, 99), error: null }));
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
+  expect(readPerSetDraft(A, EX2)).toEqual(draft);
+});
+
+it("a late save for the previous exercise leaves the newly selected per-set draft intact", async () => {
+  let resolve!: (result: { data: string; error: null }) => void;
+  fake.state.saveRpc.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  mount();
+  await ready();
+  fillSets();
+  submit();
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledOnce());
+  const id = String(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
+  change("Упражнение", EX2);
+  await ready();
+  fillSets("67,5");
+  const draft = readPerSetDraft(A, EX2);
+  await act(async () => resolve({ data: id, error: null }));
+  expect(readPerSetDraft(A, EX2)).toEqual(draft);
+  expect(readPerSetDraft(A, EX)).toBeNull();
+});
+
+it("remount restores the selected exercise and its raw V2 draft with the same set IDs", async () => {
+  const view = mount();
+  await ready();
+  change("Упражнение", EX2);
+  await ready();
+  change("Вес подхода 2", "67,5");
+  change("RIR подхода 4", "0");
+  change("Заметки", "Второй черновик");
+  const draft = readPerSetDraft(A, EX2)!;
+  view.unmount();
+  mount();
+  await ready();
+  expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2);
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("67,5");
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("");
+  expect(screen.getByLabelText("RIR подхода 4")).toHaveValue("0");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Второй черновик");
+  expect(readPerSetDraft(A, EX2)).toEqual(draft);
+});
+
+it("returning to a saved workout restores its sets and notes, while the next new exercise stays empty", async () => {
+  mount();
+  await ready();
+  fillSets("52,5");
+  change("Повторения подхода 4", "7");
+  change("Заметки", "Моя записанная заметка");
+  submit();
+  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("");
+  change("Упражнение", EX);
+  await waitFor(() => expect(screen.getByLabelText("Повторения подхода 4")).toHaveValue("7"));
+  expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("52.5");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Моя записанная заметка");
+});
+
+it("a late A save cannot clear B's persisted V2 draft", async () => {
+  const exB = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  fake.state.rows.program_days.push({
+    id: DAY_B,
+    user_id: B,
+    name: "День B",
+    position: 0,
+    archived_at: null,
+  });
+  fake.state.rows.program_exercises.push({ ...exercise(exB, B), day_id: DAY_B });
+  let resolve!: (result: { data: string; error: null }) => void;
   fake.state.saveRpc.mockImplementation(
     () =>
       new Promise((done) => {
@@ -884,237 +618,35 @@ it("a late save for A does not clear B's persisted draft", async () => {
   );
   const view = mount();
   await ready();
-  save();
-  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
+  fillSets();
+  submit();
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledOnce());
   const id = String(fake.state.saveRpc.mock.calls[0]![0]["_id"]);
-  const exB = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-    dayB = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-  fake.state.rows.program_days.push({
-    id: dayB,
-    user_id: B,
-    name: "День B",
-    position: 0,
-    archived_at: null,
-  });
-  fake.state.rows.program_exercises.push({ ...exercise(exB, B), day_id: dayB });
-  fake.state.rows.workout_entries.push(last(exB, 80, B));
   act(() => authEvent("SIGNED_IN", B));
   view.rerender(tree(<WorkoutPage />, B));
   await ready();
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Черновик B" } });
-  await act(async () => {
-    resolve({ data: id, error: null });
-  });
-  expect(readDraft(B, exB)?.fields.notes).toBe("Черновик B");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Черновик B");
-  expect(screen.queryByText("Сохранено")).not.toBeInTheDocument();
+  fillSets("80");
+  const draftB = readPerSetDraft(B, exB);
+  await act(async () => resolve({ data: id, error: null }));
+  expect(readPerSetDraft(B, exB)).toEqual(draftB);
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("80");
 });
 
-it("verifies cached last-entry again and applies the newer response to a pristine form", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await screen.findByText("Загрузка предыдущей тренировки…");
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("30");
-  await act(async () => {
-    resolve({ data: { ...last(EX, 55), reps: [9, 9, 8], rir: 2 }, error: null });
-  });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("55"));
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(3);
-  expect(screen.getByLabelText("Подход 3")).toHaveValue("8");
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("2");
-  // Background refreshes of the same key also update untouched fields.
-  fake.state.rows.workout_entries[0]!["weight"] = 57.5;
-  await act(async () => {
-    await qc.invalidateQueries({ queryKey: userKeys.lastEntry(A, EX) });
-  });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("57.5"));
-});
-
-it("a fresh cached-key response cannot replace fields edited while it was loading", async () => {
-  mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  fireEvent.change(screen.getByLabelText("Рабочий вес, кг"), { target: { value: "72,5" } });
-  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
-  fireEvent.change(screen.getByLabelText("RIR (необязательно)"), { target: { value: "3" } });
-  fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Мой ввод" } });
-  await act(async () => {
-    resolve({ data: { ...last(EX, 55), reps: [9, 9, 8], rir: 2 }, error: null });
-  });
-  await ready();
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("72,5");
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(4);
-  expect(screen.getByLabelText("Подход 4")).toHaveValue("7");
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("3");
-  expect(screen.getByLabelText("Заметки")).toHaveValue("Мой ввод");
-});
-
-it("cancels pre-save history and reopening uses the newly confirmed fourth rep", async () => {
-  mount();
-  await ready();
-  let resolve!: (response: { data: Row; error: null }) => void;
-  fake.state.delaySelect = {
-    table: "workout_entries",
-    filters: { exercise_id: EX },
-    promise: new Promise((done) => {
-      resolve = done;
-    }),
-  };
-  act(() => {
-    void qc.invalidateQueries({ queryKey: userKeys.lastEntry(A, EX) });
-  });
-  await waitFor(() => expect(fake.state.delaySelect).toBeNull());
-  const staleRequest = fake.state.calls.filter((call) => call.table === "workout_entries").at(-1)!;
-  fireEvent.change(screen.getByLabelText("Подход 4"), { target: { value: "7" } });
-  submit();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  expect(staleRequest.signal?.aborted).toBe(true);
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await waitFor(() => expect(screen.getByLabelText("Подход 4")).toHaveValue("7"));
-  await act(async () => {
-    resolve({ data: last(EX, 99), error: null });
-  });
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("50");
-  expect(screen.getByLabelText("Подход 4")).toHaveValue("7");
-  expect(fake.state.saveRpc).toHaveBeenCalledTimes(1);
-});
-
-it("keeps the session date on auto-advance past a pristine draft of another date", async () => {
-  writeDraft(
-    newDraft(A, EX2, { date: "2026-10-01", weight: "99", reps: ["1"], rir: "9", notes: "" }),
-  );
-  const view = mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
-  await ready();
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await ready();
-  fake.state.rows.workout_entries[1]!["weight"] = 65;
-  fake.state.rows.workout_entries[1]!["reps"] = [10, 9];
-  fake.state.rows.workout_entries[1]!["rir"] = 3;
-  submit();
-  await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("65"));
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
-  expect(screen.getAllByLabelText(/^Подход \d+$/)).toHaveLength(2);
-  expect(screen.getByLabelText("Подход 2")).toHaveValue("9");
-  expect(screen.getByLabelText("RIR (необязательно)")).toHaveValue("3");
-  expect(screen.queryByRole("button", { name: /Открыть черновик/ })).not.toBeInTheDocument();
-  view.unmount();
-  mount();
-  await ready();
-  expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
-});
-
-it("displays an older English draft as en-GB while preserving ISO storage and save payload", async () => {
-  localStorage.setItem(`app:language:v1:${A}`, "en");
-  const old = newDraft(A, EX, {
-    date: "2026-10-01",
-    weight: "22.5",
-    reps: ["5", "4"],
-    rir: "3",
-    notes: "Моя заметка — Push",
-  });
-  old.dirty.notes = true;
-  writeDraft(old);
-  mount(
-    <LanguageProvider>
-      <WorkoutPage />
-    </LanguageProvider>,
-  );
-  const open = await screen.findByRole("button", { name: "Open draft for 01/10/2026" });
-  expect(
-    screen.getByText("There is an unfinished draft for 01/10/2026. The current date was kept."),
-  ).toBeVisible();
-  expect(readDraft(A, EX)).toEqual(old);
-  fireEvent.click(open);
-  expect(screen.getByLabelText("Date")).toHaveValue("2026-10-01");
-  expect(screen.getByLabelText("Notes")).toHaveValue("Моя заметка — Push");
-  fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(1));
-  expect(fake.state.saveRpc.mock.calls[0]![0]).toMatchObject({
-    _id: old.id,
-    _performed_on: "2026-10-01",
-    _weight: 22.5,
-    _reps: [5, 4],
-    _rir: 3,
-    _notes: "Моя заметка — Push",
-  });
-});
-
-it.each([false, true])(
-  "restores an older edited draft explicitly, preserving both dates and pending=%s",
-  async (pending) => {
-    const old = newDraft(A, EX2, {
-      date: "2026-10-01",
-      weight: "22,5",
-      reps: ["5", "4"],
-      rir: "3",
-      notes: "Старый ввод",
-    });
-    old.dirty = { date: true, weight: true, reps: true, rir: true, notes: true };
-    if (pending) old.operation = { id: old.id, payload: validateWorkout(old.fields, EX2, DAY) };
-    writeDraft(old);
+it.each(["program_days", "program_exercises"])(
+  "a failed %s read remains an error until Retry recovers",
+  async (table) => {
+    fake.state.readErrors[table] = "offline";
     mount();
+    await screen.findByRole("alert");
+    expect(screen.queryByText("В этом дне нет активных упражнений.")).not.toBeInTheDocument();
+    delete fake.state.readErrors[table];
+    fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
     await ready();
-    fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
-    await ready();
-    submit();
-    await waitFor(() => expect(screen.getByLabelText("Упражнение")).toHaveValue(EX2));
-    await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("60"));
-    expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-15");
-    fireEvent.change(screen.getByLabelText("Заметки"), { target: { value: "Новый ввод" } });
-    const current = readDraft(A, EX2)!;
-    expect(current.id).not.toBe(old.id);
-    expect(readDraft(A, EX2, "2026-10-01")).toEqual(old);
-    fireEvent.click(screen.getByRole("button", { name: "Открыть черновик за 01.10.2026" }));
-    expect(screen.getByLabelText("Дата")).toHaveValue("2026-10-01");
-    expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("22,5");
-    expect(screen.getByLabelText("Подход 2")).toHaveValue("4");
-    expect(screen.getByLabelText("Заметки")).toHaveValue("Старый ввод");
-    if (pending) {
-      expect(screen.getByLabelText("Рабочий вес, кг")).toBeDisabled();
-      fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
-      await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
-      expect(fake.state.saveRpc.mock.calls[1]![0]).toMatchObject({
-        _id: old.id,
-        _performed_on: "2026-10-01",
-        _weight: 22.5,
-        _reps: [5, 4],
-      });
-    } else {
-      fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-15" } });
-      expect(screen.getByLabelText("Заметки")).toHaveValue("Новый ввод");
-      expect(readDraft(A, EX2)?.id).toBe(current.id);
-    }
-    expect(readDraft(A, EX2, "2026-10-15")?.fields.notes).toBe("Новый ввод");
   },
 );
 
-it("rapidly switching A's exercises and then accounts ignores a late cached-key response", async () => {
+it("A → B → A isolates the V2 draft and ignores late A responses", async () => {
+  const exB = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   fake.state.rows.program_days.push({
     id: DAY_B,
     user_id: B,
@@ -1122,34 +654,127 @@ it("rapidly switching A's exercises and then accounts ignores a late cached-key 
     position: 0,
     archived_at: null,
   });
-  fake.state.rows.program_exercises.push({ ...exercise(EX, B), day_id: DAY_B });
-  fake.state.rows.workout_entries.push({ ...last(EX, 80, B), reps: [12, 11], rir: 4 });
-  const view = mount();
-  await ready();
-  fireEvent.change(screen.getByLabelText("Дата"), { target: { value: "2026-10-13" } });
-  await ready();
-  let resolve!: (response: { data: Row; error: null }) => void;
+  fake.state.rows.program_exercises.push({ ...exercise(exB, B), day_id: DAY_B });
+  let resolve!: (result: { data: Row; error: null }) => void;
   fake.state.delaySelect = {
     table: "workout_entries",
-    filters: { user_id: A, exercise_id: EX },
+    filters: { exercise_id: EX },
     promise: new Promise((done) => {
       resolve = done;
     }),
   };
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX2 } });
-  fireEvent.change(screen.getByLabelText("Упражнение"), { target: { value: EX } });
-  await waitFor(() => expect(fake.state.delaySelect).toBeNull());
+  const view = mount();
+  await ready();
+  fillSets("61");
+  change("Заметки", "A");
+  const draftA = readPerSetDraft(A, EX)!;
   act(() => authEvent("SIGNED_IN", B));
   view.rerender(tree(<WorkoutPage />, B));
-  await waitFor(() => expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80"));
-  const dateB = (screen.getByLabelText("Дата") as HTMLInputElement).value;
-  expect(dateB).not.toBe("2026-10-13");
-  fireEvent.change(screen.getByLabelText("Подход 2"), { target: { value: "13" } });
-  await act(async () => {
-    resolve({ data: last(EX, 99, A), error: null });
+  await ready();
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("");
+  fillSets("80");
+  change("Заметки", "B");
+  const draftB = readPerSetDraft(B, exB);
+  await act(async () => resolve({ data: last(EX, 99), error: null }));
+  expect(readPerSetDraft(B, exB)).toEqual(draftB);
+  act(() => authEvent("SIGNED_IN", A));
+  view.rerender(tree(<WorkoutPage />, A));
+  await ready();
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("61");
+  expect(readPerSetDraft(A, EX)).toEqual(draftA);
+});
+
+it.each([false, true])(
+  "selecting an older session restores its V2 draft and pending=%s without losing the current draft",
+  async (pending) => {
+    mount();
+    await ready();
+    change("Дата", "2026-10-01");
+    fillSets("22,5");
+    change("Заметки", "Старый ввод");
+    if (pending) {
+      fake.state.saveRpc.mockRejectedValueOnce(new TypeError("timeout"));
+      submit();
+      await screen.findByRole("button", { name: "Повторить сохранение" });
+    }
+    const old = readPerSetDraft(A, EX)!;
+    // Open another session, as a remounted page does, leaving the frozen operation intact.
+    cleanup();
+    localStorage.setItem(`workout:date:v1:${A}`, "2026-10-15");
+    mount();
+    await ready();
+    fillSets("40");
+    change("Заметки", "Новый ввод");
+    const current = readPerSetDraft(A, EX)!;
+    change("Дата", "2026-10-01");
+    expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("22,5");
+    expect(screen.getByLabelText("Заметки")).toHaveValue("Старый ввод");
+    expect(readPerSetDraft(A, EX)?.id).toBe(old.id);
+    expect(readPerSetDraft(A, EX, "2026-10-15")?.id).toBe(current.id);
+    if (pending) {
+      expect(screen.getByLabelText("Вес подхода 1")).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Повторить сохранение" }));
+      await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledTimes(2));
+      expect(fake.state.saveRpc.mock.calls[1]![0]).toEqual(fake.state.saveRpc.mock.calls[0]![0]);
+    }
+  },
+);
+
+it.each([false, true])(
+  "preserves legacy user input while migrating or retrying a V1 draft, pending=%s",
+  async (pending) => {
+    const date = "2026-10-01";
+    const old = newDraft(A, EX, {
+      date,
+      weight: "22,5",
+      reps: ["5", "4"],
+      rir: "3",
+      notes: "Старый ввод",
+    });
+    old.dirty = { date: true, weight: true, reps: true, rir: true, notes: true };
+    if (pending) old.operation = { id: old.id, payload: validateWorkout(old.fields, EX, DAY) };
+    writeDraft(old);
+    mount();
+    await ready();
+    change("Дата", date);
+    if (pending) {
+      fireEvent.click(await screen.findByRole("button", { name: "Повторить сохранение" }));
+      await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledOnce());
+      expect(fake.state.saveRpc.mock.calls[0]![0]).toMatchObject({
+        _id: old.id,
+        _weight: 22.5,
+        _reps: [5, 4],
+      });
+    } else {
+      await ready();
+      expect(screen.getByLabelText("Вес подхода 2")).toHaveValue("22,5");
+      expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue("4");
+      expect(screen.getByLabelText("Заметки")).toHaveValue("Старый ввод");
+      submit();
+      await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledOnce());
+      expect(fake.state.saveRpc.mock.calls[0]![0]["_sets"]).toMatchObject([
+        { weight: "22.5", reps: 5 },
+        { weight: "22.5", reps: 4 },
+      ]);
+    }
+  },
+);
+
+it("a manually edited V1 draft takes precedence over saved history on the same date", async () => {
+  const old = newDraft(A, EX, {
+    date: "2026-10-12",
+    weight: "22,5",
+    reps: ["5", "4"],
+    rir: "3",
+    notes: "Мой черновик",
   });
-  expect(screen.getByLabelText("Рабочий вес, кг")).toHaveValue("80");
-  expect(screen.getByLabelText("Подход 2")).toHaveValue("13");
-  expect(screen.getByLabelText("Дата")).toHaveValue(dateB);
-  expect(qc.getQueriesData({ queryKey: userKeys.all(A) })).toHaveLength(0);
+  old.dirty = { date: true, weight: true, reps: true, rir: true, notes: true };
+  writeDraft(old);
+  localStorage.setItem(`workout:date:v1:${A}`, old.fields.date);
+  mount();
+  await ready();
+  await waitFor(() => expect(qc.isFetching()).toBe(0));
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("22,5");
+  expect(screen.getByLabelText("Повторения подхода 2")).toHaveValue("4");
+  expect(screen.getByLabelText("Заметки")).toHaveValue("Мой черновик");
 });

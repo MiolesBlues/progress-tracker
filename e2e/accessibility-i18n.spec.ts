@@ -156,7 +156,11 @@ test("C07 standalone error HTML fixture is localized and fits all mobile widths 
       await expect(
         page.getByRole("link", { name: language === "ru" ? "На главную" : "Home", exact: true }),
       ).toHaveAttribute("href", "/");
-      await expect(page.locator("script")).toHaveCount(0);
+      // The standalone document has a preference bootstrap, but no React bundle
+      // or hydration. Its theme script is also part of the unit-tested contract.
+      await expect(page.locator('script[src], script[type="module"]')).toHaveCount(0);
+      await expect(page.locator("script")).toHaveCount(1);
+      expect(await page.locator("script").textContent()).toContain("app:theme:v1");
       await noOverflow(page);
     }
   }

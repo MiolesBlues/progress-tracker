@@ -1,5 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { CalendarDays, Minus, Plus } from "lucide-react";
 import { lastEntryQuery, userKeys, type Exercise } from "@/lib/queries";
@@ -21,6 +29,7 @@ import {
   writePerSetDraft,
   removeSavedPerSetDraft,
   readDraft,
+  hasDraftInput,
   removeSavedDraft,
   type PerSetWorkoutDraft,
   type WorkoutDraft,
@@ -60,16 +69,19 @@ function newSet(position: number, weight = "", reps = "", rir = ""): WorkoutSetF
 
 export function WorkoutForm(props: WorkoutFormProps) {
   const { userId } = useUserSession();
-  const [legacyDone, setLegacyDone] = useState(false);
-  const [legacy] = useState(() => {
+  const [completedLegacyId, setCompletedLegacyId] = useState<string | null>(null);
+  const legacy = useMemo(() => {
     try {
       return readDraft(userId, props.exercise.id, props.initialDate);
     } catch {
       return null;
     }
-  });
+  }, [userId, props.exercise.id, props.initialDate]);
+  const legacyDone = !!legacy && legacy.id === completedLegacyId;
   if (legacy?.operation && !legacyDone)
-    return <LegacyRetry {...props} draft={legacy} onCompleted={() => setLegacyDone(true)} />;
+    return (
+      <LegacyRetry {...props} draft={legacy} onCompleted={() => setCompletedLegacyId(legacy.id)} />
+    );
   return <PerSetWorkoutForm {...props} legacyDraft={legacyDone ? null : legacy} />;
 }
 
@@ -202,7 +214,14 @@ function PerSetWorkoutForm({
             ),
           }
         : defaults();
-      return { draft: newPerSetDraft(userId, exercise.id, fields), error: "" };
+      const migrated = newPerSetDraft(userId, exercise.id, fields);
+      if (legacyDraft)
+        migrated.dirty = {
+          date: legacyDraft.dirty.date,
+          notes: legacyDraft.dirty.notes,
+          sets: legacyDraft.dirty.weight || legacyDraft.dirty.reps || legacyDraft.dirty.rir,
+        };
+      return { draft: migrated, error: "" };
     } catch {
       return {
         draft: newPerSetDraft(userId, exercise.id, defaults()),
@@ -273,7 +292,17 @@ function PerSetWorkoutForm({
           ),
         );
     if (!savedSets.length) return;
-    commit({ ...current, fields: { ...current.fields, sets: savedSets } });
+    commit({
+      ...current,
+      fields: {
+        ...current.fields,
+        sets: savedSets,
+        notes:
+          current.dirty.notes || current.fields.notes
+            ? current.fields.notes
+            : (previous.notes ?? ""),
+      },
+    });
   }, [
     lastResult.isFetchedAfterMount,
     lastResult.isSuccess,
@@ -291,6 +320,28 @@ function PerSetWorkoutForm({
         const restored = readPerSetDraft(userId, exercise.id, nextFields.date);
         if (restored && hasPerSetDraftInput(restored)) {
           commit(restored);
+          onDateChange(nextFields.date);
+          return;
+        }
+        const old = readDraft(userId, exercise.id, nextFields.date);
+        if (old && hasDraftInput(old)) {
+          // A frozen V1 operation must keep its original RPC and payload. The
+          // wrapper switches to LegacyRetry when the selected date changes.
+          if (!old.operation) {
+            const migrated = newPerSetDraft(userId, exercise.id, {
+              date: old.fields.date,
+              notes: old.fields.notes,
+              sets: old.fields.reps.map((reps, index) =>
+                newSet(index + 1, old.fields.weight, reps, old.fields.rir),
+              ),
+            });
+            migrated.dirty = {
+              date: old.dirty.date,
+              notes: old.dirty.notes,
+              sets: old.dirty.weight || old.dirty.reps || old.dirty.rir,
+            };
+            commit(migrated);
+          }
           onDateChange(nextFields.date);
           return;
         }

@@ -1,7 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mockSupabase } from "./mock-supabase";
-import { register, addExercise, chooseProgramDay, noOverflow, longDay, firstName } from "./helpers";
+import {
+  register,
+  addExercise,
+  chooseProgramDay,
+  noOverflow,
+  longDay,
+  firstName,
+  replaceText,
+  sortRecords,
+} from "./helpers";
 
 async function authSpacing(page: Page, name: string) {
   const button = page.getByRole("button", { name, exact: true });
@@ -87,7 +96,7 @@ for (const width of [320, 375, 390, 430]) {
     await dialog
       .getByRole("button", { name: `Переименовать день: ${longDay}`, exact: true })
       .click();
-    await dialog.getByLabel("Название дня", { exact: true }).fill("Переименованный день");
+    await replaceText(dialog.getByLabel("Название дня", { exact: true }), "Переименованный день");
     let release!: () => void;
     backend.delayProgramUpdate = {
       id: first!.id,
@@ -158,7 +167,7 @@ for (const width of [320, 375, 390, 430]) {
     await expect(diary.getByRole("listitem")).toHaveCount(20);
     await diary.getByRole("button", { name: "Далее", exact: true }).click();
     await expect(diary.getByRole("listitem")).toHaveCount(5);
-    await diary.getByLabel("Сортировка записей", { exact: true }).selectOption("weight-asc");
+    await sortRecords(page, "weight-asc");
     await expect(diary.getByText("Страница 1 из 2", { exact: true })).toBeVisible();
     await expect(diary.getByRole("listitem").first()).toContainText("0 кг");
     await noOverflow(page);

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addExercise, register } from "./helpers";
+import { addExercise, register, fillWorkout } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
 
 test("auto-advance preference stays per-user and off mode supports repeated historical entries", async ({
@@ -36,47 +36,37 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
 
-  const fillEntry = async (
-    date: string,
-    expectedPreviousWeight: string,
-    weight: string,
-    reps: string[],
-  ) => {
+  const fillEntry = async (date: string, weight: string, reps: string[]) => {
     await page.getByLabel("Дата", { exact: true }).fill(date);
     await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date);
-    await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue(
-      expectedPreviousWeight,
-    );
-    await page.getByLabel("Рабочий вес, кг", { exact: true }).fill(weight);
-    for (let index = 0; index < reps.length; index++)
-      await page.getByLabel(`Подход ${index + 1}`, { exact: true }).fill(reps[index]!);
+    await fillWorkout(page, weight, reps, "2");
   };
   const date1 = "2026-09-01";
-  await fillEntry(date1, "", "50", ["8", "8", "8"]);
-  await page.getByLabel("RIR (необязательно)", { exact: true }).fill("2");
+  await fillEntry(date1, "50", ["8", "8", "8"]);
+  await page.getByLabel("RIR подхода 1", { exact: true }).fill("2");
   backend.loseSaveResponse = true;
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await page.getByRole("button", { name: "Повторить сохранение", exact: true }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date1);
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("50");
-  await expect(page.getByLabel("Подход 3", { exact: true })).toHaveValue("8");
-  await expect(page.getByLabel("RIR (необязательно)", { exact: true })).toHaveValue("2");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("50");
+  await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("8");
+  await expect(page.getByLabel("RIR подхода 1", { exact: true })).toHaveValue("2");
   expect(backend.saveCalls[0]).toBe(backend.saveCalls[1]);
   expect(
     backend.rows["workout_entries"]!.filter((row) => row["exercise_id"] === exercise.id),
   ).toHaveLength(1);
 
   const date2 = "2026-09-05";
-  await fillEntry(date2, "50", "52,5", ["8", "8", "7"]);
+  await fillEntry(date2, "52,5", ["8", "8", "7"]);
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date2);
-  await expect(page.getByLabel("Рабочий вес, кг", { exact: true })).toHaveValue("52.5");
-  await expect(page.getByLabel("RIR (необязательно)", { exact: true })).toHaveValue("2");
+  await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("52.5");
+  await expect(page.getByLabel("RIR подхода 1", { exact: true })).toHaveValue("2");
 
   const date3 = "2026-09-10";
-  await fillEntry(date3, "52.5", "55", ["8", "7", "6"]);
+  await fillEntry(date3, "55", ["8", "7", "6"]);
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date3);

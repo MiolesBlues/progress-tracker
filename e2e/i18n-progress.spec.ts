@@ -128,7 +128,7 @@ test("day then exercise selection, archived results, and account-scoped language
   await expect(day).toHaveValue(backend.rows["program_days"]![0]!.id);
   await day.selectOption(secondDay.id);
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
-  await expect(page.getByText(/72 кг × 8\/8/)).toBeVisible();
+  await expect(page.getByText(/1\. 72 кг × 8 · RIR 2.*2\. 72 кг × 8 · RIR 2/)).toBeVisible();
   await page.getByRole("link", { name: "Программа", exact: true }).click();
   await chooseProgramDay(page, "День B");
   await page.getByRole("button", { name: `В архив: ${secondName}` }).click();
@@ -136,7 +136,7 @@ test("day then exercise selection, archived results, and account-scoped language
   await expect(page.getByRole("button", { name: "Архивная история" })).toBeVisible();
   await page.getByRole("button", { name: "Архивная история" }).click();
   await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
-  await expect(page.getByText(/72 кг × 8\/8/)).toBeVisible();
+  await expect(page.getByText(/1\. 72 кг × 8 · RIR 2.*2\. 72 кг × 8 · RIR 2/)).toBeVisible();
   await page.getByRole("button", { name: "Настройки" }).click();
   await page
     .getByRole("dialog", { name: "Настройки" })

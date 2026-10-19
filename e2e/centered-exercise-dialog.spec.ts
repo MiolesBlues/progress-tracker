@@ -2,12 +2,11 @@ import { test, expect } from "@playwright/test";
 import { addExercise, register } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
 
-test("exercise editor stays compact across mobile and desktop sizes and follows both themes", async ({
+test("exercise editor stays compact across mobile and desktop sizes", async ({
   page,
   browserName,
 }) => {
   test.skip(browserName !== "chromium", "Responsive theme check runs once in Chromium.");
-  await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 390, height: 844 });
   await mockSupabase(page);
   await page.goto("/");
@@ -18,17 +17,12 @@ test("exercise editor stays compact across mobile and desktop sizes and follows 
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Редактирование упражнения", exact: true });
   await expect(dialog).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(dialog.getByLabel("Название упражнения", { exact: true })).toHaveValue("Жим штанги");
   await expect(
     dialog.getByRole("combobox", { name: "Тренировочный день", exact: true }),
   ).toBeVisible();
   await expect(dialog.getByLabel("Подходы", { exact: true })).toHaveValue("4");
   await expect(dialog.getByLabel("Повторения", { exact: true })).toHaveValue("6–8");
-  const lightBackground = await dialog.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-
   for (const width of [320, 375, 390, 1440]) {
     const height = width === 1440 ? 1000 : 844;
     await page.setViewportSize({ width, height });
@@ -67,13 +61,6 @@ test("exercise editor stays compact across mobile and desktop sizes and follows 
     expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(height + 1);
   }
 
-  await page.emulateMedia({ colorScheme: "dark" });
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  const darkBackground = await dialog.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-  expect(darkBackground).not.toBe(lightBackground);
-
   await page.setViewportSize({ width: 320, height: 480 });
   await page.evaluate(
     () =>
@@ -101,4 +88,25 @@ test("exercise editor stays compact across mobile and desktop sizes and follows 
   const reopened = page.getByRole("dialog", { name: "Редактирование упражнения", exact: true });
   await reopened.getByRole("button", { name: "Закрыть", exact: true }).click();
   await expect(reopened).toBeHidden();
+});
+
+test("system theme integration changes the exercise editor between light and dark", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Theme capability check runs once in Chromium.");
+  await page.emulateMedia({ colorScheme: "light" });
+  await mockSupabase(page);
+  await register(page, "editor-theme@example.invalid", 1);
+  await addExercise(page, "Жим штанги", 4);
+  await page.getByRole("button", { name: "Редактировать: Жим штанги", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Редактирование упражнения", exact: true });
+  // Remains an integration blocker while feature/system-theme is excluded.
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const light = await dialog.evaluate((element) => getComputedStyle(element).backgroundColor);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(await dialog.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
+    light,
+  );
 });
