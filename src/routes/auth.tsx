@@ -252,14 +252,14 @@ function AuthPage() {
           {mode === "in" ? (
             <>
               {t("Нет аккаунта?")}{" "}
-              <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
+              <span className="font-semibold text-primary-text group-hover:text-primary-text-hover group-active:text-primary-text-active">
                 {t("Зарегистрироваться")}
               </span>
             </>
           ) : (
             <>
               {t("Уже есть аккаунт?")}{" "}
-              <span className="font-semibold text-primary group-hover:text-primary/90 group-active:text-primary/80">
+              <span className="font-semibold text-primary-text group-hover:text-primary-text-hover group-active:text-primary-text-active">
                 {t("Войти")}
               </span>
             </>
