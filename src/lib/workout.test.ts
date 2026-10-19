@@ -19,7 +19,11 @@ describe("workout metrics", () => {
     expect(r.delta).toBeNull();
   });
   it("compares with previous calendar week", () => {
-    const r = weekComparison([e("2026-10-13", 100, [5]), e("2026-10-05", 90, [5])], "weight", new Date(2026, 9, 14));
+    const r = weekComparison(
+      [e("2026-10-13", 100, [5]), e("2026-10-05", 90, [5])],
+      "weight",
+      new Date(2026, 9, 14),
+    );
     expect(r.delta).toBe(10);
   });
 });
@@ -27,16 +31,23 @@ describe("workout metrics", () => {
 import { prefillFor } from "./workout";
 describe("prefillFor", () => {
   it("uses last session when present", () => {
-    expect(prefillFor({ working_weight: 50, example_reps: [7, 7, 6, 6], target_sets: 4 }, { weight: "52.5", reps: [8, 8] }))
-      .toEqual({ weight: "52.5", reps: ["8", "8"] });
+    expect(
+      prefillFor(
+        { working_weight: 50, example_reps: [7, 7, 6, 6], target_sets: 4 },
+        { weight: "52.5", reps: [8, 8] },
+      ),
+    ).toEqual({ weight: "52.5", reps: ["8", "8"] });
   });
   it("falls back to program starting weight and example reps", () => {
-    expect(prefillFor({ working_weight: 12.5, example_reps: [10, 10, 10], target_sets: 3 }, null))
-      .toEqual({ weight: "12.5", reps: ["10", "10", "10"] });
+    expect(
+      prefillFor({ working_weight: 12.5, example_reps: [10, 10, 10], target_sets: 3 }, null),
+    ).toEqual({ weight: "12.5", reps: ["10", "10", "10"] });
   });
   it("null weight stays empty, sets from target", () => {
-    expect(prefillFor({ working_weight: null, example_reps: null, target_sets: 4 }, null))
-      .toEqual({ weight: "", reps: ["", "", "", ""] });
+    expect(prefillFor({ working_weight: null, example_reps: null, target_sets: 4 }, null)).toEqual({
+      weight: "",
+      reps: ["", "", "", ""],
+    });
   });
 });
 
