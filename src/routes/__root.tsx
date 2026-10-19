@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/lib/session";
 import { useI18n } from "@/lib/i18n";
+import { DISPLAY_LANGUAGE_COOKIE } from "@/lib/ssr-language";
 import { useLocation } from "@tanstack/react-router";
 
 function NotFoundComponent() {
@@ -126,6 +127,8 @@ function LocalizedDocumentTitle() {
   const path = useLocation({ select: (location) => location.pathname });
   const { t } = useI18n();
   useEffect(() => {
+    document.documentElement.lang = "ru";
+    document.cookie = `${DISPLAY_LANGUAGE_COOKIE}=ru; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     const section =
       path === "/auth"
         ? t("Вход")
