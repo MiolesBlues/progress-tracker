@@ -20,13 +20,21 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Sheet,
-  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { SortableList } from "@/components/Sortable";
 import { Archive, ArchiveRestore, Pencil, X } from "lucide-react";
@@ -493,7 +501,7 @@ export function ProgramManager() {
             {t("Удаление пока недоступно на сервере.")}
           </p>
         )}
-      <Sheet
+      <Dialog
         open={managingDays}
         onOpenChange={(open) => {
           setError("");
@@ -510,31 +518,24 @@ export function ProgramManager() {
               {t("{count} из {max}", { count: active.length, max: MAX_DAYS })}
             </p>
           </div>
-          <SheetTrigger asChild>
+          <DialogTrigger asChild>
             <Button variant="secondary" className="h-11 shrink-0">
               <Pencil className="h-4 w-4" />
               {t("Изменить дни")}
             </Button>
-          </SheetTrigger>
+          </DialogTrigger>
         </section>
-        <SheetContent
-          side="bottom"
-          className="flex h-dvh flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:ml-auto sm:h-[90dvh] sm:max-w-xl sm:rounded-t-lg [&>button]:hidden"
+        <DialogContent
+          className="flex max-h-[90dvh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+          style={{ width: "min(520px, calc(100vw - 2rem))" }}
         >
-          <SheetHeader className="safe-top shrink-0 border-b px-4 pb-4 text-left sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <SheetTitle>{t("Тренировочные дни")}</SheetTitle>
-              <SheetClose asChild>
-                <Button className="h-11 shrink-0" disabled={busy}>
-                  {t("Готово")}
-                </Button>
-              </SheetClose>
-            </div>
-            <SheetDescription>
+          <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
+            <DialogTitle>{t("Тренировочные дни")}</DialogTitle>
+            <DialogDescription>
               {t("{count} из {max} активных дней", { count: active.length, max: MAX_DAYS })}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="safe-bottom min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pt-4 sm:px-6">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
             {error && (
               <p
                 role="alert"
@@ -634,8 +635,15 @@ export function ProgramManager() {
               </details>
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+          <DialogFooter className="safe-bottom shrink-0 border-t bg-background px-4 pt-3 sm:px-6">
+            <DialogClose asChild>
+              <Button className="h-11 w-full sm:w-auto" disabled={busy}>
+                {t("Готово")}
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section aria-label={t("Упражнения")} className="space-y-3">
         <h2 className="font-bold">{t("Упражнения")}</h2>
