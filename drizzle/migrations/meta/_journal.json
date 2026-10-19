@@ -22,6 +22,55 @@
       "when": 1791840567392,
       "tag": "0002_personal_program_days",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791840567393,
+      "tag": "0003_program_management",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791840567394,
+      "tag": "0004_workout_data_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792063577000,
+      "tag": "20261015112617_revoke_workout_truncate",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792075652000,
+      "tag": "20261015144732_guard_new_exercise_day",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792075678000,
+      "tag": "20261015144758_restrict_workout_table_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792095900000,
+      "tag": "20261015202500_archived_object_deletion",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792153200000,
+      "tag": "20261016150000_training_template_library",
+      "breakpoints": true
     }
   ]
 }

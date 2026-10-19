@@ -1,24 +1,54 @@
-# Прогресс Тренер
+# Прогресс Трекер
 
-Создай современное mobile-first PWA приложение Workout Tracker на русском для записи силовых тренировок. Функции: регистрация и вход пользователей, облачная база с персональными данными и строгими RLS, индивидуальная программа Upper 1 / Lower 1 / Upper 2 / Lower 2 для каждого зарегистрированного пользователя. Экран тренировки: выбор дня, зависимый выпадающий список упражнений, дата, единый рабочий вес, повторения по подходам, необязательный RIR, заметки; реальное сохранение и мгновенное повторное заполнение без экрана подтверждения. Экран программы с изменяемыми упражнениями, экран прогресса с выбором упражнения, периода 7/30/90/365 дней и метрики: вес, повторения, объем; график и сравнение с предыдущей календарной неделей, пустое сравнение если записей нет. Темная минималистичная эстетика, адаптивность iPhone. Реальные запросы к БД, не имитация. Обеспечь безопасную изоляцию пользователей и отсутствие общих тренировочных результатов. Начни с полностью работающего MVP; точный шаблон упражнений добавим отдельным запросом.
+Дневник силовых тренировок на русском и английском с личной программой из **1–7 активных тренировочных дней**. Названия, упражнения, цели и порядок меняет пользователь. Upper/Lower — необязательный шаблон из четырёх дней, выбираемый при первоначальной настройке.
 
-This project was built with [Lovable](https://lovable.dev).
+Запись содержит дату, рабочий вес, повторения каждого подхода, необязательные RIR и заметки. Незавершённый ввод хранится на устройстве отдельно для пользователя и упражнения. Стабильный UUID операции позволяет повторить сохранение после потери ответа. Полноценной offline-синхронизации нет: для входа, загрузки и отправки требуется сеть.
 
-## Build with Lovable
+История сохраняется при архивировании и переносе упражнений. Аналитика сравнивает выбранную запись с предыдущей сессией и, независимо, с последней сессией предыдущей календарной недели. Графики показывают вес, суммарные повторения или объём за 7/30/90/365 дней либо всё время, исключая будущие даты. Изменение объёма не гарантирует рост силы.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/c7efcdd9-ad98-4274-8b6f-fd8abfebd574).
+В настройках можно отдельно разрешить полное удаление архивных объектов и показать архив в «Записях»; оба переключателя изначально выключены и привязаны к аккаунту на этом устройстве. Удаление дня сохраняет упражнения и историю, удаление упражнения удаляет его собственные записи. Перед включением удаления в реальной БД нужна отдельная SQL-миграция и проверка по [инструкции](docs/ARCHIVE-DELETION-RU.md).
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Технологии: React 19, TypeScript, TanStack Start/Router/Query, Tailwind, Supabase/PostgreSQL с RLS. Интерфейс тёмный, рассчитан на мобильные экраны. Актуальная оценка релиза и ограничения: [RELEASE-READINESS-V3.md](RELEASE-READINESS-V3.md).
 
-## Development
+## Локальная разработка
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Node.js 24 и **Bun 1.4.3** (нужен для адресного override в lockfile v3):
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install --frozen-lockfile --ignore-scripts
+bun run dev
 ```
+
+Клиенту нужны `VITE_SUPABASE_URL` и `VITE_SUPABASE_PUBLISHABLE_KEY` тестового проекта. Secret/service-role ключи нельзя помещать в `VITE_*`, браузер или Git. SSR может использовать серверные `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` того же backend. Для браузерных тестов конфигурация автоматически подставляет фиктивный URL; реальные базы не используются.
+
+## Проверки
+
+```sh
+bun run typecheck
+bun run lint
+bun run format:check
+bun run test
+bun run test:db
+bun run test:toolchain
+bun run build
+bun run audit
+bunx --no-install playwright install chromium webkit
+bun run test:e2e
+```
+
+В PowerShell при запрете `npm.ps1` доступны `npm.cmd run ...` и `npm.cmd exec --yes --package=bun@1.4.3 -- bun ...`. Для установки используйте Bun 1.4.3 и committed lockfile; `npm install` не воспроизводит его. SQL-тесты используют PostgreSQL/PGlite в памяти. Playwright исполняет реальный UI с подменённым Auth/HTTP; это проверка интерфейса, а не реальных JWT/RLS. Все проверки включены в [.github/workflows/quality.yml](.github/workflows/quality.yml); workflow не развёртывает приложение и не применяет миграции.
+
+Форматирование — Prettier, окончания строк LF через `.gitattributes`. Генерируемые файлы и отдельный вложенный проект исключены из форматирования/линтера.
+
+## Программа, БД и выпуск
+
+- [Модель данных и аналитики](docs/PROGRAM-AND-DATABASE-RU.md).
+- [Разбор advisories и обновлений](docs/DEPENDENCIES-RU.md).
+- [E2E-приёмка двух пользователей на staging](docs/E2E-RELEASE-RU.md).
+- [Исправления V2: данные](V2-DATA-INTEGRITY-RU.md), [сборка и E2E](V2-BUILD-AND-E2E-RU.md).
+- [Итоговая готовность V2](RELEASE-READINESS-V2.md), [план настоящей staging-приёмки](docs/STAGING-V2-RU.md).
+- [Первый этап A01–A03](SECURITY-FIXES-RU.md), [второй этап](WORKOUT-DATA-INTEGRITY-RU.md).
+
+SQL-файлы `drizzle/migrations/0000…0004` — источник схемы. Перед применением нужны read-only preflight, просмотр старых нарушений, резервная копия и проверенная репетиция. `drizzle-kit push` использовать нельзя: `drizzle/schema.ts` и snapshots не описывают эту схему. Production-миграции требуют отдельного согласования; приложение с новым сохранением требует RPC из 0004 и не использует небезопасный fallback INSERT.
+
+Проект связан с [Lovable](https://lovable.dev/projects/c7efcdd9-ad98-4274-8b6f-fd8abfebd574). Изменения связанной ветки синхронизируются с редактором; не переписывайте опубликованную историю. Merge, push и deploy выполняются только отдельным согласованным действием.
