@@ -87,6 +87,7 @@ export function ProgramManager() {
   const [addingExercise, setAddingExercise] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const exerciseEditTrigger = useRef<HTMLButtonElement | null>(null);
   const [managingDays, setManagingDays] = useState(false);
   const [archiveExpandedByUser, setArchiveExpandedByUser] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
@@ -437,9 +438,10 @@ export function ProgramManager() {
           variant="ghost"
           aria-label={t("Редактировать: {name}", { name: ex.name })}
           disabled={busy}
-          onClick={() => {
+          onClick={(event) => {
             setExerciseError("");
             setManagingDays(false);
+            exerciseEditTrigger.current = event.currentTarget;
             setEditing(ex.id);
           }}
           className="shrink-0"
@@ -759,11 +761,18 @@ export function ProgramManager() {
           ))}
         </section>
       )}
-      <Sheet open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl">
-          <SheetHeader>
-            <SheetTitle>{t("Редактирование упражнения")}</SheetTitle>
-          </SheetHeader>
+      <Dialog open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent
+          className="flex max-h-[90dvh] max-w-[480px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+          style={{ width: "min(480px, calc(100vw - 2rem))" }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            exerciseEditTrigger.current?.focus();
+          }}
+        >
+          <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
+            <DialogTitle>{t("Редактирование упражнения")}</DialogTitle>
+          </DialogHeader>
           {editingEx && (
             <ExerciseEditor
               key={editingEx.id + editingEx.day_id}
@@ -782,8 +791,8 @@ export function ProgramManager() {
               }
             />
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
       <Sheet
         open={addingExercise}
         onOpenChange={(open) => {
@@ -1021,78 +1030,80 @@ function ExerciseEditor({
     <form
       aria-label={t("Упражнение: {name}", { name: ex.name })}
       onSubmit={submit}
-      className="space-y-3 pt-2"
+      className="flex min-h-0 flex-1 flex-col"
     >
-      {error && (
-        <p
-          id="exercise-editor-error"
-          role="alert"
-          className="break-words rounded-xl border border-destructive p-3 text-sm"
-        >
-          {translateKnown(language, error)}
-        </p>
-      )}
-      <label className="block space-y-1 text-xs">
-        {t("Название упражнения")}
-        <Input
-          value={name}
-          aria-describedby={error ? "exercise-editor-error" : undefined}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={100}
-          className="h-12"
-          disabled={busy}
-        />
-      </label>
-      <label className="block space-y-1 text-xs">
-        {t("Тренировочный день")}
-        <select
-          className={selectCls}
-          aria-describedby={error ? "exercise-editor-error" : undefined}
-          value={dayId}
-          onChange={(event) => setDayId(event.target.value)}
-          disabled={busy}
-        >
-          {!ex.day_id && <option value="">{t("Без назначенного дня")}</option>}
-          {days
-            .filter((day) => !day.archived_at || day.id === ex.day_id)
-            .map((day) => (
-              <option key={day.id} value={day.id}>
-                {day.name}
-                {day.archived_at ? t(" (архив)") : ""}
-              </option>
-            ))}
-        </select>
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="space-y-1 text-xs">
-          {t("Подходы")}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+        {error && (
+          <p
+            id="exercise-editor-error"
+            role="alert"
+            className="break-words rounded-xl border border-destructive p-3 text-sm"
+          >
+            {translateKnown(language, error)}
+          </p>
+        )}
+        <label className="block space-y-1 text-xs">
+          {t("Название упражнения")}
           <Input
-            inputMode="numeric"
+            value={name}
             aria-describedby={error ? "exercise-editor-error" : undefined}
-            value={sets}
-            onChange={(event) => setSets(event.target.value)}
-            disabled={busy}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={100}
             className="h-12"
-            placeholder="—"
+            disabled={busy}
           />
         </label>
-        <label className="space-y-1 text-xs">
-          {t("Повторения")}
-          <Input
-            value={reps}
+        <label className="block space-y-1 text-xs">
+          {t("Тренировочный день")}
+          <select
+            className={selectCls}
             aria-describedby={error ? "exercise-editor-error" : undefined}
-            onChange={(event) => setReps(event.target.value)}
+            value={dayId}
+            onChange={(event) => setDayId(event.target.value)}
             disabled={busy}
-            className="h-12"
-            placeholder="8–12"
-          />
+          >
+            {!ex.day_id && <option value="">{t("Без назначенного дня")}</option>}
+            {days
+              .filter((day) => !day.archived_at || day.id === ex.day_id)
+              .map((day) => (
+                <option key={day.id} value={day.id}>
+                  {day.name}
+                  {day.archived_at ? t(" (архив)") : ""}
+                </option>
+              ))}
+          </select>
         </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="space-y-1 text-xs">
+            {t("Подходы")}
+            <Input
+              inputMode="numeric"
+              aria-describedby={error ? "exercise-editor-error" : undefined}
+              value={sets}
+              onChange={(event) => setSets(event.target.value)}
+              disabled={busy}
+              className="h-12"
+              placeholder="—"
+            />
+          </label>
+          <label className="space-y-1 text-xs">
+            {t("Повторения")}
+            <Input
+              value={reps}
+              aria-describedby={error ? "exercise-editor-error" : undefined}
+              onChange={(event) => setReps(event.target.value)}
+              disabled={busy}
+              className="h-12"
+              placeholder="8–12"
+            />
+          </label>
+        </div>
       </div>
-      <div className="flex justify-end">
-        <Button type="submit" disabled={busy || !name.trim()}>
+      <DialogFooter className="safe-bottom shrink-0 border-t bg-background px-4 pt-3 sm:px-6">
+        <Button type="submit" className="h-12 w-full" disabled={busy || !name.trim()}>
           {t("Сохранить")}
         </Button>
-      </div>
+      </DialogFooter>
     </form>
   );
 }
