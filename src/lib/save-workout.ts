@@ -47,7 +47,7 @@ export async function saveWorkout(id: string, payload: WorkoutPayload, signal: A
       "22007",
       "22008",
       "22P02",
-    ].includes(error.code);
+    ].includes(error.code ?? "");
     throw new SaveWorkoutError(
       rejected
         ? "Запись отклонена. Проверьте значения, активность упражнения и выбранный день."
