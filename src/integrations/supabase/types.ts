@@ -182,6 +182,59 @@ export type Database = {
           },
         ]
       }
+      workout_entry_sets: {
+        Row: {
+          created_at: string
+          id: string
+          legacy_snapshot: boolean
+          load_type: "external" | "bodyweight"
+          position: number
+          reps: number
+          rir: number | null
+          set_type: "warmup" | "working"
+          updated_at: string
+          user_id: string
+          weight: number
+          workout_entry_id: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          legacy_snapshot?: boolean
+          load_type?: "external" | "bodyweight"
+          position: number
+          reps: number
+          rir?: number | null
+          set_type?: "warmup" | "working"
+          updated_at?: string
+          user_id?: string
+          weight: number
+          workout_entry_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          legacy_snapshot?: boolean
+          load_type?: "external" | "bodyweight"
+          position?: number
+          reps?: number
+          rir?: number | null
+          set_type?: "warmup" | "working"
+          updated_at?: string
+          user_id?: string
+          weight?: number
+          workout_entry_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_entry_sets_entry_owner_fkey"
+            columns: ["workout_entry_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "workout_entries"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       training_exercise_catalog: {
         Row: { exercise_key: string; name_ru: string; metadata: Json; content_sha256: string; created_at: string }
         Insert: { exercise_key: string; name_ru: string; metadata?: Json; content_sha256: string; created_at?: string }
@@ -249,6 +302,49 @@ export type Database = {
           _weight: number
         }
         Returns: string
+      }
+      save_workout_entry_sets: {
+        Args: {
+          _day_id: string
+          _exercise_id: string
+          _id: string
+          _notes?: string | null
+          _performed_on: string
+          _sets: Json
+        }
+        Returns: string
+      }
+      add_workout_entry_set: {
+        Args: {
+          _entry_id: string
+          _load_type?: "external" | "bodyweight"
+          _reps: number
+          _rir: string | null
+          _set_id: string
+          _set_type?: "warmup" | "working"
+          _weight: string
+        }
+        Returns: string
+      }
+      update_workout_entry_set: {
+        Args: {
+          _entry_id: string
+          _load_type?: "external" | "bodyweight"
+          _reps: number
+          _rir: string | null
+          _set_id: string
+          _set_type?: "warmup" | "working"
+          _weight: string
+        }
+        Returns: boolean
+      }
+      delete_workout_entry_set: {
+        Args: { _entry_id: string; _set_id: string }
+        Returns: boolean
+      }
+      reorder_workout_entry_sets: {
+        Args: { _entry_id: string; _ids: string[] }
+        Returns: boolean
       }
       setup_program: {
         Args: { _names: string[]; _template?: string }

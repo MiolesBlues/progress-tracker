@@ -26,14 +26,18 @@ export function SortableList<T extends { id: string }>({
   onReorder,
   render,
   handleLabel,
+  handleClassName,
   draggingClassName,
+  listClassName,
   disabled = false,
 }: {
   items: T[];
   onReorder: (ids: string[]) => void;
   render: (item: T, handle: ReactNode) => ReactNode;
   handleLabel?: (item: T) => string;
+  handleClassName?: string;
   draggingClassName?: string;
+  listClassName?: string;
   disabled?: boolean;
 }) {
   const { t } = useI18n();
@@ -77,13 +81,14 @@ export function SortableList<T extends { id: string }>({
       }}
     >
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <ul className="space-y-2">
+        <ul className={listClassName ?? "space-y-2"}>
           {items.map((it) => (
             <Item
               key={it.id}
               id={it.id}
               disabled={disabled}
               handleLabel={handleLabel?.(it) ?? t("Перетащить")}
+              {...(handleClassName ? { handleClassName } : {})}
               {...(draggingClassName ? { draggingClassName } : {})}
             >
               {(h) => render(it, h)}
@@ -99,12 +104,14 @@ function Item({
   id,
   children,
   handleLabel,
+  handleClassName,
   draggingClassName,
   disabled,
 }: {
   id: string;
   children: (handle: ReactNode) => ReactNode;
   handleLabel: string;
+  handleClassName?: string;
   draggingClassName?: string;
   disabled: boolean;
 }) {
@@ -122,7 +129,7 @@ function Item({
       aria-label={handleLabel}
       data-sortable-dragging={isDragging ? "true" : undefined}
       disabled={disabled}
-      className="touch-none cursor-grab p-1.5 text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+      className={`touch-none cursor-grab text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 ${handleClassName ?? "p-1.5"}`}
     >
       <GripVertical className="h-5 w-5" />
     </button>

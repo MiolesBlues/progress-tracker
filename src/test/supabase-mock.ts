@@ -18,10 +18,12 @@ const fake = vi.hoisted(() => {
       program_days: [] as Row[],
       program_exercises: [] as Row[],
       workout_entries: [] as Row[],
+      workout_entry_sets: [] as Row[],
     } as Record<string, Row[]> & {
       program_days: Row[];
       program_exercises: Row[];
       workout_entries: Row[];
+      workout_entry_sets: Row[];
     },
     calls: [] as {
       table: string;
@@ -59,6 +61,15 @@ const fake = vi.hoisted(() => {
           state.nextError = null;
           return { error: { message } };
         }
+        if (
+          [
+            "add_workout_entry_set",
+            "update_workout_entry_set",
+            "delete_workout_entry_set",
+            "reorder_workout_entry_sets",
+          ].includes(name)
+        )
+          return { data: true, error: null };
         if (name === "delete_archived_program_day") {
           const day = state.rows.program_days.find(
             (row) => row.id === args._day_id && row.user_id === state.userId,
@@ -101,6 +112,7 @@ const fake = vi.hoisted(() => {
     let operation = "select";
     let values: Row = {};
     const filters: Row = {};
+    const arrayFilters: { key: string; values: unknown[] }[] = [];
     const orders: { key: string; ascending: boolean }[] = [];
     const bounds: { key: string; value: string; lower: boolean }[] = [];
     let rangeFrom = 0;
@@ -129,6 +141,7 @@ const fake = vi.hoisted(() => {
       let found = rows.filter(
         (row) =>
           Object.entries(filters).every(([key, value]) => row[key] === value) &&
+          arrayFilters.every(({ key, values }) => values.includes(row[key])) &&
           bounds.every(({ key, value, lower }) =>
             lower ? String(row[key]) >= value : String(row[key]) <= value,
           ),
@@ -173,6 +186,10 @@ const fake = vi.hoisted(() => {
       select: (_columns?: string) => builder,
       eq: (key: string, value: unknown) => {
         filters[key] = value;
+        return builder;
+      },
+      in: (key: string, values: unknown[]) => {
+        arrayFilters.push({ key, values });
         return builder;
       },
       gte: (key: string, value: string) => {
@@ -232,7 +249,9 @@ vi.mock("@/integrations/supabase/client", () => ({
     from: fake.from,
     rpc: (name: string, args: { _ids?: string[] } & Record<string, unknown> = {}) => ({
       abortSignal: () =>
-        name === "save_workout_entry" ? fake.state.saveRpc(args) : fake.state.rpc(name, args),
+        name === "save_workout_entry" || name === "save_workout_entry_sets"
+          ? fake.state.saveRpc(args)
+          : fake.state.rpc(name, args),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
         fake.state.rpc(name, args).then(resolve, reject),
     }),
@@ -253,6 +272,7 @@ export function resetFake() {
   fake.state.userId = null;
   for (const key of Object.keys(fake.state.rows)) fake.state.rows[key] = [];
   fake.state.calls.length = 0;
+  fake.state.rpc.mockClear();
   fake.state.nextError = null;
   fake.state.deletionCapability = true;
   fake.state.readErrors = {};

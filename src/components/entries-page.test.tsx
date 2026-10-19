@@ -9,7 +9,11 @@ import { userKeys, type Day } from "@/lib/queries";
 
 vi.mock("@/lib/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/session")>()),
-  useUserSession: () => ({ userId: "A" }),
+  useUserSession: () => ({
+    userId: "A",
+    signal: new AbortController().signal,
+    isCurrent: () => true,
+  }),
 }));
 
 let qc: QueryClient;
@@ -121,7 +125,86 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   await waitFor(() => expect(screen.getByLabelText("Упражнение записей")).toHaveValue("squat"));
   expect(
     (await screen.findByRole("region", { name: "Дневник записей упражнения" })).querySelector("li"),
-  ).toHaveTextContent("1 подход · Рабочий вес 80 кг");
+  ).toHaveTextContent("1 подход · Макс. рабочий вес 80 кг");
+});
+
+it("renders independent set weights, reps, RIR, and warm-up type from set history", async () => {
+  fake.state.rows.workout_entries = [entry("set-entry", dateDaysAgo(0), 80, [8, 6])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "set-1",
+      user_id: "A",
+      workout_entry_id: "set-entry",
+      position: 1,
+      weight: "40.00",
+      reps: 8,
+      rir: "2.0",
+      set_type: "working",
+      load_type: "external",
+    },
+    {
+      id: "set-2",
+      user_id: "A",
+      workout_entry_id: "set-entry",
+      position: 2,
+      weight: "42.50",
+      reps: 6,
+      rir: null,
+      set_type: "warmup",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const item = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(item).getByRole("button"));
+  expect(item).toHaveTextContent("40 кг");
+  expect(item).toHaveTextContent("42,5 кг");
+  expect(item).toHaveTextContent("2");
+  expect(item).toHaveTextContent("W");
+});
+
+it("edits one saved set through the owner-scoped per-set RPC", async () => {
+  fake.state.rows.workout_entries = [entry("editable", dateDaysAgo(0), 50, [8])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "set-to-edit",
+      user_id: "A",
+      workout_entry_id: "editable",
+      position: 1,
+      weight: "50.00",
+      reps: 8,
+      rir: "2.0",
+      set_type: "working",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const entryItem = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(entryItem).getByRole("button"));
+  fireEvent.click(within(entryItem).getByRole("button", { name: "Изменить подход 1" }));
+  fireEvent.change(within(entryItem).getByLabelText("Вес подхода 1"), {
+    target: { value: "52.25" },
+  });
+  fireEvent.change(within(entryItem).getByLabelText("Повторения подхода 1"), {
+    target: { value: "9" },
+  });
+  fireEvent.change(within(entryItem).getByLabelText("RIR подхода 1"), { target: { value: "" } });
+  fireEvent.click(within(entryItem).getByRole("button", { name: "Сохранить подход 1" }));
+  await waitFor(() =>
+    expect(fake.state.rpc).toHaveBeenCalledWith(
+      "update_workout_entry_set",
+      expect.objectContaining({
+        _entry_id: "editable",
+        _set_id: "set-to-edit",
+        _weight: "52.25",
+        _reps: 9,
+        _rir: null,
+      }),
+    ),
+  );
+  expect(fake.state.rows.workout_entries[0]).toMatchObject({ weight: 50, reps: [8] });
 });
 
 it("keeps multiple workout records open and preserves set order and missing RIR", async () => {

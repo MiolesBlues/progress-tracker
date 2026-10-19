@@ -1,9 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { Fragment, useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { daysQuery, entriesQuery, programQuery } from "@/lib/queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { ChevronDown, Pencil, X } from "lucide-react";
+import { daysQuery, entriesQuery, lastEntryQuery, programQuery, userKeys } from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
-import { toISO } from "@/lib/workout";
+import { effectiveSets, toISO, workoutMetrics } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
 import { useI18n, setsCount } from "@/lib/i18n";
@@ -15,6 +15,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { decimal } from "@/lib/workout-input";
+import { updateWorkoutSet } from "@/lib/save-workout";
+import { toast } from "sonner";
+import type { HistoryEntry } from "@/lib/analytics";
+import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
+import { PageCard } from "@/components/ui/page-card";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -50,17 +57,23 @@ export function EntriesPage() {
   const [chosenExercise, setChosenExercise] = useState("");
   if (daysResult.isError || programResult.isError)
     return (
-      <LoadError
-        onRetry={() => {
-          void daysResult.refetch();
-          void programResult.refetch();
-        }}
-      >
-        {t("Не удалось загрузить программу для выбора записей.")}
-      </LoadError>
+      <PageCard>
+        <LoadError
+          onRetry={() => {
+            void daysResult.refetch();
+            void programResult.refetch();
+          }}
+        >
+          {t("Не удалось загрузить программу для выбора записей.")}
+        </LoadError>
+      </PageCard>
     );
   if (daysResult.isPending || programResult.isPending)
-    return <Loading>{t("Загрузка программы…")}</Loading>;
+    return (
+      <PageCard>
+        <Loading>{t("Загрузка программы…")}</Loading>
+      </PageCard>
+    );
 
   const dayNames = new Map(daysResult.data.map((day) => [day.id, day.name]));
   const days = showArchive ? daysResult.data : daysResult.data.filter((day) => !day.archived_at);
@@ -93,71 +106,73 @@ export function EntriesPage() {
   return (
     <div className="min-w-0 space-y-5">
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Записи")}</h1>
-      {!days.length && !hasUnassigned ? (
-        <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
-      ) : (
-        <>
-          <label className="block min-w-0 space-y-1 text-sm">
-            {t("Тренировочный день")}
-            <select
-              aria-label={t("День записей")}
-              className={selectCls}
-              value={dayId}
-              onChange={(event) => {
-                setChosenDay(event.target.value);
-                setChosenExercise("");
-              }}
-            >
-              {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
-              {days.map((day) => (
-                <option key={day.id} value={day.id}>
-                  {day.name}
-                  {day.archived_at ? t(" (архив)") : ""}
-                </option>
-              ))}
-              {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
-            </select>
-          </label>
-          {!dayId ? (
-            <p>{t("Выберите тренировочный день")}</p>
-          ) : !dayExercises.length ? (
-            <p>{t("В этом дне пока нет упражнений с записями.")}</p>
-          ) : (
-            <>
-              <label className="block min-w-0 space-y-1 text-sm">
-                {t("Упражнение")}
-                <select
-                  aria-label={t("Упражнение записей")}
-                  className={selectCls}
-                  value={exerciseId}
-                  onChange={(event) => setChosenExercise(event.target.value)}
-                >
-                  {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
-                  {dayExercises.map((exercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.name}
-                      {exercise.archived_at ? t(" (архив)") : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {exerciseId ? (
-                <ExerciseEntries
-                  key={`${userId}:${exerciseId}`}
-                  userId={userId}
-                  exerciseId={exerciseId}
-                  exerciseName={
-                    dayExercises.find((exercise) => exercise.id === exerciseId)?.name ?? ""
-                  }
-                  dayNames={dayNames}
-                />
-              ) : (
-                <p>{t("Выберите упражнение")}</p>
-              )}
-            </>
-          )}
-        </>
-      )}
+      <PageCard className="space-y-5">
+        {!days.length && !hasUnassigned ? (
+          <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
+        ) : (
+          <>
+            <label className="block min-w-0 space-y-1 text-sm">
+              {t("Тренировочный день")}
+              <select
+                aria-label={t("День записей")}
+                className={selectCls}
+                value={dayId}
+                onChange={(event) => {
+                  setChosenDay(event.target.value);
+                  setChosenExercise("");
+                }}
+              >
+                {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
+                {days.map((day) => (
+                  <option key={day.id} value={day.id}>
+                    {day.name}
+                    {day.archived_at ? t(" (архив)") : ""}
+                  </option>
+                ))}
+                {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
+              </select>
+            </label>
+            {!dayId ? (
+              <p>{t("Выберите тренировочный день")}</p>
+            ) : !dayExercises.length ? (
+              <p>{t("В этом дне пока нет упражнений с записями.")}</p>
+            ) : (
+              <>
+                <label className="block min-w-0 space-y-1 text-sm">
+                  {t("Упражнение")}
+                  <select
+                    aria-label={t("Упражнение записей")}
+                    className={selectCls}
+                    value={exerciseId}
+                    onChange={(event) => setChosenExercise(event.target.value)}
+                  >
+                    {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
+                    {dayExercises.map((exercise) => (
+                      <option key={exercise.id} value={exercise.id}>
+                        {exercise.name}
+                        {exercise.archived_at ? t(" (архив)") : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {exerciseId ? (
+                  <ExerciseEntries
+                    key={`${userId}:${exerciseId}`}
+                    userId={userId}
+                    exerciseId={exerciseId}
+                    exerciseName={
+                      dayExercises.find((exercise) => exercise.id === exerciseId)?.name ?? ""
+                    }
+                    dayNames={dayNames}
+                  />
+                ) : (
+                  <p>{t("Выберите упражнение")}</p>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </PageCard>
     </div>
   );
 }
@@ -198,8 +213,14 @@ function ExerciseEntries({
     b.created_at.localeCompare(a.created_at) ||
     b.id.localeCompare(a.id);
   const records = [...filtered].sort((a, b) => {
-    if (sort === "weight-desc") return b.weight - a.weight || recentOrder(a, b);
-    if (sort === "weight-asc") return a.weight - b.weight || recentOrder(a, b);
+    if (sort === "weight-desc")
+      return (
+        workoutMetrics(b).maxWorkingWeight - workoutMetrics(a).maxWorkingWeight || recentOrder(a, b)
+      );
+    if (sort === "weight-asc")
+      return (
+        workoutMetrics(a).maxWorkingWeight - workoutMetrics(b).maxWorkingWeight || recentOrder(a, b)
+      );
     return recentOrder(a, b);
   });
   const pages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
@@ -308,8 +329,10 @@ function ExerciseEntries({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{exerciseName}</span>
                   <span className="block truncate text-xs text-muted-foreground tabular-nums">
-                    {setsCount(entry.reps.length, language)} ·{" "}
-                    {t("Рабочий вес {weight}", { weight: `${number(entry.weight, 2)} ${t("кг")}` })}
+                    {setsCount(effectiveSets(entry).length, language)} ·{" "}
+                    {t("Макс. рабочий вес {weight}", {
+                      weight: `${number(workoutMetrics(entry).maxWorkingWeight, 2)} ${t("кг")}`,
+                    })}
                   </span>
                 </span>
                 <span className="max-w-[35%] truncate text-right text-xs text-muted-foreground">
@@ -329,22 +352,19 @@ function ExerciseEntries({
                 className={`grid transition-[grid-template-rows,opacity] duration-250 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${expandedEntries.has(entry.id) ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
               >
                 <div className="min-h-0 overflow-hidden">
-                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 border-t border-border/50 py-2 text-xs">
+                  <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 border-t border-border/50 py-2 text-xs">
                     <span className="text-muted-foreground">{t("SET")}</span>
                     <span className="text-muted-foreground">{t("WEIGHT")}</span>
                     <span className="text-muted-foreground">{t("REPS")}</span>
                     <span className="text-muted-foreground">RIR</span>
-                    {entry.reps.map((reps, index) => (
-                      <Fragment key={index}>
-                        <span className="tabular-nums">{index + 1}</span>
-                        <span className="tabular-nums">
-                          {number(entry.weight, 2)} {t("кг")}
-                        </span>
-                        <span className="tabular-nums">{reps}</span>
-                        <span className="tabular-nums">
-                          {entry.rir === null ? "—" : number(entry.rir)}
-                        </span>
-                      </Fragment>
+                    <span />
+                    {effectiveSets(entry).map((set) => (
+                      <HistorySetRow
+                        key={`${entry.id}:${set.position}`}
+                        entryId={entry.id}
+                        exerciseId={exerciseId}
+                        set={set}
+                      />
                     ))}
                   </div>
                   {entry.notes?.trim() && (
@@ -387,5 +407,164 @@ function ExerciseEntries({
         </nav>
       )}
     </section>
+  );
+}
+
+function HistorySetRow({
+  entryId,
+  exerciseId,
+  set,
+}: {
+  entryId: string;
+  exerciseId: string;
+  set: NonNullable<HistoryEntry["sets"]>[number];
+}) {
+  const { t, number } = useI18n();
+  const { userId, signal, isCurrent } = useUserSession();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [values, setValues] = useState({
+    weight: set.weightExact ?? String(set.weight),
+    reps: String(set.reps),
+    rir: set.rir === null ? "" : String(set.rir),
+  });
+  async function save() {
+    if (!set.id || saving || !isCurrent()) return;
+    setError("");
+    setSaving(true);
+    try {
+      const weight = values.weight.trim().replace(",", ".");
+      decimal(weight, "Вес", MAX_WEIGHT, 2);
+      if (
+        !/^\d+$/.test(values.reps) ||
+        !Number.isSafeInteger(Number(values.reps)) ||
+        Number(values.reps) > MAX_REPS
+      )
+        throw new Error("Укажите целое количество повторений.");
+      const rirText = values.rir.trim().replace(",", ".");
+      if (rirText) decimal(rirText, "RIR", 10, 1);
+      await updateWorkoutSet(
+        entryId,
+        {
+          id: set.id,
+          position: set.position,
+          weight,
+          reps: Number(values.reps),
+          rir: rirText || null,
+          set_type: set.set_type,
+          load_type: set.load_type,
+        },
+        signal,
+      );
+      if (!isCurrent()) return;
+      setEditing(false);
+      toast.success(t("Подход обновлён"), { id: `set-updated-${set.id}`, duration: 2500 });
+      void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
+      void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
+    } catch (reason) {
+      if (isCurrent())
+        setError(reason instanceof Error ? reason.message : "Не удалось изменить подход.");
+    } finally {
+      if (isCurrent()) setSaving(false);
+    }
+  }
+  return (
+    <div className="col-span-5 grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 border-t border-border/30 py-1 text-xs">
+      <span className="tabular-nums">
+        {set.position}
+        {set.set_type === "warmup" ? " · W" : ""}
+      </span>
+      {editing ? (
+        <Input
+          aria-label={t("Вес подхода {number}", { number: set.position })}
+          inputMode="decimal"
+          value={values.weight}
+          onChange={(event) => setValues({ ...values, weight: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">
+          {number(set.weight, 2)} {t("кг")}
+        </span>
+      )}
+      {editing ? (
+        <Input
+          aria-label={t("Повторения подхода {number}", { number: set.position })}
+          inputMode="numeric"
+          value={values.reps}
+          onChange={(event) => setValues({ ...values, reps: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">{set.reps}</span>
+      )}
+      {editing ? (
+        <Input
+          aria-label={t("RIR подхода {number}", { number: set.position })}
+          inputMode="decimal"
+          value={values.rir}
+          onChange={(event) => setValues({ ...values, rir: event.target.value })}
+          className="num h-9 min-w-0 px-1"
+        />
+      ) : (
+        <span className="tabular-nums">{set.rir === null ? "—" : number(set.rir)}</span>
+      )}
+      {set.id &&
+        (editing ? (
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("Сохранить подход {number}", { number: set.position })}
+              disabled={saving}
+              onClick={() => void save()}
+            >
+              {saving ? "…" : <Check className="h-4 w-4" />}
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("Отмена редактирования подхода")}
+              disabled={saving}
+              onClick={() => {
+                setValues({
+                  weight: set.weightExact ?? String(set.weight),
+                  reps: String(set.reps),
+                  rir: set.rir === null ? "" : String(set.rir),
+                });
+                setEditing(false);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={t("Изменить подход {number}", { number: set.position })}
+            onClick={() => {
+              setValues({
+                weight: set.weightExact ?? String(set.weight),
+                reps: String(set.reps),
+                rir: set.rir === null ? "" : String(set.rir),
+              });
+              setEditing(true);
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ))}
+      {error && (
+        <p role="alert" className="col-span-5 text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

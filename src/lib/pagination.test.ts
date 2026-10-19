@@ -51,7 +51,8 @@ it("loads 1207 rows despite a server cap smaller than the requested page, sorted
   expect(rows).toHaveLength(1207);
   expect(rows[0]?.id).toBe("00000");
   expect(rows.at(-1)?.id).toBe("01206");
-  expect(fake.state.calls).toHaveLength(9);
+  expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(9);
+  expect(fake.state.calls.filter((call) => call.table === "workout_entry_sets")).toHaveLength(13);
   qc.clear();
 });
 it("paginates the exercise archive too", async () => {
