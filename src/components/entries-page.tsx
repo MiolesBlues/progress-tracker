@@ -8,12 +8,31 @@ import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
 import { useI18n, setsCount } from "@/lib/i18n";
 import { useArchivePreferences } from "@/lib/archive-preferences";
+import { ArrowDownUp, Check } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
 type Sort = "recent" | "weight-desc" | "weight-asc";
 const UNASSIGNED = "unassigned";
 const PAGE_SIZE = 20;
+const SORT_PREFERENCE_PREFIX = "app:entries-sort:v1:";
+
+function readSortPreference(userId: string): Sort {
+  try {
+    const value = localStorage.getItem(`${SORT_PREFERENCE_PREFIX}${userId}`);
+    return value === "recent" || value === "weight-desc" || value === "weight-asc"
+      ? value
+      : "recent";
+  } catch {
+    return "recent";
+  }
+}
 
 function daysAgo(days: number, today: string) {
   const date = new Date(`${today}T12:00:00`);
@@ -158,7 +177,7 @@ function ExerciseEntries({
   const today = toISO(new Date());
   const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
   const [period, setPeriod] = useState<Period>(30);
-  const [sort, setSort] = useState<Sort>("recent");
+  const [sort, setSort] = useState<Sort>(() => readSortPreference(userId));
   const [page, setPage] = useState(0);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(() => new Set());
   if (result.isError)
@@ -215,23 +234,55 @@ function ExerciseEntries({
           ))}
         </div>
       </div>
-      <label className="block min-w-0 space-y-1 text-sm">
-        {t("Сортировка")}
-        <select
-          aria-label={t("Сортировка записей")}
-          className={selectCls}
-          value={sort}
-          onChange={(event) => {
-            setSort(event.target.value as Sort);
-            setPage(0);
-          }}
-        >
-          <option value="recent">{t("Сначала новые")}</option>
-          <option value="weight-desc">{t("Вес: по убыванию")}</option>
-          <option value="weight-asc">{t("Вес: по возрастанию")}</option>
-        </select>
-      </label>
-      <h2 className="font-bold">{t("Записи · {count}", { count: records.length })}</h2>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <h2 className="min-w-0 font-bold">{t("Записи · {count}", { count: records.length })}</h2>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-11 w-11 shrink-0"
+              aria-label={t("Сортировка записей")}
+            >
+              <ArrowDownUp aria-hidden="true" className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            side="bottom"
+            sideOffset={4}
+            collisionPadding={8}
+            className="w-52 max-w-[calc(100vw-1rem)] p-1 duration-150 motion-reduce:animate-none motion-reduce:transition-none"
+          >
+            {(
+              [
+                ["recent", t("Сначала новые")],
+                ["weight-desc", t("Вес: по убыванию")],
+                ["weight-asc", t("Вес: по возрастанию")],
+              ] as const
+            ).map(([value, label]) => (
+              <DropdownMenuItem
+                key={value}
+                role="menuitemradio"
+                aria-checked={sort === value}
+                onSelect={() => {
+                  setSort(value);
+                  setPage(0);
+                  try {
+                    localStorage.setItem(`${SORT_PREFERENCE_PREFIX}${userId}`, value);
+                  } catch {
+                    // Sorting remains available for this session when storage is unavailable.
+                  }
+                }}
+                className="min-h-11 gap-3 px-3"
+              >
+                <span>{label}</span>
+                {sort === value && <Check aria-hidden="true" className="ml-auto h-4 w-4" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {!records.length ? (
         <p className="rounded-xl bg-card p-4 text-sm text-muted-foreground">
           {t("За выбранный период записей нет.")}
