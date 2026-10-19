@@ -92,6 +92,22 @@ describe("session-relative analytics", () => {
     expect(cmp.weightPct).toBeNull();
     expect(cmp.warnings[0]).toMatch(/RIR/);
   });
+  it("does not label differently loaded per-set sessions comparable", () => {
+    const current = row("b", "2026-10-05", {
+      sets: [
+        { position: 1, weight: 55, reps: 8, rir: 2, set_type: "working", load_type: "external" },
+        { position: 2, weight: 50, reps: 7, rir: 2, set_type: "working", load_type: "external" },
+      ],
+    });
+    const prior = row("a", "2026-10-04", {
+      sets: [
+        { position: 1, weight: 50, reps: 10, rir: 2, set_type: "working", load_type: "external" },
+      ],
+    });
+    const result = compareSessions(current, prior)!;
+    expect(result.comparable).toBe(false);
+    expect(result.warnings).toContain("Разное число подходов: условия несопоставимы.");
+  });
   it.each([7, 30, 90, 365] as const)("bounds the %i-day chart on both sides", (period) => {
     const [from, to] = chartRange(period, "2026-10-13");
     const values = chartSeries(

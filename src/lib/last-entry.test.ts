@@ -62,9 +62,10 @@ it("selects only the current user's exercise at or before the date, ordered by d
   });
   expect(await client.fetchQuery(lastEntryQuery("A", "ex", "2026-10-13"))).toBeNull();
   expect(
-    fake.state.calls.every(
-      (call) =>
-        call.filters["user_id"] === "A" && call.filters["exercise_id"] === "ex" && !!call.signal,
+    fake.state.calls.every((call) =>
+      call.table === "workout_entry_sets"
+        ? call.filters["user_id"] === "A" && !!call.filters["workout_entry_id"] && !!call.signal
+        : call.filters["user_id"] === "A" && call.filters["exercise_id"] === "ex" && !!call.signal,
     ),
   ).toBe(true);
 });

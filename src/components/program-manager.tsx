@@ -18,6 +18,7 @@ import {
 import { ArchiveDeleteDialog } from "@/components/archive-delete-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PageCard } from "@/components/ui/page-card";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -393,20 +394,26 @@ export function ProgramManager() {
       .single();
 
   if (daysResult.isPending || programResult.isPending)
-    return <p role="status">{t("Загрузка программы…")}</p>;
+    return (
+      <PageCard>
+        <p role="status">{t("Загрузка программы…")}</p>
+      </PageCard>
+    );
   if (daysResult.isError || programResult.isError)
     return (
-      <div role="alert">
-        {t("Не удалось загрузить программу.")}{" "}
-        <Button
-          onClick={() => {
-            void daysResult.refetch();
-            void programResult.refetch();
-          }}
-        >
-          {t("Повторить")}
-        </Button>
-      </div>
+      <PageCard>
+        <div role="alert">
+          {t("Не удалось загрузить программу.")}{" "}
+          <Button
+            onClick={() => {
+              void daysResult.refetch();
+              void programResult.refetch();
+            }}
+          >
+            {t("Повторить")}
+          </Button>
+        </div>
+      </PageCard>
     );
 
   function summary(ex: Exercise) {
@@ -491,391 +498,396 @@ export function ProgramManager() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-extrabold">{t("Программа")}</h1>
-      {error && !managingDays && !addingExercise && (
-        <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
-          {translateKnown(language, error)}
-        </p>
-      )}
-      {deletionEnabled &&
-        (deletionCapability.isSuccess || deletionCapability.isError) &&
-        !canDeleteArchived && (
-          <p role="status" className="text-sm text-muted-foreground">
-            {t("Удаление пока недоступно на сервере.")}
+      <PageCard className="space-y-6">
+        {error && !managingDays && !addingExercise && (
+          <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
+            {translateKnown(language, error)}
           </p>
         )}
-      <Dialog
-        open={managingDays}
-        onOpenChange={(open) => {
-          setError("");
-          setManagingDays(open);
-        }}
-      >
-        <section
-          aria-label={t("Тренировочные дни")}
-          className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
-        >
-          <div className="min-w-0">
-            <h2 className="font-bold">{t("Тренировочные дни")}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("{count} из {max}", { count: active.length, max: MAX_DAYS })}
+        {deletionEnabled &&
+          (deletionCapability.isSuccess || deletionCapability.isError) &&
+          !canDeleteArchived && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("Удаление пока недоступно на сервере.")}
             </p>
-          </div>
-          <DialogTrigger asChild>
-            <Button variant="secondary" className="h-11 shrink-0">
-              <Pencil className="h-4 w-4" />
-              {t("Изменить дни")}
-            </Button>
-          </DialogTrigger>
-        </section>
-        <DialogContent
-          className="flex max-h-[90dvh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
-          style={{ width: "min(520px, calc(100vw - 2rem))" }}
-        >
-          <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
-            <DialogTitle>{t("Тренировочные дни")}</DialogTitle>
-            <DialogDescription>
-              {t("{count} из {max} активных дней", { count: active.length, max: MAX_DAYS })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
-            {error && (
-              <p
-                role="alert"
-                className="break-words rounded-lg border border-destructive p-3 text-sm"
-              >
-                {translateKnown(language, error)}
-              </p>
-            )}
-            <SortableList
-              items={active}
-              disabled={busy}
-              handleLabel={(day) => t("Переместить день {name}", { name: day.name })}
-              draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
-              onReorder={(ids) =>
-                void run(() =>
-                  pendingRpc("reorder_program_days", { _ids: ids }).abortSignal(signal),
-                )
-              }
-              render={(day, handle) => (
-                <DayEditor
-                  day={day}
-                  handle={handle}
-                  busy={busy}
-                  run={run}
-                  save={(patch) => updateDay(day.id, patch)}
-                  canArchive={active.length > 1}
-                  canRestore={false}
-                  deleteControl={null}
-                />
-              )}
-            />
-            <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
-              <Input
-                aria-label={t("Название нового дня")}
-                value={newDay}
-                onChange={(event) => setNewDay(event.target.value)}
-                maxLength={60}
-                placeholder={t("Новый день")}
-                className="h-12 min-w-0 flex-1 basis-40"
-                disabled={busy || active.length >= MAX_DAYS}
-              />
-              <Button
-                type="submit"
-                className="h-12 shrink-0"
-                disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
-              >
-                {t("Добавить день")}
-              </Button>
-            </form>
-            {active.length >= MAX_DAYS && (
-              <p className="text-sm text-muted-foreground">
-                {t("Можно иметь не более 7 активных дней.")}
-              </p>
-            )}
-            {days.some((day) => day.archived_at) && (
-              <details className="space-y-3">
-                <summary className="cursor-pointer py-2 font-bold">{t("Архив дней")}</summary>
-                {days
-                  .filter((day) => day.archived_at)
-                  .map((day) => (
-                    <div key={day.id}>
-                      <DayEditor
-                        day={day}
-                        busy={busy}
-                        run={run}
-                        save={(patch) => updateDay(day.id, patch)}
-                        canArchive={false}
-                        canRestore={active.length < MAX_DAYS}
-                        deleteControl={
-                          canDeleteArchived ? (
-                            <ArchiveDeleteDialog
-                              kind="day"
-                              id={day.id}
-                              name={day.name}
-                              userId={userId}
-                              exerciseCount={exercises.filter((ex) => ex.day_id === day.id).length}
-                              disabled={busy}
-                              onConfirm={() => deleteArchived("day", day.id)}
-                            />
-                          ) : null
-                        }
-                      />
-                      {exercises.some((ex) => ex.day_id === day.id) && (
-                        <details className="space-y-2 pt-2">
-                          <summary className="cursor-pointer py-2 text-sm">
-                            {t("Упражнения архивного дня")}
-                          </summary>
-                          {exercises
-                            .filter((ex) => ex.day_id === day.id)
-                            .map((ex) => (
-                              <div key={ex.id}>{compactRow(ex)}</div>
-                            ))}
-                        </details>
-                      )}
-                    </div>
-                  ))}
-              </details>
-            )}
-          </div>
-          <DialogFooter className="safe-bottom shrink-0 border-t bg-background px-4 pt-3 sm:px-6">
-            <DialogClose asChild>
-              <Button className="h-11 w-full sm:w-auto" disabled={busy}>
-                {t("Готово")}
-              </Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <section aria-label={t("Упражнения")} className="space-y-3">
-        <h2 className="font-bold">{t("Упражнения")}</h2>
-        <Select
-          value={dayId}
-          disabled={busy || !active.length || addingExercise}
-          onValueChange={selectDay}
-        >
-          <SelectTrigger
-            aria-label={t("День для упражнений")}
-            className="h-12 w-full min-w-0 bg-card text-left [&>span]:min-w-0 [&>span]:truncate"
-          >
-            <SelectValue placeholder={t("Нет активных дней")} />
-          </SelectTrigger>
-          <SelectContent
-            position="popper"
-            align="start"
-            collisionPadding={8}
-            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
-          >
-            {active.map((day) => (
-              <SelectItem key={day.id} value={day.id} className="min-h-10 whitespace-normal py-2">
-                <span className="block min-w-0 break-words leading-snug">
-                  {day.name} ·{" "}
-                  {t("{count} упр.", {
-                    count: exercises.filter((ex) => ex.day_id === day.id && !ex.archived_at).length,
-                  })}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {!active.length && (
-          <p className="text-sm text-muted-foreground">
-            {t("Нет активных дней. Создайте или восстановите день через «Изменить дни».")}
-          </p>
-        )}
-        <SortableList
-          items={currentExercises}
-          disabled={busy}
-          handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
-          onReorder={(ids) =>
-            void run(() =>
-              pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids }).abortSignal(
-                signal,
-              ),
-            )
-          }
-          render={(ex, handle) => compactRow(ex, handle)}
-        />
-        {!currentExercises.length && (
-          <p className="text-sm text-muted-foreground">{t("Упражнений пока нет.")}</p>
-        )}
-        {selectedDay && !selectedDay.archived_at && (
-          <Button
-            type="button"
-            className="h-12 w-full"
-            disabled={busy || addingExercise}
-            onClick={() => {
-              setError("");
-              setNewExerciseDayId(dayId);
-              setAddingExercise(true);
-            }}
-          >
-            {t("Добавить упражнение")}
-          </Button>
-        )}
-        {selectedDay && (
-          <section className="space-y-3">
-            <button
-              type="button"
-              aria-expanded={archiveExpanded}
-              className="w-full cursor-pointer py-2 text-left font-bold"
-              onClick={() =>
-                setArchiveExpandedByUser((openByUser) => ({
-                  ...openByUser,
-                  [userId]: !archiveExpanded,
-                }))
-              }
-            >
-              {t("Архив упражнений")}
-            </button>
-            {archiveExpanded && (
-              <div className="space-y-3">
-                {exercises
-                  .filter((ex) => ex.day_id === dayId && ex.archived_at)
-                  .map((ex) => (
-                    <div key={ex.id}>{compactRow(ex)}</div>
-                  ))}
-                {!exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
-                  <p className="text-sm text-muted-foreground">
-                    {t("Архивированных упражнений нет")}
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-      </section>
-
-      {unassigned.length > 0 && (
-        <section aria-label={t("Упражнения без дня")} className="space-y-3 rounded-xl border p-3">
-          <h2 className="font-bold">
-            {t("Без назначенного дня · {count}", { count: unassigned.length })}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История останется без изменений.",
-            )}
-          </p>
-          {unassigned.map((ex) => (
-            <div key={ex.id}>{compactRow(ex)}</div>
-          ))}
-        </section>
-      )}
-      <Dialog open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent
-          className="flex max-h-[90dvh] max-w-[480px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
-          style={{ width: "min(480px, calc(100vw - 2rem))" }}
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            exerciseEditTrigger.current?.focus();
+          )}
+        <Dialog
+          open={managingDays}
+          onOpenChange={(open) => {
+            setError("");
+            setManagingDays(open);
           }}
         >
-          <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
-            <DialogTitle>{t("Редактирование упражнения")}</DialogTitle>
-          </DialogHeader>
-          {editingEx && (
-            <ExerciseEditor
-              key={editingEx.id + editingEx.day_id}
-              exercise={editingEx}
-              days={days}
-              busy={busy}
-              error={exerciseError}
-              run={async (action) => {
-                const ok = await run(action, setExerciseError);
-                if (ok) setEditing(null);
-                return ok;
-              }}
-              save={(patch) => updateExercise(editingEx.id, patch)}
-              nextPosition={(target) =>
-                nextPosition(exercises.filter((item) => item.day_id === target))
-              }
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-      <Sheet
-        open={addingExercise}
-        onOpenChange={(open) => {
-          if (!busy) setAddingExercise(open);
-        }}
-      >
-        <SheetContent
-          side="bottom"
-          className="max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:mx-auto sm:max-w-md"
-        >
-          <SheetHeader>
-            <SheetTitle>{t("Добавить упражнение")}</SheetTitle>
-            <SheetDescription>
-              {t("Упражнение будет добавлено в выбранный тренировочный день.")}
-            </SheetDescription>
-          </SheetHeader>
-          <form
-            aria-label={t("Новое упражнение")}
-            onSubmit={addExercise}
-            className="space-y-4 pt-3"
+          <section
+            aria-label={t("Тренировочные дни")}
+            className="flex flex-wrap items-center justify-between gap-3 border-b pb-4"
           >
-            {error && (
-              <p
-                role="alert"
-                className="break-words rounded-xl border border-destructive p-3 text-sm"
-              >
-                {translateKnown(language, error)}
+            <div className="min-w-0">
+              <h2 className="font-bold">{t("Тренировочные дни")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("{count} из {max}", { count: active.length, max: MAX_DAYS })}
               </p>
-            )}
-            <label className="block space-y-1 text-sm">
-              {t("Название упражнения")}
-              <Input
-                aria-label={t("Название упражнения")}
-                value={newExerciseName}
-                onChange={(event) => setNewExerciseName(event.target.value)}
-                maxLength={100}
-                required
-                autoFocus
+            </div>
+            <DialogTrigger asChild>
+              <Button variant="secondary" className="h-11 shrink-0">
+                <Pencil className="h-4 w-4" />
+                {t("Изменить дни")}
+              </Button>
+            </DialogTrigger>
+          </section>
+          <DialogContent
+            className="flex max-h-[90dvh] max-w-[520px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+            style={{ width: "min(520px, calc(100vw - 2rem))" }}
+          >
+            <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
+              <DialogTitle>{t("Тренировочные дни")}</DialogTitle>
+              <DialogDescription>
+                {t("{count} из {max} активных дней", { count: active.length, max: MAX_DAYS })}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+              {error && (
+                <p
+                  role="alert"
+                  className="break-words rounded-lg border border-destructive p-3 text-sm"
+                >
+                  {translateKnown(language, error)}
+                </p>
+              )}
+              <SortableList
+                items={active}
                 disabled={busy}
-                className="h-12"
+                handleLabel={(day) => t("Переместить день {name}", { name: day.name })}
+                draggingClassName="rounded-lg bg-card shadow-lg ring-2 ring-primary"
+                onReorder={(ids) =>
+                  void run(() =>
+                    pendingRpc("reorder_program_days", { _ids: ids }).abortSignal(signal),
+                  )
+                }
+                render={(day, handle) => (
+                  <DayEditor
+                    day={day}
+                    handle={handle}
+                    busy={busy}
+                    run={run}
+                    save={(patch) => updateDay(day.id, patch)}
+                    canArchive={active.length > 1}
+                    canRestore={false}
+                    deleteControl={null}
+                  />
+                )}
               />
-            </label>
-            <label className="block space-y-1 text-sm">
-              {t("Количество подходов")}
-              <Input
-                aria-label={t("Количество подходов")}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={20}
-                step={1}
-                value={newExerciseSets}
-                onChange={(event) => setNewExerciseSets(event.target.value)}
-                required
-                disabled={busy}
-                className="h-12"
-              />
-            </label>
-            <label className="block space-y-1 text-sm">
-              {t("Целевой диапазон повторений")}
-              <Input
-                aria-label={t("Целевой диапазон повторений")}
-                value={newExerciseReps}
-                onChange={(event) => setNewExerciseReps(event.target.value)}
-                placeholder="8–12"
-                maxLength={30}
-                required
-                disabled={busy}
-                className="h-12"
-              />
-            </label>
-            <Button
-              type="submit"
-              className="h-12 w-full"
-              disabled={
-                busy || !newExerciseName.trim() || !newExerciseSets || !newExerciseReps.trim()
-              }
+              <form onSubmit={addDay} className="flex flex-wrap gap-2 border-t pt-4">
+                <Input
+                  aria-label={t("Название нового дня")}
+                  value={newDay}
+                  onChange={(event) => setNewDay(event.target.value)}
+                  maxLength={60}
+                  placeholder={t("Новый день")}
+                  className="h-12 min-w-0 flex-1 basis-40"
+                  disabled={busy || active.length >= MAX_DAYS}
+                />
+                <Button
+                  type="submit"
+                  className="h-12 shrink-0"
+                  disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
+                >
+                  {t("Добавить день")}
+                </Button>
+              </form>
+              {active.length >= MAX_DAYS && (
+                <p className="text-sm text-muted-foreground">
+                  {t("Можно иметь не более 7 активных дней.")}
+                </p>
+              )}
+              {days.some((day) => day.archived_at) && (
+                <details className="space-y-3">
+                  <summary className="cursor-pointer py-2 font-bold">{t("Архив дней")}</summary>
+                  {days
+                    .filter((day) => day.archived_at)
+                    .map((day) => (
+                      <div key={day.id}>
+                        <DayEditor
+                          day={day}
+                          busy={busy}
+                          run={run}
+                          save={(patch) => updateDay(day.id, patch)}
+                          canArchive={false}
+                          canRestore={active.length < MAX_DAYS}
+                          deleteControl={
+                            canDeleteArchived ? (
+                              <ArchiveDeleteDialog
+                                kind="day"
+                                id={day.id}
+                                name={day.name}
+                                userId={userId}
+                                exerciseCount={
+                                  exercises.filter((ex) => ex.day_id === day.id).length
+                                }
+                                disabled={busy}
+                                onConfirm={() => deleteArchived("day", day.id)}
+                              />
+                            ) : null
+                          }
+                        />
+                        {exercises.some((ex) => ex.day_id === day.id) && (
+                          <details className="space-y-2 pt-2">
+                            <summary className="cursor-pointer py-2 text-sm">
+                              {t("Упражнения архивного дня")}
+                            </summary>
+                            {exercises
+                              .filter((ex) => ex.day_id === day.id)
+                              .map((ex) => (
+                                <div key={ex.id}>{compactRow(ex)}</div>
+                              ))}
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                </details>
+              )}
+            </div>
+            <DialogFooter className="safe-bottom shrink-0 border-t bg-background px-4 pt-3 sm:px-6">
+              <DialogClose asChild>
+                <Button className="h-11 w-full sm:w-auto" disabled={busy}>
+                  {t("Готово")}
+                </Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <section aria-label={t("Упражнения")} className="space-y-3">
+          <h2 className="font-bold">{t("Упражнения")}</h2>
+          <Select
+            value={dayId}
+            disabled={busy || !active.length || addingExercise}
+            onValueChange={selectDay}
+          >
+            <SelectTrigger
+              aria-label={t("День для упражнений")}
+              className="h-12 w-full min-w-0 bg-card text-left [&>span]:min-w-0 [&>span]:truncate"
             >
-              {t("Сохранить")}
+              <SelectValue placeholder={t("Нет активных дней")} />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              align="start"
+              collisionPadding={8}
+              className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+            >
+              {active.map((day) => (
+                <SelectItem key={day.id} value={day.id} className="min-h-10 whitespace-normal py-2">
+                  <span className="block min-w-0 break-words leading-snug">
+                    {day.name} ·{" "}
+                    {t("{count} упр.", {
+                      count: exercises.filter((ex) => ex.day_id === day.id && !ex.archived_at)
+                        .length,
+                    })}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!active.length && (
+            <p className="text-sm text-muted-foreground">
+              {t("Нет активных дней. Создайте или восстановите день через «Изменить дни».")}
+            </p>
+          )}
+          <SortableList
+            items={currentExercises}
+            disabled={busy}
+            handleLabel={(exercise) => t("Переместить упражнение {name}", { name: exercise.name })}
+            onReorder={(ids) =>
+              void run(() =>
+                pendingRpc("reorder_program_exercises", { _day_id: dayId, _ids: ids }).abortSignal(
+                  signal,
+                ),
+              )
+            }
+            render={(ex, handle) => compactRow(ex, handle)}
+          />
+          {!currentExercises.length && (
+            <p className="text-sm text-muted-foreground">{t("Упражнений пока нет.")}</p>
+          )}
+          {selectedDay && !selectedDay.archived_at && (
+            <Button
+              type="button"
+              className="h-12 w-full"
+              disabled={busy || addingExercise}
+              onClick={() => {
+                setError("");
+                setNewExerciseDayId(dayId);
+                setAddingExercise(true);
+              }}
+            >
+              {t("Добавить упражнение")}
             </Button>
-          </form>
-        </SheetContent>
-      </Sheet>
+          )}
+          {selectedDay && (
+            <section className="space-y-3">
+              <button
+                type="button"
+                aria-expanded={archiveExpanded}
+                className="w-full cursor-pointer py-2 text-left font-bold"
+                onClick={() =>
+                  setArchiveExpandedByUser((openByUser) => ({
+                    ...openByUser,
+                    [userId]: !archiveExpanded,
+                  }))
+                }
+              >
+                {t("Архив упражнений")}
+              </button>
+              {archiveExpanded && (
+                <div className="space-y-3">
+                  {exercises
+                    .filter((ex) => ex.day_id === dayId && ex.archived_at)
+                    .map((ex) => (
+                      <div key={ex.id}>{compactRow(ex)}</div>
+                    ))}
+                  {!exercises.some((ex) => ex.day_id === dayId && ex.archived_at) && (
+                    <p className="text-sm text-muted-foreground">
+                      {t("Архивированных упражнений нет")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+        </section>
+
+        {unassigned.length > 0 && (
+          <section aria-label={t("Упражнения без дня")} className="space-y-3 rounded-xl border p-3">
+            <h2 className="font-bold">
+              {t("Без назначенного дня · {count}", { count: unassigned.length })}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "Эти упражнения сохранены без привязки к дню. Выберите день вручную и сохраните. История останется без изменений.",
+              )}
+            </p>
+            {unassigned.map((ex) => (
+              <div key={ex.id}>{compactRow(ex)}</div>
+            ))}
+          </section>
+        )}
+        <Dialog open={!!editingEx} onOpenChange={(open) => !open && setEditing(null)}>
+          <DialogContent
+            className="flex max-h-[90dvh] max-w-[480px] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:rounded-xl"
+            style={{ width: "min(480px, calc(100vw - 2rem))" }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              exerciseEditTrigger.current?.focus();
+            }}
+          >
+            <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 text-left sm:px-6">
+              <DialogTitle>{t("Редактирование упражнения")}</DialogTitle>
+            </DialogHeader>
+            {editingEx && (
+              <ExerciseEditor
+                key={editingEx.id + editingEx.day_id}
+                exercise={editingEx}
+                days={days}
+                busy={busy}
+                error={exerciseError}
+                run={async (action) => {
+                  const ok = await run(action, setExerciseError);
+                  if (ok) setEditing(null);
+                  return ok;
+                }}
+                save={(patch) => updateExercise(editingEx.id, patch)}
+                nextPosition={(target) =>
+                  nextPosition(exercises.filter((item) => item.day_id === target))
+                }
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+        <Sheet
+          open={addingExercise}
+          onOpenChange={(open) => {
+            if (!busy) setAddingExercise(open);
+          }}
+        >
+          <SheetContent
+            side="bottom"
+            className="max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:mx-auto sm:max-w-md"
+          >
+            <SheetHeader>
+              <SheetTitle>{t("Добавить упражнение")}</SheetTitle>
+              <SheetDescription>
+                {t("Упражнение будет добавлено в выбранный тренировочный день.")}
+              </SheetDescription>
+            </SheetHeader>
+            <form
+              aria-label={t("Новое упражнение")}
+              onSubmit={addExercise}
+              className="space-y-4 pt-3"
+            >
+              {error && (
+                <p
+                  role="alert"
+                  className="break-words rounded-xl border border-destructive p-3 text-sm"
+                >
+                  {translateKnown(language, error)}
+                </p>
+              )}
+              <label className="block space-y-1 text-sm">
+                {t("Название упражнения")}
+                <Input
+                  aria-label={t("Название упражнения")}
+                  value={newExerciseName}
+                  onChange={(event) => setNewExerciseName(event.target.value)}
+                  maxLength={100}
+                  required
+                  autoFocus
+                  disabled={busy}
+                  className="h-12"
+                />
+              </label>
+              <label className="block space-y-1 text-sm">
+                {t("Количество подходов")}
+                <Input
+                  aria-label={t("Количество подходов")}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={newExerciseSets}
+                  onChange={(event) => setNewExerciseSets(event.target.value)}
+                  required
+                  disabled={busy}
+                  className="h-12"
+                />
+              </label>
+              <label className="block space-y-1 text-sm">
+                {t("Целевой диапазон повторений")}
+                <Input
+                  aria-label={t("Целевой диапазон повторений")}
+                  value={newExerciseReps}
+                  onChange={(event) => setNewExerciseReps(event.target.value)}
+                  placeholder="8–12"
+                  maxLength={30}
+                  required
+                  disabled={busy}
+                  className="h-12"
+                />
+              </label>
+              <Button
+                type="submit"
+                className="h-12 w-full"
+                disabled={
+                  busy || !newExerciseName.trim() || !newExerciseSets || !newExerciseReps.trim()
+                }
+              >
+                {t("Сохранить")}
+              </Button>
+            </form>
+          </SheetContent>
+        </Sheet>
+      </PageCard>
     </div>
   );
 }

@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs",
+    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs",
     "test:watch": "vitest",
     "test:toolchain": "node --test scripts/toolchain.test.mjs",
     "test:e2e": "playwright test",

@@ -63,7 +63,10 @@
 
 @layer base {
   * { border-color: var(--color-border); }
-  html { -webkit-tap-highlight-color: transparent; }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    overflow-y: scroll;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);

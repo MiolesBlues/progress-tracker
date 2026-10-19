@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -9,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { METRICS, PERIODS, toISO, type Metric } from "@/lib/workout";
+import { effectiveSets, METRICS, PERIODS, toISO, workoutMetrics, type Metric } from "@/lib/workout";
 import {
   chartRange,
   chartSeries,
@@ -27,8 +28,10 @@ import {
 import { useUserSession } from "@/lib/session";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "./ui/button";
+import { PageCard } from "@/components/ui/page-card";
 
-const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
+const selectCls =
+  "h-11 min-w-0 w-full appearance-none truncate rounded-md border border-input bg-card px-3 pr-9 text-foreground";
 const PAGE_SIZE = 20;
 
 export function ProgressPage() {
@@ -46,96 +49,116 @@ export function ProgressPage() {
     days.some((day) => day.archived_at) ||
     exercises.some((exercise) => exercise.archived_at || !exercise.day_id);
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="min-w-0 space-y-4">
       <h1 className="text-2xl font-extrabold tracking-tight">{t("Прогресс")}</h1>
-      {programResult.isError || daysResult.isError ? (
-        <LoadError
-          onRetry={() => {
-            void programResult.refetch();
-            void daysResult.refetch();
-          }}
-        >
-          {t("Не удалось загрузить программу для просмотра истории.")}
-        </LoadError>
-      ) : programResult.isPending || daysResult.isPending ? (
-        <Loading>{t("Загрузка программы…")}</Loading>
-      ) : !days.length && !exercises.length ? (
-        <p>{t("В программе пока нет упражнений.")}</p>
-      ) : (
-        <>
-          {hasArchive && (
-            <div className="flex flex-wrap gap-2" aria-label={t("Архивная история")}>
-              {(["active", "archive"] as const).map((value) => (
-                <Button
-                  key={value}
-                  variant={mode === value ? "default" : "secondary"}
-                  aria-pressed={mode === value}
-                  onClick={() => {
-                    setMode(value);
-                    setDay("");
-                    setExercise("");
-                  }}
-                >
-                  {value === "active" ? t("Активная программа") : t("Архивная история")}
-                </Button>
-              ))}
-            </div>
-          )}
-          {selection.dayId ? (
-            <>
-              <label className="block min-w-0 space-y-1 text-sm">
-                {t("Тренировочный день")}
-                <select
-                  aria-label={t("Тренировочный день")}
-                  className={selectCls}
-                  value={selection.dayId}
-                  onChange={(event) => {
-                    setDay(event.target.value);
-                    setExercise("");
-                  }}
-                >
-                  {selection.dayOptions.map((day) => (
-                    <option key={day.id} value={day.id}>
-                      {day.name}
-                    </option>
-                  ))}
-                  {mode === "archive" && exercises.some((exercise) => !exercise.day_id) && (
-                    <option value={UNASSIGNED_HISTORY_DAY}>{t("История без активного дня")}</option>
-                  )}
-                </select>
-              </label>
-              {selection.exerciseId ? (
-                <>
-                  <label className="block min-w-0 space-y-1 text-sm">
-                    {t("Упражнение")}
-                    <select
-                      aria-label={t("Упражнение")}
-                      className={selectCls}
-                      value={selection.exerciseId}
-                      onChange={(event) => setExercise(event.target.value)}
-                    >
-                      {selection.dayExercises.map((exercise) => (
-                        <option key={exercise.id} value={exercise.id}>
-                          {exercise.name}
-                        </option>
-                      ))}
-                    </select>
+      <PageCard className="space-y-4">
+        {programResult.isError || daysResult.isError ? (
+          <LoadError
+            onRetry={() => {
+              void programResult.refetch();
+              void daysResult.refetch();
+            }}
+          >
+            {t("Не удалось загрузить программу для просмотра истории.")}
+          </LoadError>
+        ) : programResult.isPending || daysResult.isPending ? (
+          <Loading>{t("Загрузка программы…")}</Loading>
+        ) : !days.length && !exercises.length ? (
+          <p>{t("В программе пока нет упражнений.")}</p>
+        ) : (
+          <>
+            {hasArchive && (
+              <div className="flex flex-wrap gap-2" aria-label={t("Архивная история")}>
+                {(["active", "archive"] as const).map((value) => (
+                  <Button
+                    key={value}
+                    variant={mode === value ? "default" : "secondary"}
+                    aria-pressed={mode === value}
+                    onClick={() => {
+                      setMode(value);
+                      setDay("");
+                      setExercise("");
+                    }}
+                  >
+                    {value === "active" ? t("Активная программа") : t("Архивная история")}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {selection.dayId ? (
+              <>
+                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
+                  <label className="block min-w-0 space-y-1 text-xs">
+                    {t("Тренировочный день")}
+                    <span className="relative block min-w-0">
+                      <select
+                        aria-label={t("Тренировочный день")}
+                        className={selectCls}
+                        value={selection.dayId}
+                        onChange={(event) => {
+                          setDay(event.target.value);
+                          setExercise("");
+                        }}
+                      >
+                        {selection.dayOptions.map((day) => (
+                          <option key={day.id} value={day.id}>
+                            {day.name}
+                          </option>
+                        ))}
+                        {mode === "archive" && exercises.some((exercise) => !exercise.day_id) && (
+                          <option value={UNASSIGNED_HISTORY_DAY}>
+                            {t("История без активного дня")}
+                          </option>
+                        )}
+                      </select>
+                      <ChevronDown
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      />
+                    </span>
                   </label>
-                  <ExerciseHistory
-                    key={`${userId}:${selection.exerciseId}`}
-                    userId={userId}
-                    exerciseId={selection.exerciseId}
-                  />
-                </>
-              ) : (
-                <p>{t("Для выбранного дня нет упражнений.")}</p>
-              )}
-            </>
-          ) : (
-            <p>{mode === "active" ? t("Нет активных дней") : t("Выберите архивный день")}</p>
-          )}
-        </>
-      )}
+                  {selection.exerciseId && (
+                    <label className="block min-w-0 space-y-1 text-xs">
+                      {t("Упражнение")}
+                      <span className="relative block min-w-0">
+                        <select
+                          aria-label={t("Упражнение")}
+                          className={selectCls}
+                          value={selection.exerciseId}
+                          onChange={(event) => setExercise(event.target.value)}
+                        >
+                          {selection.dayExercises.map((exercise) => (
+                            <option key={exercise.id} value={exercise.id}>
+                              {exercise.name}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          aria-hidden="true"
+                          className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                      </span>
+                    </label>
+                  )}
+                </div>
+                {selection.exerciseId ? (
+                  <>
+                    <ExerciseHistory
+                      key={`${userId}:${selection.exerciseId}`}
+                      userId={userId}
+                      exerciseId={selection.exerciseId}
+                    />
+                  </>
+                ) : (
+                  <p>{t("Для выбранного дня нет упражнений.")}</p>
+                )}
+              </>
+            ) : (
+              <p>{mode === "active" ? t("Нет активных дней") : t("Выберите архивный день")}</p>
+            )}
+          </>
+        )}
+      </PageCard>
     </div>
   );
 }
@@ -234,6 +257,53 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
           </ResponsiveContainer>
         )}
       </div>
+      {selected &&
+        (() => {
+          const metrics = workoutMetrics(selected);
+          const bodyweightOnly = effectiveSets(selected).some(
+            (set) => set.load_type === "bodyweight",
+          );
+          return (
+            <section
+              className="grid grid-cols-2 gap-2 text-sm"
+              aria-label={t("Показатели подходов")}
+            >
+              <MetricCard
+                label={t("Максимальный рабочий вес")}
+                value={`${number(metrics.maxWorkingWeight)} ${t("кг")}`}
+              />
+              <MetricCard
+                label={t("Лучший рабочий подход · внешнее отягощение")}
+                value={
+                  metrics.bestWorkingSet
+                    ? `${number(metrics.bestWorkingSet.weight)} ${t("кг")} × ${metrics.bestWorkingSet.reps}`
+                    : "—"
+                }
+              />
+              <MetricCard
+                label={t("Объём рабочих подходов")}
+                value={`${number(metrics.workingVolume)} ${t("кг")}`}
+              />
+              <MetricCard
+                label={t("Рабочие подходы")}
+                value={`${metrics.workingSets} · ${metrics.workingReps} ${t("Повторения")}`}
+              />
+              <MetricCard
+                label={t("История RIR")}
+                value={metrics.rirHistory
+                  .map((rir) => (rir === null ? "—" : number(rir)))
+                  .join(" / ")}
+              />
+              {bodyweightOnly && (
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  {t(
+                    "Для упражнений с собственным весом объём учитывает только добавленное отягощение, не массу тела.",
+                  )}
+                </p>
+              )}
+            </section>
+          );
+        })()}
       {selected ? (
         <>
           <label className="block text-sm">
@@ -276,7 +346,7 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
           />
           <p className="text-xs text-muted-foreground">
             {t(
-              "Объём — вес × сумма повторений. Изменение объёма само по себе не доказывает рост силы. Вес 0 учитывается, процент относительно 0 не определяется.",
+              "Объём считается только по рабочим подходам: сумма веса × повторений. Сам по себе он не доказывает рост силы.",
             )}
           </p>
         </>
@@ -292,14 +362,14 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
                 <span className="block break-words">
                   {date(e.performed_on)} · {e.day_name ?? t("Без названия дня")}
                 </span>
-                <span className="num block break-all font-semibold">
-                  {number(e.weight)} {t("кг")} × {e.reps.join("/")}
-                </span>
-                <span className="text-muted-foreground">
-                  {t("{count} подх. · RIR {rir}", {
-                    count: e.reps.length,
-                    rir: e.rir === null ? "—" : number(e.rir),
-                  })}
+                <span className="block text-muted-foreground">
+                  {t("Рабочие подходы")}:{" "}
+                  {effectiveSets(e)
+                    .map(
+                      (set) =>
+                        `${set.position}. ${number(set.weight)} ${t("кг")} × ${set.reps} · RIR ${set.rir === null ? "—" : number(set.rir)}`,
+                    )
+                    .join("; ")}
                 </span>
               </button>
             </li>
@@ -333,6 +403,15 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
   );
 }
 
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 break-words font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
 function Comparison({
   title,
   description,
@@ -347,6 +426,8 @@ function Comparison({
   const { t, number, date } = useI18n();
   const signed = (value: number) => `${value > 0 ? "+" : ""}${number(value)}`;
   const comparison = compareSessions(selected, previous);
+  const selectedMetrics = workoutMetrics(selected);
+  const previousMetrics = previous ? workoutMetrics(previous) : null;
   return (
     <section className="space-y-3 rounded-2xl bg-card p-4">
       <h2 className="font-bold">{title}</h2>
@@ -362,7 +443,8 @@ function Comparison({
             <div>
               <dt>{t("Рабочий вес")}</dt>
               <dd>
-                {number(previous.weight)} → {number(selected.weight)} {t("кг")} (
+                {number(previousMetrics!.maxWorkingWeight)} →{" "}
+                {number(selectedMetrics.maxWorkingWeight)} {t("кг")} (
                 {comparison.weightPct === null ? "—" : `${signed(comparison.weightPct)}%`})
               </dd>
             </div>
@@ -375,16 +457,34 @@ function Comparison({
               <dd>{signed(comparison.volumeDelta)}</dd>
             </div>
             <div>
+              <dt>{t("Лучший рабочий подход · внешнее отягощение")}</dt>
+              <dd>
+                {previousMetrics!.bestWorkingSet
+                  ? `${number(previousMetrics!.bestWorkingSet.weight)} ${t("кг")} × ${previousMetrics!.bestWorkingSet.reps}`
+                  : "—"}{" "}
+                →{" "}
+                {selectedMetrics.bestWorkingSet
+                  ? `${number(selectedMetrics.bestWorkingSet.weight)} ${t("кг")} × ${selectedMetrics.bestWorkingSet.reps}`
+                  : "—"}{" "}
+                ({signed(comparison.bestSetVolumeDelta)} {t("кг")})
+              </dd>
+            </div>
+            <div>
               <dt>{t("Подходы")}</dt>
               <dd>
-                {previous.reps.length} → {selected.reps.length}
+                {previousMetrics!.workingSets} → {selectedMetrics.workingSets}
               </dd>
             </div>
             <div>
               <dt>RIR</dt>
               <dd>
-                {previous.rir === null ? "—" : number(previous.rir)} →{" "}
-                {selected.rir === null ? "—" : number(selected.rir)}
+                {previousMetrics!.rirHistory
+                  .map((rir) => (rir === null ? "—" : number(rir)))
+                  .join(" / ")}{" "}
+                →{" "}
+                {selectedMetrics.rirHistory
+                  .map((rir) => (rir === null ? "—" : number(rir)))
+                  .join(" / ")}
               </dd>
             </div>
           </dl>
@@ -394,7 +494,9 @@ function Comparison({
                 ? t("Разное число подходов: условия несопоставимы.")
                 : w === "RIR отличается на 2 или больше: условия несопоставимы."
                   ? t("RIR отличается на 2 или больше: условия несопоставимы.")
-                  : t("RIR указан не в обеих записях; усилие нельзя сопоставить полностью.")}
+                  : w === "RIR указан не в обеих записях; усилие нельзя сопоставить полностью."
+                    ? t("RIR указан не в обеих записях; усилие нельзя сопоставить полностью.")
+                    : t("Рабочие подходы или усилие отличаются: вывод о прогрессии ограничен.")}
             </p>
           ))}
         </>

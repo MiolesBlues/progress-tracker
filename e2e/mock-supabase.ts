@@ -9,6 +9,7 @@ export async function mockSupabase(page: Page) {
     program_days: [],
     program_exercises: [],
     workout_entries: [],
+    workout_entry_sets: [],
   };
   const state = {
     rows,
@@ -196,6 +197,38 @@ export async function mockSupabase(page: Page) {
         }
         return respond(operation);
       }
+      if (url.pathname.endsWith("/save_workout_entry_sets")) {
+        const operation = String(args["_id"]);
+        const sets = args["_sets"] as Row[];
+        state.saveCalls.push(operation);
+        if (!rows["workout_entries"]!.some((row) => row.id === operation)) {
+          rows["workout_entries"]!.push({
+            id: operation,
+            user_id: id,
+            exercise_id: args["_exercise_id"],
+            day_id: args["_day_id"],
+            day_name: rows["program_days"]!.find((row) => row.id === args["_day_id"])?.["name"],
+            performed_on: args["_performed_on"],
+            created_at: createdAt(),
+            weight: Number(sets[0]?.["weight"] ?? 0),
+            reps: sets.map((set) => set["reps"]),
+            rir: sets[0]?.["rir"] ?? null,
+            notes: args["_notes"],
+          });
+          sets.forEach((set) =>
+            rows["workout_entry_sets"]!.push({
+              ...set,
+              id: String(set["id"]),
+              user_id: id,
+              workout_entry_id: operation,
+              legacy_snapshot: false,
+              created_at: createdAt(),
+              updated_at: createdAt(),
+            }),
+          );
+        }
+        return respond(operation);
+      }
       if (url.pathname.endsWith("/archive_deletion_capabilities"))
         return respond(state.archiveDeletionAvailable);
       if (url.pathname.endsWith("/delete_archived_program_day")) {
@@ -314,7 +347,10 @@ export async function mockSupabase(page: Page) {
       from = Number(url.searchParams.get("offset") ?? 0),
       requested = Number(url.searchParams.get("limit") ?? 1000);
     // A deliberately low maxRows catches silent truncation even with a tiny fixture.
-    found = found.slice(from, from + Math.min(requested, 2));
+    found = found.slice(
+      from,
+      from + Math.min(requested, table === "workout_entry_sets" ? 1000 : 2),
+    );
     if (
       requested === 1 &&
       url.searchParams.get("exercise_id") === `eq.${state.delayLastRead?.exerciseId}`

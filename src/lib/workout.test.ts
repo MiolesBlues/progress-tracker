@@ -1,11 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { aggregate, weekComparison, weekRange } from "./workout";
+import { aggregate, weekComparison, weekRange, workoutMetrics } from "./workout";
 
 const e = (d: string, w: number, reps: number[]) => ({ performed_on: d, weight: w, reps });
 
 describe("workout metrics", () => {
   it("volume = weight × total reps", () => {
     expect(aggregate([e("2026-10-12", 100, [5, 5, 5])], "volume")).toBe(1500);
+  });
+  it("keeps per-set loads and excludes warm-ups from working metrics", () => {
+    const entry = {
+      ...e("2026-10-12", 99, [99]),
+      sets: [
+        {
+          position: 1,
+          weight: 20,
+          reps: 10,
+          rir: 4,
+          set_type: "warmup" as const,
+          load_type: "external" as const,
+        },
+        {
+          position: 2,
+          weight: 40,
+          reps: 8,
+          rir: 2,
+          set_type: "working" as const,
+          load_type: "external" as const,
+        },
+        {
+          position: 3,
+          weight: 42.5,
+          reps: 6,
+          rir: null,
+          set_type: "working" as const,
+          load_type: "external" as const,
+        },
+      ],
+    };
+    expect(aggregate([entry], "volume")).toBe(575);
+    expect(workoutMetrics(entry)).toMatchObject({
+      maxWorkingWeight: 42.5,
+      workingSets: 2,
+      workingReps: 14,
+      workingVolume: 575,
+      rirHistory: [2, null],
+    });
+    expect(workoutMetrics(entry).bestWorkingSet).toMatchObject({ position: 2, volume: 320 });
   });
   it("weight aggregates as max", () => {
     expect(aggregate([e("a", 80, [5]), e("b", 90, [3])], "weight")).toBe(90);

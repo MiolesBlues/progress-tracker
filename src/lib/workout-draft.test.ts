@@ -1,13 +1,49 @@
 import { randomUUID } from "node:crypto";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { draftKey, newDraft, readDraft, removeSavedDraft, writeDraft } from "@/lib/workout-draft";
-import { validateWorkout } from "@/lib/workout-input";
+import {
+  draftKey,
+  removeExerciseDrafts,
+  newDraft,
+  readDraft,
+  removeSavedDraft,
+  writeDraft,
+  newPerSetDraft,
+  perSetDraftKey,
+  readPerSetDraft,
+  removeSavedPerSetDraft,
+  writePerSetDraft,
+} from "@/lib/workout-draft";
+import { validatePerSetWorkout, validateWorkout } from "@/lib/workout-input";
 const fields = {
   date: "2026-10-13",
   weight: "50,5",
   reps: ["8", ""],
   rir: "",
   notes: "Сырой ввод",
+};
+const setFields = {
+  date: "2026-10-13",
+  sets: [
+    {
+      id: "10000000-0000-4000-8000-000000000001",
+      position: 1,
+      weight: "50,5",
+      reps: "8",
+      rir: "2",
+      set_type: "working" as const,
+      load_type: "external" as const,
+    },
+    {
+      id: "10000000-0000-4000-8000-000000000002",
+      position: 2,
+      weight: "52.50",
+      reps: "7",
+      rir: "",
+      set_type: "working" as const,
+      load_type: "external" as const,
+    },
+  ],
+  notes: "Per-set draft",
 };
 beforeEach(() => {
   localStorage.clear();
@@ -73,4 +109,63 @@ it("does not replace an old draft when preserving it fails", () => {
   expect(() => writeDraft(newDraft("A", "ex", { ...fields, date: "2026-10-15" }))).toThrow("quota");
   expect(readDraft("A", "ex")).toEqual(old);
   vi.restoreAllMocks();
+});
+
+it("round-trips versioned per-set drafts with distinct weights, nullable RIR and stable IDs", () => {
+  const draft = newPerSetDraft("A", "ex", setFields);
+  draft.dirty.sets = true;
+  draft.operation = {
+    id: draft.id,
+    payload: validatePerSetWorkout(draft.fields, "ex", "day"),
+  };
+  writePerSetDraft(draft);
+  const restored = readPerSetDraft("A", "ex");
+  expect(restored).toEqual(draft);
+  expect(restored?.fields.sets.map((set) => set.id)).toEqual(setFields.sets.map((set) => set.id));
+  expect(readPerSetDraft("B", "ex")).toBeNull();
+  expect(readPerSetDraft("A", "other")).toBeNull();
+});
+
+it("preserves per-set drafts for another date and removes only the acknowledged operation", () => {
+  const old = newPerSetDraft("A", "ex", setFields);
+  old.dirty.sets = true;
+  old.operation = { id: old.id, payload: validatePerSetWorkout(old.fields, "ex", "day") };
+  writePerSetDraft(old);
+  const next = newPerSetDraft("A", "ex", { ...setFields, date: "2026-10-15" });
+  next.dirty.notes = true;
+  writePerSetDraft(next);
+  expect(readPerSetDraft("A", "ex", "2026-10-13")).toEqual(old);
+  removeSavedPerSetDraft("A", "ex", old.id, old.fields.date);
+  expect(readPerSetDraft("A", "ex", "2026-10-13")).toBeNull();
+  expect(readPerSetDraft("A", "ex", "2026-10-15")).toEqual(next);
+});
+
+it("rejects a modified frozen per-set payload and a foreign per-set draft", () => {
+  const draft = newPerSetDraft("A", "ex", setFields);
+  draft.operation = { id: draft.id, payload: validatePerSetWorkout(draft.fields, "ex", "day") };
+  writePerSetDraft(draft);
+  draft.operation.payload.sets[1]!.weight = "90";
+  writePerSetDraft(draft);
+  expect(() => readPerSetDraft("A", "ex")).toThrow("не совпадают");
+
+  localStorage.setItem(
+    perSetDraftKey("A", "ex"),
+    JSON.stringify(newPerSetDraft("B", "ex", setFields)),
+  );
+  expect(() => readPerSetDraft("A", "ex")).toThrow();
+});
+
+it("removes both legacy and per-set draft versions when an exercise is permanently deleted", () => {
+  const legacy = newDraft("A", "ex", fields);
+  const perSet = newPerSetDraft("A", "ex", setFields);
+  writeDraft(legacy);
+  writePerSetDraft(perSet);
+  localStorage.setItem(draftKey("A", "ex", "2026-10-01"), JSON.stringify(legacy));
+  localStorage.setItem(perSetDraftKey("A", "ex", "2026-10-01"), JSON.stringify(perSet));
+  removeSavedDraft("A", "ex", legacy.id, legacy.fields.date);
+  // removeExerciseDrafts is invoked by permanent program deletion and owns both versions.
+  removeExerciseDrafts("A", "ex");
+  expect(readDraft("A", "ex")).toBeNull();
+  expect(readPerSetDraft("A", "ex")).toBeNull();
+  expect(localStorage.getItem(perSetDraftKey("A", "ex", "2026-10-01"))).toBeNull();
 });

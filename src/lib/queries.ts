@@ -27,6 +27,8 @@ export const userKeys = {
   days: (userId: string) => ["user", userId, "days"] as const,
   program: (userId: string) => ["user", userId, "program"] as const,
   entries: (userId: string, exerciseId: string) => ["user", userId, "entries", exerciseId] as const,
+  entrySets: (userId: string, entryIds: string[]) =>
+    ["user", userId, "entry-sets", ...[...entryIds].sort()] as const,
   lastEntry: (userId: string, exerciseId: string) =>
     ["user", userId, "last-entry", exerciseId] as const,
 };
@@ -126,13 +128,90 @@ export const entriesQuery = (
         throw new Error(
           "В истории есть некорректные старые результаты. Расчёты остановлены; данные требуют отдельной проверки.",
         );
+      const setsByEntry = new Map<string, NonNullable<HistoryEntry["sets"]>>();
+      const ids = data.map((entry) => entry.id);
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const { data: setRows, error } = await supabase
+          .from("workout_entry_sets")
+          .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type")
+          .eq("user_id", userId)
+          .in("workout_entry_id", ids.slice(offset, offset + 100))
+          .order("workout_entry_id")
+          .order("position")
+          .abortSignal(signal);
+        if (error) throw error;
+        for (const row of setRows ?? []) {
+          const sets = setsByEntry.get(row.workout_entry_id) ?? [];
+          sets.push({
+            id: row.id,
+            position: row.position,
+            weight: Number(row.weight),
+            weightExact: String(row.weight),
+            reps: row.reps,
+            rir: row.rir === null ? null : Number(row.rir),
+            set_type: row.set_type,
+            load_type: row.load_type,
+          });
+          setsByEntry.set(row.workout_entry_id, sets);
+        }
+      }
       return data.map((e) => ({
         ...e,
         weight: Number(e.weight),
         rir: e.rir === null ? null : Number(e.rir),
+        ...(setsByEntry.has(e.id) ? { sets: setsByEntry.get(e.id)! } : {}),
       }));
     },
   });
+
+/** Authoritative per-set history. Numeric values stay decimal strings for exact editing. */
+export type WorkoutEntrySet = {
+  id: string;
+  workout_entry_id: string;
+  user_id: string;
+  position: number;
+  weight: string;
+  reps: number;
+  rir: string | null;
+  set_type: "warmup" | "working";
+  load_type: "external" | "bodyweight";
+  legacy_snapshot: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export const entrySetsQuery = (userId: string, entryIds: string[]) => {
+  const ids = [...new Set(entryIds)].sort();
+  return queryOptions({
+    queryKey: userKeys.entrySets(userId, ids),
+    enabled: !!userId && ids.length > 0,
+    queryFn: async ({ signal }): Promise<WorkoutEntrySet[]> => {
+      if (!ids.length) return [];
+      const data = await loadAllPages(
+        (from, to) =>
+          supabase
+            .from("workout_entry_sets")
+            .select(
+              "id, workout_entry_id, user_id, position, weight, reps, rir, set_type, load_type, legacy_snapshot, created_at, updated_at",
+              { count: "exact" },
+            )
+            .eq("user_id", userId)
+            .in("workout_entry_id", ids)
+            .order("workout_entry_id")
+            .order("position")
+            .order("id")
+            .range(from, to)
+            .abortSignal(signal),
+        signal,
+      );
+      return data.map((row) => ({
+        ...row,
+        weight: String(row.weight),
+        rir: row.rir === null ? null : String(row.rir),
+      }));
+    },
+  });
+};
 
 export const lastEntryQuery = (
   userId: string,
@@ -148,7 +227,7 @@ export const lastEntryQuery = (
     queryFn: async ({ signal }) => {
       const { data, error } = await supabase
         .from("workout_entries")
-        .select("performed_on, weight, reps, rir")
+        .select("id, performed_on, weight, reps, rir")
         .eq("user_id", userId)
         .eq("exercise_id", exerciseId)
         .lte("performed_on", onOrBefore)
@@ -159,6 +238,22 @@ export const lastEntryQuery = (
         .abortSignal(signal)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!data) return data;
+      const { data: sets, error: setsError } = await supabase
+        .from("workout_entry_sets")
+        .select("position, weight, reps, rir, set_type, load_type")
+        .eq("user_id", userId)
+        .eq("workout_entry_id", data.id)
+        .order("position")
+        .abortSignal(signal);
+      if (setsError) throw setsError;
+      return {
+        ...data,
+        sets: (sets ?? []).map((set) => ({
+          ...set,
+          weight: String(set.weight),
+          rir: set.rir === null ? null : String(set.rir),
+        })),
+      };
     },
   });
