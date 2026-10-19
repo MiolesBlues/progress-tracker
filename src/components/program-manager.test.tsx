@@ -48,6 +48,26 @@ async function chooseProgramDay(name: string) {
 async function openDayManagement() {
   fireEvent.click(await screen.findByRole("button", { name: "Изменить дни" }));
 }
+
+it("shows day management in a centered dialog with a fixed completion action", async () => {
+  mount();
+  const trigger = await screen.findByRole("button", { name: "Изменить дни" });
+  fireEvent.click(trigger);
+
+  const dialog = await screen.findByRole("dialog", { name: "Тренировочные дни" });
+  expect(dialog).toHaveClass("max-h-[90dvh]", "max-w-[520px]");
+  expect(dialog).toHaveStyle({ width: "min(520px, calc(100vw - 2rem))" });
+  expect(within(dialog).getByText("1 из 7 активных дней")).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Готово" })).toBeInTheDocument();
+  expect(dialog.querySelector(".overflow-y-auto")).not.toBeNull();
+
+  fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Тренировочные дни" })).toBeNull(),
+  );
+  expect(trigger).toHaveFocus();
+});
+
 function mockSortableRects() {
   return vi
     .spyOn(HTMLElement.prototype, "getBoundingClientRect")
