@@ -13,6 +13,12 @@ import {
   translateKnown,
   useI18n,
 } from "./i18n";
+
+it("falls back to the source string when an English translation is missing at runtime", () => {
+  expect(translate("en", "unregistered runtime key" as Parameters<typeof translate>[1])).toBe(
+    "unregistered runtime key",
+  );
+});
 import { LanguageProvider } from "./i18n-provider";
 
 it("uses the requested English label for an entry without day information", () => {

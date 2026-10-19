@@ -19,13 +19,18 @@ for (const width of [320, 375, 390, 430]) {
       await register(page, `c07-${language}-${width}@example.invalid`, 2);
       await addExercise(page, "Мой жим — Push");
       await page.getByRole("button", { name: "Настройки", exact: true }).click();
-      const settings = page.getByRole("dialog", { name: "Настройки", exact: true });
+      const settings = page.getByRole("dialog");
       if (language === "en") {
         await settings.getByRole("combobox", { name: "Язык интерфейса" }).click();
         await page.getByRole("option", { name: "English", exact: true }).click();
       }
       const close = language === "ru" ? "Закрыть" : "Close";
-      await page.getByRole("dialog").getByRole("button", { name: close, exact: true }).click();
+      const settingsClose = settings.getByRole("button", { name: close, exact: true });
+      const closeAttempt = settingsClose.click().catch(async (error: unknown) => {
+        // WebKit can report a detached click after the close action already removed the portal.
+        if (await settings.isVisible().catch(() => false)) throw error;
+      });
+      await Promise.all([closeAttempt, expect(settings).toBeHidden()]);
       await expect(
         page.getByRole("region", { name: language === "ru" ? /^Уведомления/ : /^Notifications/ }),
       ).toBeAttached();

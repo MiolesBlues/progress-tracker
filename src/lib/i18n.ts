@@ -475,7 +475,7 @@ export function translate(
   key: TranslationKey,
   values?: Record<string, string | number>,
 ) {
-  const template: string = language === "ru" ? key : english[key];
+  const template: string = language === "ru" ? key : (english[key] ?? key);
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(values?.[name] ?? ""));
 }
 

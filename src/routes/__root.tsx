@@ -14,8 +14,9 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/lib/session";
+import { LanguageProvider } from "@/lib/i18n-provider";
+import { ThemeProvider } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
-import { DISPLAY_LANGUAGE_COOKIE } from "@/lib/ssr-language";
 import { useLocation } from "@tanstack/react-router";
 
 function NotFoundComponent() {
@@ -114,15 +115,19 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <SessionProvider onIdentityChange={onIdentityChange}>
-        <LocalizedDocumentTitle />
-        <Outlet />
-        <Toaster
-          position="top-center"
-          offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-          mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
-        />
-      </SessionProvider>
+      <ThemeProvider>
+        <SessionProvider onIdentityChange={onIdentityChange}>
+          <LanguageProvider>
+            <LocalizedDocumentTitle />
+            <Outlet />
+            <Toaster
+              position="top-center"
+              offset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+              mobileOffset={{ bottom: "calc(env(safe-area-inset-bottom) + 4.75rem)" }}
+            />
+          </LanguageProvider>
+        </SessionProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
@@ -131,8 +136,6 @@ function LocalizedDocumentTitle() {
   const path = useLocation({ select: (location) => location.pathname });
   const { t } = useI18n();
   useEffect(() => {
-    document.documentElement.lang = "ru";
-    document.cookie = `${DISPLAY_LANGUAGE_COOKIE}=ru; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     const section =
       path === "/auth"
         ? t("Вход")
