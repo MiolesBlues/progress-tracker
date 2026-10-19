@@ -13,7 +13,6 @@ import { userKeys } from "@/lib/queries";
 import { validateWorkout } from "@/lib/workout-input";
 import { toast } from "sonner";
 import { LanguageProvider } from "@/lib/i18n-provider";
-import { ThemeProvider } from "@/lib/theme";
 import { SettingsDialog } from "@/components/settings-dialog";
 
 vi.mock("@tanstack/react-router", async (original) => ({
@@ -68,7 +67,7 @@ function mount(children: ReactNode = <WorkoutPage />, userId = A) {
   return view;
 }
 async function ready() {
-  await screen.findByText("План 4×6–8");
+  await screen.findByRole("form", { name: "Запись тренировки" });
 }
 async function chooseTrainingDay(name: RegExp | string) {
   fireEvent.click(screen.getByRole("combobox", { name: "Тренировочный день" }));
@@ -369,11 +368,9 @@ it("keeps the exercise selected with auto-advance off and adds separate historic
   mount(
     <>
       <WorkoutPage />
-      <ThemeProvider>
-        <LanguageProvider>
-          <SettingsDialog />
-        </LanguageProvider>
-      </ThemeProvider>
+      <LanguageProvider>
+        <SettingsDialog />
+      </LanguageProvider>
     </>,
   );
   await ready();

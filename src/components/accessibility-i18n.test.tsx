@@ -5,7 +5,6 @@ import { LanguageContext, type Language } from "@/lib/i18n";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
-import { ThemeProvider } from "@/lib/theme";
 import { SortableList } from "./Sortable";
 
 afterEach(cleanup);
@@ -49,11 +48,9 @@ it.each(["sheet", "dialog"])(
 
 it("keeps the Sonner region in the selected language during immediate switches", () => {
   render(
-    <ThemeProvider>
-      <Languages>
-        <Toaster />
-      </Languages>
-    </ThemeProvider>,
+    <Languages>
+      <Toaster />
+    </Languages>,
   );
   expect(screen.getByRole("region", { name: /^Уведомления/ })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Switch language" }));
