@@ -6,6 +6,10 @@ export const Route = createFileRoute("/_authenticated/workout")({
     meta: [
       { title: "Тренировка — Прогресс Трекер" },
       { name: "description", content: "Запишите подходы, вес и RIR для упражнения." },
+      { property: "og:title", content: "Тренировка — Прогресс Трекер" },
+      { property: "og:description", content: "Запишите подходы, вес и RIR для упражнения." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: WorkoutPage,
