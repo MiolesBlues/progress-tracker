@@ -1,6 +1,3 @@
-import "./lib/error-capture";
-
-import { consumeLastCapturedError } from "./lib/error-capture";
 import { errorPageResponse } from "./lib/error-page";
 import { requestLanguage } from "./lib/ssr-language";
 
@@ -32,7 +29,9 @@ async function normalizeCatastrophicSsrResponse(
   const body = await response.clone().text();
   if (!isH3SwallowedErrorBody(body)) return response;
 
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
+  // h3 has already discarded request-local error details. Do not correlate a
+  // process-global captured exception here: concurrent Worker requests can
+  // otherwise expose another request's error. Keep the public response generic.
   return errorPageResponse(requestLanguage(request));
 }
 
@@ -52,7 +51,9 @@ export default {
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response, request);
     } catch (error) {
-      console.error(error);
+      // Do not serialize arbitrary request errors: they may contain tokens or
+      // user workout data. The generic response remains request-local.
+      void error;
       return errorPageResponse(requestLanguage(request));
     }
   },

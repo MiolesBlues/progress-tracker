@@ -58,6 +58,7 @@
   --primary-text: var(--primary);
   --primary-text-hover: color-mix(in oklab, var(--primary) 90%, transparent);
   --primary-text-active: color-mix(in oklab, var(--primary) 80%, transparent);
+  --nav-active-text: #b6ef55;
   --secondary: oklch(0.24 0.006 260);
   --secondary-foreground: oklch(0.96 0.005 260);
   --muted: oklch(0.24 0.006 260);
@@ -90,6 +91,7 @@
   --primary-text: #1672cd;
   --primary-text-hover: #1672cd;
   --primary-text-active: #1672cd;
+  --nav-active-text: #0b4f8a;
   --secondary: #eff5fc;
   --secondary-foreground: #243a56;
   --muted: #f1f5fa;

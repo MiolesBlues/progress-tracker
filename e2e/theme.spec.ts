@@ -2,6 +2,22 @@ import { expect, test } from "@playwright/test";
 import { addExercise, noOverflow, register } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
 
+test("saved light preference is applied before delayed application JavaScript", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => localStorage.setItem("app:theme:v1", "light"));
+  await page.route(/\.js(?:\?|$)/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await route.continue();
+  });
+  await page.goto("/auth", { waitUntil: "commit" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("heading", { name: "С возвращением!" })).toBeVisible();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
 test("theme preference applies across the main mobile screens", async ({ page, browserName }) => {
   test.skip(browserName !== "chromium", "Theme screenshots are captured once in Chromium.");
   const hydrationWarnings: string[] = [];

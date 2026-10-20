@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 const { fetchHandler } = vi.hoisted(() => ({ fetchHandler: vi.fn() }));
 vi.mock("@tanstack/react-start/server-entry", () => ({ default: { fetch: fetchHandler } }));
-vi.mock("./lib/error-capture", () => ({ consumeLastCapturedError: () => null }));
 import server from "./server";
 
 afterEach(() => {
@@ -49,4 +48,30 @@ it("preserves successful responses and unrelated JSON errors", async () => {
     fetchHandler.mockResolvedValueOnce(response);
     expect(await server.fetch(new Request("https://example.invalid"), {}, {})).toBe(response);
   }
+});
+
+it("keeps overlapping SSR failures request-local and does not log private diagnostics", async () => {
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  fetchHandler.mockImplementation((request: Request) => {
+    const language = new URL(request.url).pathname === "/en" ? "en" : "ru";
+    return new Response(JSON.stringify({ unhandled: true, message: "HTTPError", language }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  });
+  const [en, ru] = await Promise.all([
+    server.fetch(
+      new Request("https://example.invalid/en", { headers: { "accept-language": "en" } }),
+      {},
+      {},
+    ),
+    server.fetch(
+      new Request("https://example.invalid/ru", { headers: { "accept-language": "ru" } }),
+      {},
+      {},
+    ),
+  ]);
+  expect(en.headers.get("content-language")).toBe("en");
+  expect(ru.headers.get("content-language")).toBe("ru");
+  expect(logged).not.toHaveBeenCalled();
 });
