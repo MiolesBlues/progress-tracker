@@ -49,6 +49,7 @@ const fake = vi.hoisted(() => {
     delayMutation: null as Promise<void> | null,
     sequence: 0,
     maxRows: Infinity,
+    disableLegacySetSynthesis: false,
     rpc: vi.fn(
       async (
         name: string,
@@ -137,7 +138,24 @@ const fake = vi.hoisted(() => {
         state.nextError = null;
         return { data: null, error: { message } };
       }
-      const rows = state.rows[table]!;
+      let rows = state.rows[table]!;
+      if (table === "workout_entry_sets" && rows.length === 0 && !state.disableLegacySetSynthesis) {
+        rows = state.rows.workout_entries.flatMap((entry) => {
+          const reps = entry["reps"];
+          if (!Array.isArray(reps) || entry["weight"] == null) return [];
+          return reps.map((rep, index) => ({
+            id: `legacy-snapshot-${entry["id"]}-${index + 1}`,
+            user_id: String(entry["user_id"] ?? ""),
+            workout_entry_id: String(entry["id"] ?? ""),
+            position: index + 1,
+            weight: String(entry["weight"]),
+            reps: rep,
+            rir: entry["rir"] ?? null,
+            set_type: "working",
+            load_type: "external",
+          }));
+        });
+      }
       let found = rows.filter(
         (row) =>
           Object.entries(filters).every(([key, value]) => row[key] === value) &&
@@ -309,5 +327,6 @@ export function resetFake() {
   fake.state.delayMutation = null;
   fake.state.sequence = 0;
   fake.state.maxRows = Infinity;
+  fake.state.disableLegacySetSynthesis = false;
   fake.state.rpc.mockClear();
 }

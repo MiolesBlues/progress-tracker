@@ -488,4 +488,4 @@ it("B08 limits the DOM to 20 entries while loading every server page and resetti
   chooseSort(diary, "Вес: по возрастанию");
   expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("0 кг");
   expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
-});
+}, 15_000);

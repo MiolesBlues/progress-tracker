@@ -33,6 +33,55 @@ export const draftKey = (userId: string, exerciseId: string, date?: string) =>
   `workout:draft:v1:${userId}:${exerciseId}${date === undefined ? "" : `:${date}`}`;
 export const perSetDraftKey = (userId: string, exerciseId: string, date?: string) =>
   `workout:draft:v2:${userId}:${exerciseId}${date === undefined ? "" : `:${date}`}`;
+const tabDraftKey = (key: string) => {
+  let tabId = sessionStorage.getItem("workout:draft:tab-id");
+  if (!tabId) {
+    tabId = crypto.randomUUID();
+    sessionStorage.setItem("workout:draft:tab-id", tabId);
+  }
+  return `${key}:tab:${tabId}`;
+};
+function readDraftKey(userId: string, exerciseId: string, key: string): WorkoutDraft | null {
+  const scopedKey = tabDraftKey(key);
+  const scoped = localStorage.getItem(scopedKey);
+  if (scoped) return parseDraft(scoped, userId, exerciseId);
+  const legacy = localStorage.getItem(key);
+  if (!legacy) return null;
+  const draft = parseDraft(legacy, userId, exerciseId);
+  // A mutable legacy draft is forked on first use in each tab. Frozen retries
+  // retain their original operation UUID and payload exactly.
+  const restored = draft.operation ? draft : { ...draft, id: crypto.randomUUID(), operation: null };
+  localStorage.setItem(scopedKey, JSON.stringify(restored));
+  return restored;
+}
+function readPerSetDraftKey(
+  userId: string,
+  exerciseId: string,
+  key: string,
+): PerSetWorkoutDraft | null {
+  const scopedKey = tabDraftKey(key);
+  const scoped = localStorage.getItem(scopedKey);
+  if (scoped) return parsePerSetDraft(scoped, userId, exerciseId);
+  const legacy = localStorage.getItem(key);
+  if (!legacy) return null;
+  const draft = parsePerSetDraft(legacy, userId, exerciseId);
+  let restored = draft;
+  if (!draft.operation) {
+    const idBySet = new Map(draft.fields.sets.map((set) => [set.id, crypto.randomUUID()]));
+    restored = {
+      ...draft,
+      id: crypto.randomUUID(),
+      operation: null,
+      fields: {
+        ...draft.fields,
+        sets: draft.fields.sets.map((set) => ({ ...set, id: idBySet.get(set.id)! })),
+      },
+      recordedSetIds: draft.recordedSetIds.map((id) => idBySet.get(id)!),
+    };
+  }
+  localStorage.setItem(scopedKey, JSON.stringify(restored));
+  return restored;
+}
 export function removeExerciseDrafts(userId: string, exerciseId: string) {
   const bases = [draftKey(userId, exerciseId), perSetDraftKey(userId, exerciseId)];
   for (let index = localStorage.length - 1; index >= 0; index--) {
@@ -79,17 +128,15 @@ export function newPerSetDraft(
 }
 
 export function readDraft(userId: string, exerciseId: string, date?: string): WorkoutDraft | null {
-  const raw = localStorage.getItem(draftKey(userId, exerciseId));
+  const latest = readDraftKey(userId, exerciseId, draftKey(userId, exerciseId));
   if (date !== undefined) {
-    const latest = raw ? parseDraft(raw, userId, exerciseId) : null;
     if (latest?.fields.date === date) return latest;
-    const archived = localStorage.getItem(draftKey(userId, exerciseId, date));
-    if (!archived) return null;
-    const restored = parseDraft(archived, userId, exerciseId);
+    const restored = readDraftKey(userId, exerciseId, draftKey(userId, exerciseId, date));
+    if (!restored) return null;
     if (restored.fields.date !== date) throw new Error("Дата черновика не совпадает.");
     return restored;
   }
-  return raw ? parseDraft(raw, userId, exerciseId) : null;
+  return latest;
 }
 
 export function readPerSetDraft(
@@ -97,17 +144,19 @@ export function readPerSetDraft(
   exerciseId: string,
   date?: string,
 ): PerSetWorkoutDraft | null {
-  const raw = localStorage.getItem(perSetDraftKey(userId, exerciseId));
+  const latest = readPerSetDraftKey(userId, exerciseId, perSetDraftKey(userId, exerciseId));
   if (date !== undefined) {
-    const latest = raw ? parsePerSetDraft(raw, userId, exerciseId) : null;
     if (latest?.fields.date === date) return latest;
-    const archived = localStorage.getItem(perSetDraftKey(userId, exerciseId, date));
-    if (!archived) return null;
-    const restored = parsePerSetDraft(archived, userId, exerciseId);
+    const restored = readPerSetDraftKey(
+      userId,
+      exerciseId,
+      perSetDraftKey(userId, exerciseId, date),
+    );
+    if (!restored) return null;
     if (restored.fields.date !== date) throw new Error("Дата черновика не совпадает.");
     return restored;
   }
-  return raw ? parsePerSetDraft(raw, userId, exerciseId) : null;
+  return latest;
 }
 
 function parseDraft(raw: string, userId: string, exerciseId: string): WorkoutDraft {
@@ -154,22 +203,28 @@ export function writeDraft(draft: WorkoutDraft) {
   if (previous && previous.fields.date !== draft.fields.date && hasDraftInput(previous)) {
     // Preserve the other session BEFORE replacing the latest-draft pointer, including frozen retries.
     localStorage.setItem(
-      draftKey(previous.userId, previous.exerciseId, previous.fields.date),
+      tabDraftKey(draftKey(previous.userId, previous.exerciseId, previous.fields.date)),
       JSON.stringify(previous),
     );
   }
-  localStorage.setItem(draftKey(draft.userId, draft.exerciseId), JSON.stringify(draft));
+  localStorage.setItem(
+    tabDraftKey(draftKey(draft.userId, draft.exerciseId)),
+    JSON.stringify(draft),
+  );
 }
 
 export function writePerSetDraft(draft: PerSetWorkoutDraft) {
   const previous = readPerSetDraft(draft.userId, draft.exerciseId);
   if (previous && previous.fields.date !== draft.fields.date && hasPerSetDraftInput(previous)) {
     localStorage.setItem(
-      perSetDraftKey(previous.userId, previous.exerciseId, previous.fields.date),
+      tabDraftKey(perSetDraftKey(previous.userId, previous.exerciseId, previous.fields.date)),
       JSON.stringify(previous),
     );
   }
-  localStorage.setItem(perSetDraftKey(draft.userId, draft.exerciseId), JSON.stringify(draft));
+  localStorage.setItem(
+    tabDraftKey(perSetDraftKey(draft.userId, draft.exerciseId)),
+    JSON.stringify(draft),
+  );
 }
 
 export function removeSavedDraft(
@@ -179,8 +234,13 @@ export function removeSavedDraft(
   date: string,
 ) {
   for (const key of [draftKey(userId, exerciseId), draftKey(userId, exerciseId, date)]) {
-    const raw = localStorage.getItem(key);
-    if (raw && parseDraft(raw, userId, exerciseId).id === operationId) localStorage.removeItem(key);
+    const scoped = tabDraftKey(key);
+    const scopedRaw = localStorage.getItem(scoped);
+    const legacyRaw = localStorage.getItem(key);
+    if (scopedRaw && parseDraft(scopedRaw, userId, exerciseId).id === operationId)
+      localStorage.removeItem(scoped);
+    if (legacyRaw && parseDraft(legacyRaw, userId, exerciseId).id === operationId)
+      localStorage.removeItem(key);
   }
 }
 
@@ -194,8 +254,12 @@ export function removeSavedPerSetDraft(
     perSetDraftKey(userId, exerciseId),
     perSetDraftKey(userId, exerciseId, date),
   ]) {
-    const raw = localStorage.getItem(key);
-    if (raw && parsePerSetDraft(raw, userId, exerciseId).id === operationId)
+    const scoped = tabDraftKey(key);
+    const scopedRaw = localStorage.getItem(scoped);
+    const legacyRaw = localStorage.getItem(key);
+    if (scopedRaw && parsePerSetDraft(scopedRaw, userId, exerciseId).id === operationId)
+      localStorage.removeItem(scoped);
+    if (legacyRaw && parsePerSetDraft(legacyRaw, userId, exerciseId).id === operationId)
       localStorage.removeItem(key);
   }
 }

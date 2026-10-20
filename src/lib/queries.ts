@@ -131,15 +131,22 @@ export const entriesQuery = (
       const setsByEntry = new Map<string, NonNullable<HistoryEntry["sets"]>>();
       const ids = data.map((entry) => entry.id);
       for (let offset = 0; offset < ids.length; offset += 100) {
-        const { data: setRows, error } = await supabase
-          .from("workout_entry_sets")
-          .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type")
-          .eq("user_id", userId)
-          .in("workout_entry_id", ids.slice(offset, offset + 100))
-          .order("workout_entry_id")
-          .order("position")
-          .abortSignal(signal);
-        if (error) throw error;
+        const setRows = await loadAllPages(
+          (from, to) =>
+            supabase
+              .from("workout_entry_sets")
+              .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
+                count: "exact",
+              })
+              .eq("user_id", userId)
+              .in("workout_entry_id", ids.slice(offset, offset + 100))
+              .order("workout_entry_id")
+              .order("position")
+              .order("id")
+              .range(from, to)
+              .abortSignal(signal),
+          signal,
+        );
         for (const row of setRows ?? []) {
           const sets = setsByEntry.get(row.workout_entry_id) ?? [];
           sets.push({
@@ -155,11 +162,15 @@ export const entriesQuery = (
           setsByEntry.set(row.workout_entry_id, sets);
         }
       }
+      if (data.some((entry) => !setsByEntry.has(entry.id)))
+        throw new Error(
+          "История содержит запись без подтверждённых подходов. Аналитика остановлена; требуется проверка данных.",
+        );
       return data.map((e) => ({
         ...e,
         weight: Number(e.weight),
         rir: e.rir === null ? null : Number(e.rir),
-        ...(setsByEntry.has(e.id) ? { sets: setsByEntry.get(e.id)! } : {}),
+        sets: setsByEntry.get(e.id)!,
       }));
     },
   });

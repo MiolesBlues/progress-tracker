@@ -44,7 +44,7 @@ export async function mockSupabase(page: Page) {
   const token = (id: string) =>
     `${Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url")}.${Buffer.from(JSON.stringify({ sub: id, exp: 4102444800, role: "authenticated", aud: "authenticated" })).toString("base64url")}.test-signature`;
   // Reject every non-local request by default: these tests cannot contact a real Supabase.
-  await page.route("**/*", async (route) => {
+  await page.context().route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname === "127.0.0.1" || url.hostname === "localhost") return route.continue();
     if (url.hostname !== "workout-e2e.invalid") return route.abort();
@@ -285,6 +285,31 @@ export async function mockSupabase(page: Page) {
     }
     const table = url.pathname.split("/").at(-1)!;
     if (!rows[table]) return respond({ message: "Unknown endpoint" }, 404);
+    const sourceRows: Row[] =
+      table === "workout_entry_sets"
+        ? [
+            ...rows[table]!,
+            ...rows["workout_entries"]!.flatMap((entry) => {
+              if (
+                rows[table]!.some((set) => set["workout_entry_id"] === entry.id) ||
+                !Array.isArray(entry["reps"]) ||
+                entry["weight"] == null
+              )
+                return [];
+              return (entry["reps"] as number[]).map((reps, index) => ({
+                id: `legacy-snapshot-${entry.id}-${index + 1}`,
+                user_id: entry.user_id,
+                workout_entry_id: entry.id,
+                position: index + 1,
+                weight: String(entry["weight"]),
+                reps,
+                rir: entry["rir"] ?? null,
+                set_type: "working",
+                load_type: "external",
+              }));
+            }),
+          ]
+        : rows[table]!;
     const matches = (r: Row) =>
       r.user_id === id &&
       [...url.searchParams].every(([key, filter]) => {
@@ -294,9 +319,10 @@ export async function mockSupabase(page: Page) {
         if (op === "eq") return String(r[key]) === value;
         if (op === "gte") return String(r[key]) >= value;
         if (op === "lte") return String(r[key]) <= value;
+        if (op === "in") return value.replace(/[()]/g, "").split(",").includes(String(r[key]));
         return true;
       });
-    let found = rows[table]!.filter(matches);
+    let found: Row[] = sourceRows.filter(matches);
     if (request.method() === "POST") {
       if (table === "program_exercises" && state.archiveDayOnInsert) {
         state.archiveDayOnInsert = false;
