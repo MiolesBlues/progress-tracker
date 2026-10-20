@@ -88,10 +88,11 @@ export const entriesQuery = (
   exerciseId: string,
   sinceISO = "0001-01-01",
   untilISO = toISO(new Date()),
+  enabled = true,
 ) =>
   queryOptions({
     queryKey: [...userKeys.entries(userId, exerciseId), sinceISO, untilISO],
-    enabled: !!exerciseId,
+    enabled: !!exerciseId && enabled,
     queryFn: async ({ signal }): Promise<HistoryEntry[]> => {
       const data = await loadAllPages(
         (from, to) =>
@@ -172,6 +173,163 @@ export const entriesQuery = (
         rir: e.rir === null ? null : Number(e.rir),
         sets: setsByEntry.get(e.id)!,
       }));
+    },
+  });
+
+/** Bounded, exact-count Records page. Entries and their authoritative sets are complete. */
+type EntryPageRow = {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  performed_on: string;
+  created_at: string;
+  weight: number | null;
+  reps: number[] | null;
+  rir: number | null;
+  notes: string | null;
+  day_id: string | null;
+  day_name: string | null;
+};
+
+function fetchEntryPageChunk(
+  userId: string,
+  exerciseId: string,
+  sinceISO: string,
+  untilISO: string,
+  from: number,
+  to: number,
+  signal: AbortSignal,
+) {
+  return supabase
+    .from("workout_entries")
+    .select(
+      "id, user_id, exercise_id, performed_on, created_at, weight, reps, rir, notes, day_id, day_name",
+      { count: "exact" },
+    )
+    .eq("user_id", userId)
+    .eq("exercise_id", exerciseId)
+    .gte("performed_on", sinceISO)
+    .lte("performed_on", untilISO)
+    .order("performed_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(from, to)
+    .abortSignal(signal);
+}
+
+export const entriesPageQuery = (
+  userId: string,
+  exerciseId: string,
+  sinceISO: string,
+  untilISO: string,
+  page: number,
+  pageSize: number,
+) =>
+  queryOptions({
+    queryKey: [...userKeys.entries(userId, exerciseId), "page", sinceISO, untilISO, page, pageSize],
+    enabled: !!exerciseId,
+    queryFn: async ({ signal }): Promise<{ entries: HistoryEntry[]; count: number }> => {
+      const offset = page * pageSize;
+      const data: EntryPageRow[] = [];
+      let count: number | null = null;
+      const pageIds = new Set<string>();
+      const expectedPageSize = (total: number) => Math.min(pageSize, Math.max(0, total - offset));
+      while (count === null || data.length < expectedPageSize(count)) {
+        const from = offset + data.length;
+        const {
+          data: chunk,
+          count: observedCount,
+          error,
+        } = await fetchEntryPageChunk(
+          userId,
+          exerciseId,
+          sinceISO,
+          untilISO,
+          from,
+          offset + pageSize - 1,
+          signal,
+        );
+        if (error) throw error;
+        if (observedCount === null || !chunk)
+          throw new Error("Количество записей не подтверждено. Повторите загрузку.");
+        if (count !== null && observedCount !== count)
+          throw new Error("История изменилась во время загрузки. Обновите страницу записей.");
+        count = observedCount;
+        if (data.length >= expectedPageSize(count)) break;
+        if (!chunk.length || data.length + chunk.length > expectedPageSize(count))
+          throw new Error("История загружена не полностью. Обновите страницу записей.");
+        for (const entry of chunk) {
+          if (pageIds.has(entry.id))
+            throw new Error("История изменилась во время загрузки. Обновите страницу записей.");
+          pageIds.add(entry.id);
+          data.push(entry);
+        }
+      }
+      if (count === null)
+        throw new Error("Количество записей не подтверждено. Повторите загрузку.");
+      if (
+        data.some(
+          (entry) =>
+            entry.weight === null ||
+            !Number.isFinite(Number(entry.weight)) ||
+            Number(entry.weight) < 0 ||
+            Number(entry.weight) > MAX_WEIGHT ||
+            !Array.isArray(entry.reps) ||
+            entry.reps.length < 1 ||
+            entry.reps.length > MAX_SETS ||
+            entry.reps.some((rep) => !Number.isInteger(rep) || rep < 0 || rep > MAX_REPS),
+        )
+      )
+        throw new Error(
+          "В истории есть некорректные старые результаты. Расчёты остановлены; данные требуют отдельной проверки.",
+        );
+      if (!data.length) return { entries: [], count };
+      const ids = data.map((entry) => entry.id);
+      const setRows = await loadAllPages(
+        (from, to) =>
+          supabase
+            .from("workout_entry_sets")
+            .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
+              count: "exact",
+            })
+            .eq("user_id", userId)
+            .in("workout_entry_id", ids)
+            .order("workout_entry_id")
+            .order("position")
+            .order("id")
+            .range(from, to)
+            .abortSignal(signal),
+        signal,
+      );
+      const setsByEntry = new Map<string, NonNullable<HistoryEntry["sets"]>>();
+      for (const row of setRows) {
+        const sets = setsByEntry.get(row.workout_entry_id) ?? [];
+        sets.push({
+          id: row.id,
+          position: row.position,
+          weight: Number(row.weight),
+          weightExact: String(row.weight),
+          reps: row.reps,
+          rir: row.rir === null ? null : Number(row.rir),
+          set_type: row.set_type,
+          load_type: row.load_type,
+        });
+        setsByEntry.set(row.workout_entry_id, sets);
+      }
+      if (data.some((entry) => !setsByEntry.has(entry.id)))
+        throw new Error(
+          "История содержит запись без подтверждённых подходов. Аналитика остановлена; требуется проверка данных.",
+        );
+      return {
+        count,
+        entries: data.map((entry) => ({
+          ...entry,
+          weight: Number(entry.weight),
+          reps: entry.reps!,
+          rir: entry.rir === null ? null : Number(entry.rir),
+          sets: setsByEntry.get(entry.id)!,
+        })),
+      };
     },
   });
 

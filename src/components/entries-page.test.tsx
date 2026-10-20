@@ -207,6 +207,36 @@ it("edits one saved set through the owner-scoped per-set RPC", async () => {
   expect(fake.state.rows.workout_entries[0]).toMatchObject({ weight: 50, reps: [8] });
 });
 
+it("keeps the edit and input when the RPC reports that the set was deleted", async () => {
+  fake.state.updateRpcResult = false;
+  fake.state.rows.workout_entries = [entry("deleted-set", dateDaysAgo(0), 50, [8])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "deleted-set-id",
+      user_id: "A",
+      workout_entry_id: "deleted-set",
+      position: 1,
+      weight: "50.00",
+      reps: 8,
+      rir: "2.0",
+      set_type: "working",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const item = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(item).getByRole("button"));
+  fireEvent.click(within(item).getByRole("button", { name: "Изменить подход 1" }));
+  fireEvent.change(within(item).getByLabelText("Вес подхода 1"), { target: { value: "51.5" } });
+  fireEvent.click(within(item).getByRole("button", { name: "Сохранить подход 1" }));
+  expect(
+    await within(item).findByText("Подход больше недоступен. История обновлена; проверьте запись."),
+  ).toBeVisible();
+  expect(within(item).getByLabelText("Вес подхода 1")).toHaveValue("51.5");
+  expect(within(item).queryByText("Подход обновлён")).not.toBeInTheDocument();
+});
+
 it("keeps multiple workout records open and preserves set order and missing RIR", async () => {
   fake.state.rows.workout_entries = [
     { ...entry("today", dateDaysAgo(0), 39, [10, 10, 9, 8]), rir: null },
@@ -382,25 +412,31 @@ it("filters diary entries by date and sorts weights in both directions", async (
   expect(within(diary).getByRole("heading", { name: "Записи · 3" })).toBeInTheDocument();
 
   fireEvent.click(within(diary).getByRole("button", { name: "Сегодня" }));
-  expect(within(diary).getByRole("heading", { name: "Записи · 1" })).toBeInTheDocument();
-  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
-  expect(within(diary).getAllByRole("listitem")).toHaveLength(1);
+  let updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getByRole("heading", { name: "Записи · 1" })).toBeInTheDocument();
+  expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
+  expect(within(updatedDiary).getAllByRole("listitem")).toHaveLength(1);
 
-  fireEvent.click(within(diary).getByRole("button", { name: "7 дней" }));
-  expect(within(diary).getByRole("heading", { name: "Записи · 2" })).toBeInTheDocument();
-  expect(within(diary).queryByText("40 кг · 10")).not.toBeInTheDocument();
+  fireEvent.click(within(updatedDiary).getByRole("button", { name: "7 дней" }));
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getByRole("heading", { name: "Записи · 2" })).toBeInTheDocument();
+  expect(within(updatedDiary).queryByText("40 кг · 10")).not.toBeInTheDocument();
 
-  fireEvent.click(within(diary).getByRole("button", { name: "Всё время" }));
-  chooseSort(diary, "Вес: по возрастанию");
+  fireEvent.click(within(updatedDiary).getByRole("button", { name: "Всё время" }));
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  chooseSort(updatedDiary, "Вес: по возрастанию");
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   await waitFor(() => {
-    expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("35 кг");
+    expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent("35 кг");
   });
-  chooseSort(diary, "Вес: по убыванию");
+  chooseSort(updatedDiary, "Вес: по убыванию");
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   await waitFor(() => {
-    expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
+    expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
   });
-  chooseSort(diary, "Сначала новые");
-  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
+  chooseSort(updatedDiary, "Сначала новые");
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent("50 кг");
 });
 
 it("persists sort per user and marks the current choice with a check", async () => {
@@ -465,7 +501,7 @@ it.each([false, true])(
   },
 );
 
-it("B08 limits the DOM to 20 entries while loading every server page and resetting controls", async () => {
+it("B08 fetches bounded Records pages and preserves exact full-history weight sorting", async () => {
   fake.state.maxRows = 137;
   fake.state.rows.workout_entries = Array.from({ length: 1200 }, (_, index) => ({
     ...entry(`entry-${String(index).padStart(4, "0")}`, dateDaysAgo(0), index, [8]),
@@ -476,16 +512,28 @@ it("B08 limits the DOM to 20 entries while loading every server page and resetti
   expect(within(diary).getByRole("heading", { name: "Записи · 1200" })).toBeInTheDocument();
   expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
   expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
-  expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(9);
+  expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(1);
   fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
-  expect(within(diary).getByText("Страница 2 из 60")).toBeInTheDocument();
-  chooseSort(diary, "Вес: по убыванию");
-  expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
-  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent(/1\s199 кг/);
-  fireEvent.click(within(diary).getByRole("button", { name: "Далее" }));
-  fireEvent.click(within(diary).getByRole("button", { name: "Сегодня" }));
-  expect(within(diary).getByText("Страница 1 из 60")).toBeInTheDocument();
-  chooseSort(diary, "Вес: по возрастанию");
-  expect(within(diary).getAllByRole("listitem")[0]).toHaveTextContent("0 кг");
-  expect(within(diary).getAllByRole("listitem")).toHaveLength(20);
+  await screen.findByText("Страница 2 из 60");
+  await waitFor(() =>
+    expect(fake.state.calls.filter((call) => call.table === "workout_entries")).toHaveLength(2),
+  );
+  let updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  chooseSort(updatedDiary, "Вес: по убыванию");
+  await waitFor(() =>
+    expect(fake.state.calls.filter((call) => call.table === "workout_entries").length).toBe(12),
+  );
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getByText("Страница 1 из 60")).toBeInTheDocument();
+  expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent(/1\s199 кг/);
+  fireEvent.click(within(updatedDiary).getByRole("button", { name: "Далее" }));
+  await screen.findByText("Страница 2 из 60");
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  fireEvent.click(within(updatedDiary).getByRole("button", { name: "Сегодня" }));
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getByText("Страница 1 из 60")).toBeInTheDocument();
+  chooseSort(updatedDiary, "Вес: по возрастанию");
+  updatedDiary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  expect(within(updatedDiary).getAllByRole("listitem")[0]).toHaveTextContent("0 кг");
+  expect(within(updatedDiary).getAllByRole("listitem")).toHaveLength(20);
 }, 15_000);
