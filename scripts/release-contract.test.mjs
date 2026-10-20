@@ -58,6 +58,17 @@ test("V4 and ACL migrations are transaction scoped and preserve the expected rec
   assert.match(acl, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public/);
 });
 
+test("release preflight checks browser and PUBLIC defaults across every object owner", () => {
+  const preflight = file("scripts/release-schema-preflight.mjs");
+  const defaultsCheck = preflight.slice(preflight.indexOf("const defaults = await tx`"));
+  assert.match(
+    defaultsCheck,
+    /FROM pg_default_acl d CROSS JOIN LATERAL aclexplode\(d\.defaclacl\) a/,
+  );
+  assert.match(defaultsCheck, /a\.grantee IN \(0, 'anon'::regrole, 'authenticated'::regrole\)/);
+  assert.doesNotMatch(defaultsCheck, /d\.defaclrole='postgres'::regrole/);
+});
+
 test("Vite exits before compiling when browser and SSR configs target different refs", () => {
   assert.throws(
     () =>

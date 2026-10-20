@@ -370,8 +370,7 @@ async function runRemotePreflight() {
       const defaults = await tx`
         SELECT d.defaclobjtype, a.grantee, a.privilege_type
         FROM pg_default_acl d CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-        WHERE d.defaclrole='postgres'::regrole
-          AND ((d.defaclnamespace='public'::regnamespace
+        WHERE ((d.defaclnamespace='public'::regnamespace
             AND a.grantee IN (0, 'anon'::regrole, 'authenticated'::regrole)
             AND ((d.defaclobjtype='r' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
               OR (d.defaclobjtype='S' AND a.privilege_type IN ('USAGE','SELECT','UPDATE'))
