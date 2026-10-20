@@ -255,6 +255,22 @@
       "anon": false
     }
   ],
+  "requiredHelperFunctions": [
+    {
+      "name": "snapshot_entry_day",
+      "argumentTypes": "",
+      "authenticated": false,
+      "anon": false,
+      "public": false
+    },
+    {
+      "name": "valid_workout_reps",
+      "argumentTypes": "integer[]",
+      "authenticated": true,
+      "anon": false,
+      "public": false
+    }
+  ],
   "migrationOwnership": {
     "canonicalDirectory": "drizzle/migrations",
     "capabilityMigration": "20261016204330_per_set_workout_v4.sql",

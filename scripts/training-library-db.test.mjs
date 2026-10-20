@@ -38,6 +38,7 @@ before(async () => {
     CREATE ROLE anon NOLOGIN;
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN BYPASSRLS;
+    CREATE ROLE supabase_admin NOLOGIN;
     CREATE SCHEMA auth;
     CREATE TABLE auth.users(id uuid PRIMARY KEY);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
@@ -94,7 +95,18 @@ before(async () => {
     GRANT ALL ON SEQUENCES TO anon, authenticated`);
   await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
     GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`);
+  // Supabase-managed role defaults are not modifiable by the postgres role.
+  // Model them explicitly so the release contract cannot silently ignore them.
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT ALL ON TABLES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT ALL ON SEQUENCES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin
+    GRANT EXECUTE ON FUNCTIONS TO PUBLIC`);
   await db.exec(file("drizzle/migrations/20261020100000_training_library_least_privilege.sql"));
+  await db.exec(file("drizzle/migrations/20261020120000_public_helper_function_privileges.sql"));
 });
 
 after(async () => db?.close());
@@ -625,4 +637,64 @@ test("training library ACLs are minimal for browser roles after correcting hoste
     false,
     "replaying the ACL correction is safe and idempotent",
   );
+});
+
+test("ACL repair clears postgres defaults, inventories managed supabase_admin defaults, and keeps app tables postgres-owned", async () => {
+  const defaults = await rows(file("scripts/default-privileges-preflight.sql"));
+  assert.ok(defaults.some((row) => row.owner === "supabase_admin"));
+  assert.ok(defaults.every((row) => row.owner !== "postgres"));
+  const applicationOwners = await rows(`
+    SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relname IN (
+      'training_exercise_catalog','training_templates','training_template_days',
+      'training_template_slots','training_template_applications'
+    )
+  `);
+  assert.deepEqual(applicationOwners, [{ owner: "postgres" }]);
+});
+
+test("helper functions are callable only by their intended application path", async () => {
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('anon','public.valid_workout_reps(integer[])','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('authenticated','public.valid_workout_reps(integer[])','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    true,
+  );
+  for (const role of ["anon", "authenticated"])
+    assert.equal(
+      (
+        await rows(
+          "SELECT has_function_privilege($1,'public.snapshot_entry_day()','EXECUTE') AS allowed",
+          [role],
+        )
+      )[0].allowed,
+      false,
+    );
+  assert.equal(
+    (
+      await rows(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f',p.proowner))) a
+          WHERE p.oid='public.snapshot_entry_day()'::regprocedure
+            AND a.grantee=0 AND a.privilege_type='EXECUTE'
+        ) AS allowed
+      `)
+    )[0].allowed,
+    false,
+  );
+  const saved = await asRole("authenticated", C, async () =>
+    rows("SELECT public.valid_workout_reps(ARRAY[8,8]) AS allowed"),
+  );
+  assert.deepEqual(saved, [{ allowed: true }]);
 });

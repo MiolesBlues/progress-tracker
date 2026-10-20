@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
+import { validateRestoreApproval } from "./recovery-contract.mjs";
 
 const contract = JSON.parse(
   readFileSync(new URL("./schema-capability-contract.json", import.meta.url), "utf8"),
@@ -41,6 +42,13 @@ function requireLocalContract() {
     ),
     "utf8",
   );
+  const helperAclSql = readFileSync(
+    new URL(
+      "../drizzle/migrations/20261020120000_public_helper_function_privileges.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   for (const table of Object.keys(contract.authoritativeSetTables))
     if (!v4Sql.includes(`public.${table}`))
       throw new Error(`V4 migration does not define public.${table}`);
@@ -63,6 +71,13 @@ function requireLocalContract() {
     !aclSql.includes("GRANT EXECUTE ON FUNCTION public.apply_training_template")
   )
     throw new Error("ACL migration omits default privilege or template apply handling");
+  if (
+    !/^BEGIN;/m.test(helperAclSql) ||
+    !/^COMMIT;/m.test(helperAclSql) ||
+    !helperAclSql.includes("public.snapshot_entry_day()") ||
+    !helperAclSql.includes("public.valid_workout_reps(integer[])")
+  )
+    throw new Error("Helper-function ACL migration is missing its forward-only privileges");
   if (contract.workoutCapability !== "per-set-workout-v4")
     throw new Error("Unknown workout capability contract");
   console.log(
@@ -72,15 +87,35 @@ function requireLocalContract() {
 
 async function runRemotePreflight() {
   const environment = process.env["SUPABASE_ENVIRONMENT"];
-  const expectedRef = process.env["SUPABASE_PROJECT_REF"];
+  const projectRef = process.env["SUPABASE_PROJECT_REF"];
   const databaseUrl = process.env["RELEASE_DATABASE_URL"];
-  if (!(environment in refs) || !expectedRef || !databaseUrl) {
+  const recoveryMode = environment === "recovery";
+  if (
+    !environment ||
+    (!recoveryMode && !Object.hasOwn(refs, environment)) ||
+    !projectRef ||
+    !databaseUrl
+  ) {
     throw new Error(
-      "Set SUPABASE_ENVIRONMENT (staging|production), SUPABASE_PROJECT_REF and RELEASE_DATABASE_URL",
+      "Set SUPABASE_ENVIRONMENT (staging|production|recovery), SUPABASE_PROJECT_REF and RELEASE_DATABASE_URL",
     );
   }
-  if (refs[environment] !== expectedRef)
+  const expectedRef = recoveryMode ? projectRef : refs[environment];
+  if (recoveryMode) {
+    try {
+      validateRestoreApproval({
+        projectRef,
+        databaseUrl,
+        approvedRef: process.env["PHASE5B_RESTORE_APPROVED_PROJECT_REF"],
+        targetName: process.env["PHASE5B_RESTORE_TARGET_NAME"],
+        confirmation: process.env["PHASE5B_RESTORE_CONFIRM"],
+      });
+    } catch (error) {
+      throw new Error(`Recovery target identity/approval check failed: ${error.message}`);
+    }
+  } else if (refs[environment] !== expectedRef) {
     throw new Error("SUPABASE_PROJECT_REF does not match the selected environment");
+  }
   requireProjectRef(databaseUrl, expectedRef);
 
   const db = postgres(databaseUrl, {
@@ -91,6 +126,7 @@ async function runRemotePreflight() {
     onnotice: () => {},
   });
   const failures = [];
+  let managedDefaults = false;
   try {
     await db.begin(async (tx) => {
       await tx.unsafe("SET TRANSACTION READ ONLY");
@@ -100,7 +136,8 @@ async function runRemotePreflight() {
         ...Object.keys(contract.libraryTables),
       ];
       const tableRows = await tx`
-        SELECT c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls
+        SELECT c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS force_rls,
+          pg_get_userbyid(c.relowner) AS owner
         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relname = ANY(${tx.array(tables, "text")}) AND c.relkind='r'`;
       const tableByName = new Map(tableRows.map((row) => [row.name, row]));
@@ -127,6 +164,8 @@ async function runRemotePreflight() {
           failures.push(`missing table public.${name}`);
           continue;
         }
+        if (table.owner !== "postgres")
+          failures.push(`application table public.${name} is owned by ${table.owner}`);
         const actual = new Set(columns.get(name) ?? []);
         for (const column of required)
           if (!actual.has(column)) failures.push(`missing column public.${name}.${column}`);
@@ -255,8 +294,8 @@ async function runRemotePreflight() {
         const actual = matches[0];
         if (actual.security_definer !== expected.definer)
           failures.push(`SECURITY DEFINER mode differs for ${expected.name}`);
-        if (expected.definer && actual.owner !== "postgres")
-          failures.push(`unexpected owner on SECURITY DEFINER RPC ${expected.name}`);
+        if (actual.owner !== "postgres")
+          failures.push(`application RPC ${expected.name} is owned by ${actual.owner}`);
         if (expected.authenticated && !actual.authenticated_execute)
           failures.push(`authenticated lacks EXECUTE on ${expected.name}`);
         if (!expected.anon && actual.anon_execute)
@@ -264,6 +303,37 @@ async function runRemotePreflight() {
         if (actual.public_execute) failures.push(`PUBLIC has EXECUTE on ${expected.name}`);
         if (expected.definer && !actual.config.some((entry) => entry.startsWith("search_path=")))
           failures.push(`${expected.name} has no fixed search_path`);
+      }
+
+      const helperRows = await tx`
+        SELECT p.proname AS name, pg_catalog.oidvectortypes(p.proargtypes) AS argument_types,
+          pg_get_userbyid(p.proowner) AS owner,
+          has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated_execute,
+          has_function_privilege('anon', p.oid, 'EXECUTE') AS anon_execute,
+          EXISTS (SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f',p.proowner))) a
+            WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND p.proname = ANY(${tx.array(
+          contract.requiredHelperFunctions.map((fn) => fn.name),
+          "text",
+        )})`;
+      for (const expected of contract.requiredHelperFunctions) {
+        const matches = helperRows.filter(
+          (row) => row.name === expected.name && row.argument_types === expected.argumentTypes,
+        );
+        if (matches.length !== 1) {
+          failures.push(`helper function signature missing or ambiguous: ${expected.name}`);
+          continue;
+        }
+        const actual = matches[0];
+        if (actual.owner !== "postgres")
+          failures.push(`application helper function ${expected.name} is owned by ${actual.owner}`);
+        if (actual.authenticated_execute !== expected.authenticated)
+          failures.push(`authenticated EXECUTE differs for helper ${expected.name}`);
+        if (actual.anon_execute !== expected.anon)
+          failures.push(`anon EXECUTE differs for helper ${expected.name}`);
+        if (actual.public_execute !== expected.public)
+          failures.push(`PUBLIC EXECUTE differs for helper ${expected.name}`);
       }
 
       const protectedTables = [
@@ -367,17 +437,22 @@ async function runRemotePreflight() {
         if (assertions[0].missing_operation_snapshot)
           failures.push("existing operation rows lack a per-set retry snapshot");
       }
-      const defaults = await tx`
-        SELECT d.defaclobjtype, a.grantee, a.privilege_type
-        FROM pg_default_acl d CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-        WHERE ((d.defaclnamespace='public'::regnamespace
-            AND a.grantee IN (0, 'anon'::regrole, 'authenticated'::regrole)
-            AND ((d.defaclobjtype='r' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'))
-              OR (d.defaclobjtype='S' AND a.privilege_type IN ('USAGE','SELECT','UPDATE'))
-              OR (d.defaclobjtype='f' AND a.privilege_type='EXECUTE')))
-            OR (d.defaclnamespace=0 AND d.defaclobjtype='f' AND a.grantee=0 AND a.privilege_type='EXECUTE'))`;
-      if (defaults.length)
-        failures.push("public default privileges still grant browser roles or PUBLIC access");
+      const defaultAclSql = readFileSync(
+        new URL("./default-privileges-preflight.sql", import.meta.url),
+        "utf8",
+      );
+      const defaults = await tx.unsafe(defaultAclSql);
+      const postgresDefaults = defaults.filter((row) => row.owner === "postgres");
+      if (postgresDefaults.length)
+        failures.push("postgres default ACLs still grant browser roles or PUBLIC access");
+      const unsupportedOwners = new Set(
+        defaults
+          .map((row) => row.owner)
+          .filter((owner) => !["postgres", "supabase_admin"].includes(owner)),
+      );
+      for (const owner of unsupportedOwners)
+        failures.push(`unreviewed public default ACL owner: ${owner}`);
+      managedDefaults = defaults.some((row) => row.owner === "supabase_admin");
 
       const migrations =
         await tx`SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS journal_exists`;
@@ -400,7 +475,7 @@ async function runRemotePreflight() {
     return;
   }
   console.log(
-    `Schema preflight PASS for ${environment} (${expectedRef}); capability ${contract.workoutCapability}. Read-only transaction; no changes made.`,
+    `Schema preflight PASS for ${environment} (${expectedRef}); capability ${contract.workoutCapability}. Read-only transaction; no changes made.${managedDefaults ? " Supabase-managed supabase_admin defaults remain; application objects must stay postgres-owned." : ""}`,
   );
 }
 

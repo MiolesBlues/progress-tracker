@@ -21,6 +21,8 @@ test("release preflight uses a read-only transaction and has no database repair 
   const preflight = file("scripts/release-schema-preflight.mjs");
   assert.ok(preflight.includes("SET TRANSACTION READ ONLY"));
   assert.ok(preflight.includes("SUPABASE_PROJECT_REF"));
+  assert.ok(preflight.includes("validateRestoreApproval"));
+  assert.ok(preflight.includes('environment === "recovery"'));
   assert.ok(preflight.includes("has_table_privilege"));
   assert.ok(preflight.includes("has_function_privilege"));
   assert.ok(
@@ -56,17 +58,24 @@ test("V4 and ACL migrations are transaction scoped and preserve the expected rec
   assert.match(acl, /^COMMIT;/m);
   assert.match(acl, /REVOKE ALL ON TABLE[\s\S]*FROM PUBLIC, anon, authenticated;/);
   assert.match(acl, /ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public/);
+  const helperAcl = file("drizzle/migrations/20261020120000_public_helper_function_privileges.sql");
+  assert.match(helperAcl, /^BEGIN;/m);
+  assert.match(helperAcl, /^COMMIT;/m);
+  assert.match(helperAcl, /REVOKE ALL ON FUNCTION public\.snapshot_entry_day\(\)/);
+  assert.match(helperAcl, /GRANT EXECUTE ON FUNCTION public\.valid_workout_reps\(integer\[\]\)/);
+  assert.doesNotMatch(helperAcl, /ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin/i);
 });
 
 test("release preflight checks browser and PUBLIC defaults across every object owner", () => {
   const preflight = file("scripts/release-schema-preflight.mjs");
-  const defaultsCheck = preflight.slice(preflight.indexOf("const defaults = await tx`"));
-  assert.match(
-    defaultsCheck,
-    /FROM pg_default_acl d CROSS JOIN LATERAL aclexplode\(d\.defaclacl\) a/,
-  );
+  const defaultsCheck = file("scripts/default-privileges-preflight.sql");
+  assert.match(defaultsCheck, /FROM pg_default_acl d/);
+  assert.match(defaultsCheck, /pg_get_userbyid\(a\.grantor\) AS grantor/);
   assert.match(defaultsCheck, /a\.grantee IN \(0, 'anon'::regrole, 'authenticated'::regrole\)/);
-  assert.doesNotMatch(defaultsCheck, /d\.defaclrole='postgres'::regrole/);
+  assert.match(preflight, /owner === "supabase_admin"/);
+  assert.match(preflight, /application table public\.\$\{name\} is owned by/);
+  assert.match(preflight, /application RPC \$\{expected\.name\} is owned by/);
+  assert.doesNotMatch(defaultsCheck, /\b(?:ALTER|GRANT|REVOKE|DROP|CREATE)\b/i);
 });
 
 test("Vite exits before compiling when browser and SSR configs target different refs", () => {
