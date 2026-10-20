@@ -75,6 +75,28 @@ test("backup manifest validates sanitized files, hashes, source identity, and ex
   });
 });
 
+test("backup manifest accepts only explicitly marked synthetic sources outside production", async () => {
+  const fixture = await manifestFixture();
+  fixture.manifest.source = {
+    kind: "synthetic",
+    projectRef: "synthetic-local",
+    postgresVersion: "18.6",
+  };
+  fixture.manifest.authorization = {
+    ticketId: "synthetic-fixture",
+    approvedBy: "local-automation",
+  };
+  await writeFile(fixture.manifestPath, JSON.stringify(fixture.manifest));
+  assert.equal(
+    (await validateBackupManifest(fixture.manifestPath)).sourceProjectRef,
+    "synthetic-local",
+  );
+
+  fixture.manifest.source.projectRef = "szdmzvsenrnjxgjgregf";
+  await writeFile(fixture.manifestPath, JSON.stringify(fixture.manifest));
+  await assert.rejects(validateBackupManifest(fixture.manifestPath), /source identity/);
+});
+
 test("backup manifest rejects modified files, path traversal, and missing dependency coverage", async () => {
   const fixture = await manifestFixture();
   await writeFile(join(fixture.directory, "schema.sql"), "modified\n");

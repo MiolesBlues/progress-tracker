@@ -62,17 +62,26 @@ export async function validateBackupManifest(manifestPath) {
   const root = await realpath(dirname(manifestFile));
   const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
   if (manifest.schemaVersion !== 1) throw new Error("Unsupported recovery manifest version");
-  if (manifest.source?.projectRef !== PRODUCTION_PROJECT_REF)
-    throw new Error("Backup source does not match the verified production project ref");
+  const synthetic = manifest.source?.kind === "synthetic";
+  if (
+    synthetic
+      ? manifest.source?.projectRef !== "synthetic-local"
+      : manifest.source?.projectRef !== PRODUCTION_PROJECT_REF
+  )
+    throw new Error("Backup source identity is not an allowed production or synthetic source");
   if (
     typeof manifest.authorization?.ticketId !== "string" ||
     !manifest.authorization.ticketId.trim() ||
     typeof manifest.authorization?.approvedBy !== "string" ||
-    !manifest.authorization.approvedBy.trim()
+    !manifest.authorization.approvedBy.trim() ||
+    (synthetic && manifest.authorization.ticketId !== "synthetic-fixture")
   )
-    throw new Error("Manifest must reference the data-export approval and approver");
-  if (!/^17\./.test(manifest.source?.postgresVersion ?? ""))
-    throw new Error("Backup PostgreSQL version is missing or incompatible with production");
+    throw new Error("Manifest must reference a valid export approval or synthetic fixture");
+  const compatibleVersion = synthetic ? /^(17|18)\./ : /^17\./;
+  if (!compatibleVersion.test(manifest.source?.postgresVersion ?? ""))
+    throw new Error(
+      "Backup PostgreSQL version is missing or incompatible with its declared source",
+    );
   if (!Number.isFinite(Date.parse(manifest.createdAt)))
     throw new Error("Backup creation timestamp is invalid");
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length < 2)
