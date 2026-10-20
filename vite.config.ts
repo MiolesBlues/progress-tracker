@@ -8,6 +8,10 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { loadEnv } from "vite";
 import { validateSupabaseEnvironment } from "./src/integrations/supabase/env-contract.js";
 
+// Keep Nitro's generated Worker date supported by the pinned Wrangler runtime.
+// Bump it together with Wrangler after validating the new workerd runtime.
+process.env["NITRO_COMPATIBILITY_DATE"] ||= "2026-10-19";
+
 const modeArg = process.argv.indexOf("--mode");
 const mode =
   modeArg >= 0

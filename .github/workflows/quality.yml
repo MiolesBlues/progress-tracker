@@ -2,13 +2,13 @@ name: Quality checks
 on:
   pull_request:
   push:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "phase3/**"]
 permissions:
   contents: read
 jobs:
   checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: "true"
       VITE_SUPABASE_URL: https://workout-e2e.invalid
@@ -41,6 +41,7 @@ jobs:
       - run: bun run preflight:schema-contract
       - run: bun run build
       - run: bun run check:client-bundle
+      - run: bun run smoke:runtime
       - run: bun run audit
       - name: Install pinned Playwright browsers
         run: bunx --no-install playwright install --with-deps chromium webkit
