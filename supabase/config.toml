@@ -1,1 +1,2 @@
-project_id = "jbxbgcqaywkbnsohjzcx"
+# No project is linked by default. Select the intended ref explicitly for each
+# operation; do not let a stale local project_id silently choose a hosted DB.

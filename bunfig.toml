@@ -1,3 +1,6 @@
+# Let Vite load .env files according to --mode; Bun auto-load would override Vite mode priority.
+env = false
+
 [install]
 saveTextLockfile = true
 # 24h supply-chain guard: skip package versions published less than a day ago.

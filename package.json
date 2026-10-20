@@ -14,8 +14,11 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs",
+    "preflight:schema-contract": "node scripts/release-schema-preflight.mjs --check-contract",
+    "preflight:release": "node scripts/release-schema-preflight.mjs",
+    "check:client-bundle": "node scripts/check-client-bundle.mjs",
     "test:watch": "vitest",
-    "test:toolchain": "node --test scripts/toolchain.test.mjs",
+    "test:toolchain": "node --test scripts/toolchain.test.mjs scripts/release-contract.test.mjs",
     "test:e2e": "playwright test",
     "audit": "bun audit",
     "format:check": "prettier --check ."

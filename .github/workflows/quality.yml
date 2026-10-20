@@ -16,6 +16,8 @@ jobs:
       SUPABASE_URL: https://workout-e2e.invalid
       SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_only
       SUPABASE_SERVICE_ROLE_KEY: ""
+      SUPABASE_ENVIRONMENT: test
+      VITE_SUPABASE_ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,7 +38,9 @@ jobs:
       - run: bun run test
       - run: bun run test:db
       - run: bun run test:toolchain
+      - run: bun run preflight:schema-contract
       - run: bun run build
+      - run: bun run check:client-bundle
       - run: bun run audit
       - name: Install pinned Playwright browsers
         run: bunx --no-install playwright install --with-deps chromium webkit

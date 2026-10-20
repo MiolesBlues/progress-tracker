@@ -37,6 +37,8 @@ export default defineConfig({
       SUPABASE_URL: "https://workout-e2e.invalid",
       SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_only",
       SUPABASE_SERVICE_ROLE_KEY: "",
+      SUPABASE_ENVIRONMENT: "test",
+      VITE_SUPABASE_ENVIRONMENT: "test",
     },
     timeout: 120_000,
   },

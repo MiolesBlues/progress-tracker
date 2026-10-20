@@ -1,3 +1,5 @@
+-- Supplemental legacy baseline probe only. The canonical capability gate is
+-- scripts/release-schema-preflight.mjs, which also checks V4, ACLs and RPCs.
 -- Catalogs and non-identifying violation flags only. PostgreSQL 17+.
 BEGIN READ ONLY;
 SELECT c.relname, c.relrowsecurity, pg_get_userbyid(c.relowner) AS owner
