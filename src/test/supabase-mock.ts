@@ -10,7 +10,7 @@ export type Row = Record<string, unknown> & {
 const fake = vi.hoisted(() => {
   type Response = {
     data: Row[] | Row | null;
-    error: { message: string } | null;
+    error: { message: string; code?: string } | null;
     count?: number | null;
   };
   const state = {
@@ -35,6 +35,8 @@ const fake = vi.hoisted(() => {
     authChange: null as ((event: string, session: { user: { id: string } } | null) => void) | null,
     userId: null as string | null,
     nextError: null as string | null,
+    insertErrorAfterCommit: null as { code: string; message: string } | null,
+    nextReadError: null as { table: string; message: string } | null,
     deletionCapability: true,
     readErrors: {} as Record<string, string>,
     delaySelect: null as { table: string; filters: Row; promise: Promise<Response> } | null,
@@ -47,6 +49,13 @@ const fake = vi.hoisted(() => {
       }),
     ),
     delayMutation: null as Promise<void> | null,
+    delayRpc: null as Promise<void> | null,
+    rpcIdentityCalls: [] as {
+      name: string;
+      args: Record<string, unknown>;
+      userId: string | null;
+      signal: AbortSignal | undefined;
+    }[],
     sequence: 0,
     maxRows: Infinity,
     disableLegacySetSynthesis: false,
@@ -71,6 +80,11 @@ const fake = vi.hoisted(() => {
             "reorder_workout_entry_sets",
           ].includes(name)
         ) {
+          if (state.delayRpc) {
+            const delayed = state.delayRpc;
+            state.delayRpc = null;
+            await delayed;
+          }
           if (name === "update_workout_entry_set" && state.updateRpcResult !== null)
             return { data: state.updateRpcResult, error: null };
           return { data: true, error: null };
@@ -128,6 +142,11 @@ const fake = vi.hoisted(() => {
       state.calls.push({ table, operation, values, filters, ...(signal ? { signal } : {}) });
       if (operation === "select" && state.readErrors[table])
         return { data: null, error: { message: state.readErrors[table]! } };
+      if (operation === "select" && state.nextReadError?.table === table) {
+        const message = state.nextReadError.message;
+        state.nextReadError = null;
+        return { data: null, error: { message } };
+      }
       if (
         operation === "select" &&
         state.delaySelect?.table === table &&
@@ -169,8 +188,10 @@ const fake = vi.hoisted(() => {
           ),
       );
       if (operation === "insert") {
+        if (rows.some((row) => row.id === values.id))
+          return { data: null, error: { code: "23505", message: "duplicate key" } };
         const row = {
-          id: `new-${++state.sequence}`,
+          id: String(values.id ?? `new-${++state.sequence}`),
           archived_at: null,
           target_sets: null,
           target_reps: null,
@@ -195,6 +216,11 @@ const fake = vi.hoisted(() => {
         const delay = state.delayMutation;
         state.delayMutation = null;
         await delay;
+      }
+      if (operation === "insert" && state.insertErrorAfterCommit) {
+        const error = state.insertErrorAfterCommit;
+        state.insertErrorAfterCommit = null;
+        return { data: null, error };
       }
       const count = found.length;
       found = found.slice(rangeFrom, Math.min(rangeTo + 1, rangeFrom + state.maxRows));
@@ -270,10 +296,17 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: fake.from,
     rpc: (name: string, args: { _ids?: string[] } & Record<string, unknown> = {}) => ({
-      abortSignal: () =>
-        name === "save_workout_entry" || name === "save_workout_entry_sets"
+      abortSignal: (signal?: AbortSignal) => {
+        fake.state.rpcIdentityCalls.push({
+          name,
+          args,
+          userId: fake.state.userId,
+          signal,
+        });
+        return name === "save_workout_entry" || name === "save_workout_entry_sets"
           ? fake.state.saveRpc(args)
-          : fake.state.rpc(name, args),
+          : fake.state.rpc(name, args);
+      },
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) =>
         fake.state.rpc(name, args).then(resolve, reject),
     }),
@@ -296,6 +329,8 @@ export function resetFake() {
   fake.state.calls.length = 0;
   fake.state.rpc.mockClear();
   fake.state.nextError = null;
+  fake.state.insertErrorAfterCommit = null;
+  fake.state.nextReadError = null;
   fake.state.deletionCapability = true;
   fake.state.readErrors = {};
   fake.state.delaySelect = null;
@@ -329,6 +364,8 @@ export function resetFake() {
     return { data: id, error: null };
   });
   fake.state.delayMutation = null;
+  fake.state.delayRpc = null;
+  fake.state.rpcIdentityCalls.length = 0;
   fake.state.sequence = 0;
   fake.state.maxRows = Infinity;
   fake.state.disableLegacySetSynthesis = false;

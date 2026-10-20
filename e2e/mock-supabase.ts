@@ -24,6 +24,9 @@ export async function mockSupabase(page: Page) {
     failNextTemplateApply: false,
     loseNextTemplateApplyResponse: false,
     archiveDayOnInsert: false,
+    loseProgramCreateResponse: null as "program_days" | "program_exercises" | null,
+    failCreateReconciliationRead: null as { table: string; id: string } | null,
+    programCreateCalls: [] as { table: string; userId: string; payload: Record<string, unknown> }[],
     delayProgramUpdate: null as { id: string; promise: Promise<void> } | null,
     saveCalls: [] as string[],
     signupCalls: [] as Record<string, unknown>[],
@@ -285,6 +288,14 @@ export async function mockSupabase(page: Page) {
     }
     const table = url.pathname.split("/").at(-1)!;
     if (!rows[table]) return respond({ message: "Unknown endpoint" }, 404);
+    if (
+      request.method() === "GET" &&
+      state.failCreateReconciliationRead?.table === table &&
+      url.searchParams.get("id") === `eq.${state.failCreateReconciliationRead.id}`
+    ) {
+      state.failCreateReconciliationRead = null;
+      return route.abort("failed");
+    }
     const sourceRows: Row[] =
       table === "workout_entry_sets"
         ? [
@@ -324,6 +335,23 @@ export async function mockSupabase(page: Page) {
       });
     let found: Row[] = sourceRows.filter(matches);
     if (request.method() === "POST") {
+      if (table === "program_days" || table === "program_exercises")
+        state.programCreateCalls.push({ table, userId: id, payload: { ...json } });
+      if (state.loseProgramCreateResponse === table) {
+        state.loseProgramCreateResponse = null;
+        state.failCreateReconciliationRead = { table, id: String(json?.["id"] ?? "") };
+        return respond({ message: "Network unavailable" }, 503);
+      }
+      if (
+        state.failCreateReconciliationRead?.table === table &&
+        json?.["id"] === state.failCreateReconciliationRead.id
+      )
+        return respond({ message: "Temporary retry response loss" }, 503);
+      if (json?.["id"] && rows[table]!.some((row) => row.id === json["id"]))
+        return respond(
+          { code: "23505", message: "duplicate key value violates unique constraint" },
+          409,
+        );
       if (table === "program_exercises" && state.archiveDayOnInsert) {
         state.archiveDayOnInsert = false;
         const day = rows["program_days"]!.find((row) => row.id === json?.["day_id"]);

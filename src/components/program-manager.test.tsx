@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authEvent, fake, resetFake, type Row } from "@/test/supabase-mock";
 import { AccountBoundary, SessionProvider } from "@/lib/session";
 import { ProgramManager } from "@/components/program-manager";
-import { userKeys } from "@/lib/queries";
+import { userKeys, type Day } from "@/lib/queries";
 
 let qc: QueryClient;
 const day = (id: string, position = 0, archived_at: string | null = null): Row => ({
@@ -28,17 +28,17 @@ const exercise = (id: string, day_id: string | null, position = 0): Row => ({
   working_weight: 50,
   example_reps: null,
 });
-function mount() {
+function mount(verifiedUserId = "A") {
   const view = render(
     <QueryClientProvider client={qc}>
       <SessionProvider onIdentityChange={vi.fn()}>
-        <AccountBoundary verifiedUserId="A">
+        <AccountBoundary verifiedUserId={verifiedUserId}>
           <ProgramManager />
         </AccountBoundary>
       </SessionProvider>
     </QueryClientProvider>,
   );
-  act(() => authEvent("SIGNED_IN", "A"));
+  act(() => authEvent("SIGNED_IN", verifiedUserId));
   return view;
 }
 async function chooseProgramDay(name: string) {
@@ -125,7 +125,7 @@ it("adds a named day after registration, renames, archives and restores it", asy
   expect(
     qc
       .getQueryData<Array<{ id: string; name: string }>>(userKeys.days("A"))
-      ?.find((row) => row.id === "new-1")?.name,
+      ?.find((row) => row.name === "Силовой день")?.name,
   ).toBe("Силовой день");
   expect(screen.queryByRole("button", { name: "День выше" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "День ниже" })).not.toBeInTheDocument();
@@ -137,7 +137,9 @@ it("adds a named day after registration, renames, archives and restores it", asy
     within(archived).getByRole("button", { name: "Восстановить день: Силовой день" }),
   );
   await waitFor(() =>
-    expect(fake.state.rows.program_days!.find((row) => row.id === "new-1")?.archived_at).toBeNull(),
+    expect(
+      fake.state.rows.program_days!.find((row) => row["name"] === "Силовой день")?.["archived_at"],
+    ).toBeNull(),
   );
   expect(fake.state.calls.find((call) => call.operation === "insert")?.values).toMatchObject({
     user_id: "A",
@@ -278,7 +280,7 @@ it("creates an exercise for the selected day and edits it without changing its w
   fireEvent.click(screen.getByRole("button", { name: "В архив: Жим сидя" }));
   await waitFor(() =>
     expect(
-      fake.state.rows.program_exercises!.find((row) => row.id === "new-1")?.archived_at,
+      fake.state.rows.program_exercises!.find((row) => row["name"] === "Жим сидя")?.["archived_at"],
     ).toEqual(expect.any(String)),
   );
   expect(
@@ -287,6 +289,158 @@ it("creates an exercise for the selected day and edits it without changing its w
       .every((call) => !("working_weight" in call.values)),
   ).toBe(true);
   expect(fake.state.calls.some((call) => "day" in call.values)).toBe(false);
+});
+
+it("recovers a day created before a lost response after a component remount without duplicating it", async () => {
+  const first = mount();
+  await openDayManagement();
+  fireEvent.change(screen.getByLabelText("Название нового дня"), { target: { value: "Ноги" } });
+  fake.state.insertErrorAfterCommit = { code: "FETCH_ERROR", message: "lost response" };
+  fake.state.nextReadError = { table: "program_days", message: "temporary read error" };
+  fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
+  await screen.findByRole("alert");
+  const pending = JSON.parse(localStorage.getItem("program:create:v1:A:day") ?? "null") as {
+    id: string;
+  };
+  expect(fake.state.rows.program_days!.filter((row) => row["name"] === "Ноги")).toHaveLength(1);
+  first.unmount();
+
+  mount();
+  await screen.findByRole("button", { name: "Повторить создание" });
+  fireEvent.click(screen.getByRole("button", { name: "Повторить создание" }));
+  await waitFor(() => expect(localStorage.getItem("program:create:v1:A:day")).toBeNull());
+  expect(fake.state.rows.program_days!.filter((row) => row["name"] === "Ноги")).toHaveLength(1);
+  expect(fake.state.rows.program_days!.find((row) => row["name"] === "Ноги")?.["id"]).toBe(
+    pending.id,
+  );
+  expect(
+    fake.state.calls.filter(
+      (call) => call.operation === "insert" && call.values["name"] === "Ноги",
+    ),
+  ).toHaveLength(2);
+});
+
+it("recovers a created exercise after remount with its original UUID and frozen values", async () => {
+  const first = mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Добавить упражнение" }));
+  const form = await screen.findByRole("form", { name: "Новое упражнение" });
+  fireEvent.change(within(form).getByLabelText("Название упражнения"), {
+    target: { value: "Жим" },
+  });
+  fireEvent.change(within(form).getByLabelText("Целевой диапазон повторений"), {
+    target: { value: "8–12" },
+  });
+  fake.state.insertErrorAfterCommit = { code: "FETCH_ERROR", message: "lost response" };
+  fake.state.nextReadError = {
+    table: "program_exercises",
+    message: "temporary read error",
+  };
+  fireEvent.click(within(form).getByRole("button", { name: "Сохранить" }));
+  await screen.findByRole("alert");
+  const pending = JSON.parse(localStorage.getItem("program:create:v1:A:exercise") ?? "null") as {
+    id: string;
+    payload: { name: string; target_reps: string };
+  };
+  expect(fake.state.rows.program_exercises!.filter((row) => row["name"] === "Жим")).toHaveLength(1);
+  first.unmount();
+
+  mount();
+  const restored = await screen.findByRole("form", { name: "Новое упражнение" });
+  expect(within(restored).getByLabelText("Название упражнения")).toHaveValue("Жим");
+  expect(within(restored).getByLabelText("Название упражнения")).toBeDisabled();
+  fireEvent.click(within(restored).getByRole("button", { name: "Повторить создание" }));
+  await waitFor(() => expect(localStorage.getItem("program:create:v1:A:exercise")).toBeNull());
+  expect(fake.state.rows.program_exercises!.filter((row) => row["name"] === "Жим")).toHaveLength(1);
+  expect(fake.state.rows.program_exercises!.find((row) => row["name"] === "Жим")?.["id"]).toBe(
+    pending.id,
+  );
+  expect(
+    fake.state.rows.program_exercises!.find((row) => row["name"] === "Жим")?.["target_reps"],
+  ).toBe(pending.payload.target_reps);
+  expect(
+    fake.state.calls.filter((call) => call.operation === "insert" && call.values["name"] === "Жим"),
+  ).toHaveLength(2);
+});
+
+it("double submit and a slow response keep day creation to one UUID and one row", async () => {
+  let release!: () => void;
+  fake.state.delayMutation = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  mount();
+  await openDayManagement();
+  fireEvent.change(screen.getByLabelText("Название нового дня"), { target: { value: "День B" } });
+  const submit = screen.getByRole("button", { name: "Добавить день" });
+  fireEvent.click(submit);
+  fireEvent.click(submit);
+  await waitFor(() =>
+    expect(fake.state.rows.program_days!.filter((row) => row["name"] === "День B")).toHaveLength(1),
+  );
+  await waitFor(() =>
+    expect(
+      fake.state.calls.filter(
+        (call) => call.operation === "insert" && call.values["name"] === "День B",
+      ),
+    ).toHaveLength(1),
+  );
+  release();
+  await waitFor(() => expect(localStorage.getItem("program:create:v1:A:day")).toBeNull());
+  expect(fake.state.rows.program_days!.filter((row) => row["name"] === "День B")).toHaveLength(1);
+});
+
+it("same display names remain independent for different users", async () => {
+  mount("A");
+  await openDayManagement();
+  fireEvent.change(screen.getByLabelText("Название нового дня"), {
+    target: { value: "Общий день" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
+  await waitFor(() =>
+    expect(
+      fake.state.rows.program_days!.filter((row) => row["name"] === "Общий день"),
+    ).toHaveLength(1),
+  );
+  cleanup();
+  qc.clear();
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  mount("B");
+  await openDayManagement();
+  fireEvent.change(screen.getByLabelText("Название нового дня"), {
+    target: { value: "Общий день" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
+  await waitFor(() =>
+    expect(
+      fake.state.rows.program_days!.filter((row) => row["name"] === "Общий день"),
+    ).toHaveLength(2),
+  );
+  const created = fake.state.rows.program_days!.filter((row) => row["name"] === "Общий день");
+  expect(created.map((row) => row["user_id"]).sort()).toEqual(["A", "B"]);
+  expect(created[0]?.["id"]).not.toBe(created[1]?.["id"]);
+});
+
+it("keeps a pending day scoped to its original account when the session switches", async () => {
+  let release!: () => void;
+  fake.state.delayMutation = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  mount("A");
+  await openDayManagement();
+  fireEvent.change(screen.getByLabelText("Название нового дня"), { target: { value: "A day" } });
+  fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
+  await waitFor(() =>
+    expect(fake.state.rows.program_days!.some((row) => row["name"] === "A day")).toBe(true),
+  );
+  act(() => authEvent("SIGNED_IN", "B"));
+  expect(screen.queryByText("День добавлен")).toBeNull();
+  expect(qc.getQueryData<Day[]>(userKeys.days("B"))?.some((row) => row.name === "A day")).not.toBe(
+    true,
+  );
+  expect(fake.state.rows.program_days!.find((row) => row["name"] === "A day")?.["user_id"]).toBe(
+    "A",
+  );
+  expect(localStorage.getItem("program:create:v1:A:day")).not.toBeNull();
+  release();
 });
 
 it("keeps the creation form open when the captured day is archived before save", async () => {
@@ -352,7 +506,7 @@ it("keeps the input and displays a failed save instead of claiming success", asy
   });
   fake.state.nextError = "Нет связи";
   fireEvent.click(screen.getByRole("button", { name: "Добавить день" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось сохранить изменения");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Результат создания не подтверждён");
   expect(screen.getByLabelText("Название нового дня")).toHaveValue("Не потерять");
   expect(fake.state.rows.program_days).toHaveLength(1);
 });

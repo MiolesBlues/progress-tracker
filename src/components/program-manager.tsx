@@ -17,6 +17,14 @@ import {
 } from "@/lib/archive-deletion";
 import { ArchiveDeleteDialog } from "@/components/archive-delete-dialog";
 import { toast } from "sonner";
+import {
+  clearPendingProgramCreate,
+  executeProgramCreate,
+  prepareProgramCreate,
+  type PendingProgramCreate,
+  ProgramCreateError,
+  readPendingProgramCreate,
+} from "@/lib/program-create";
 import { Button } from "@/components/ui/button";
 import { PageCard } from "@/components/ui/page-card";
 import { Input } from "@/components/ui/input";
@@ -50,6 +58,13 @@ import {
 type Result = { error: { message: string; code?: string } | null };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
 const selectCls = "h-12 w-full min-w-0 rounded-md border border-input bg-card px-3 text-foreground";
+function safePendingCreate(userId: string, kind: "day" | "exercise") {
+  try {
+    return readPendingProgramCreate(userId, kind);
+  } catch {
+    return null;
+  }
+}
 
 export function ProgramManager() {
   const { t, language } = useI18n();
@@ -80,16 +95,32 @@ export function ProgramManager() {
       return "";
     }
   });
-  const [newDay, setNewDay] = useState("");
-  const [newExerciseName, setNewExerciseName] = useState("");
-  const [newExerciseSets, setNewExerciseSets] = useState("3");
-  const [newExerciseReps, setNewExerciseReps] = useState("");
-  const [newExerciseDayId, setNewExerciseDayId] = useState("");
-  const [addingExercise, setAddingExercise] = useState(false);
+  const [pendingDayCreate, setPendingDayCreate] = useState(() => safePendingCreate(userId, "day"));
+  const [pendingExerciseCreate, setPendingExerciseCreate] = useState(() =>
+    safePendingCreate(userId, "exercise"),
+  );
+  const [newDay, setNewDay] = useState(() =>
+    String(safePendingCreate(userId, "day")?.payload["name"] ?? ""),
+  );
+  const [newExerciseName, setNewExerciseName] = useState(() =>
+    String(safePendingCreate(userId, "exercise")?.payload["name"] ?? ""),
+  );
+  const [newExerciseSets, setNewExerciseSets] = useState(() =>
+    String(safePendingCreate(userId, "exercise")?.payload["target_sets"] ?? "3"),
+  );
+  const [newExerciseReps, setNewExerciseReps] = useState(() =>
+    String(safePendingCreate(userId, "exercise")?.payload["target_reps"] ?? ""),
+  );
+  const [newExerciseDayId, setNewExerciseDayId] = useState(() =>
+    String(safePendingCreate(userId, "exercise")?.payload["day_id"] ?? ""),
+  );
+  const [addingExercise, setAddingExercise] = useState(
+    () => !!safePendingCreate(userId, "exercise"),
+  );
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const exerciseEditTrigger = useRef<HTMLButtonElement | null>(null);
-  const [managingDays, setManagingDays] = useState(false);
+  const [managingDays, setManagingDays] = useState(() => !!safePendingCreate(userId, "day"));
   const [archiveExpandedByUser, setArchiveExpandedByUser] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [exerciseError, setExerciseError] = useState("");
@@ -160,7 +191,11 @@ export function ProgramManager() {
     }
   }, [daysResult.isSuccess, dayId, selected, selectionKey]);
 
-  const run = async (action: Parameters<Run>[0], onError = setError): Promise<boolean> => {
+  const run = async (
+    action: Parameters<Run>[0],
+    onError = setError,
+    createOperation?: PendingProgramCreate,
+  ): Promise<boolean> => {
     if (running.current || !isCurrent()) return false;
     running.current = true;
     setBusy(true);
@@ -186,8 +221,19 @@ export function ProgramManager() {
       ]);
       return isCurrent();
     } catch (err) {
-      if (isCurrent())
+      if (isCurrent()) {
+        if (err instanceof ProgramCreateError && err.code === "rejected" && createOperation) {
+          clearPendingProgramCreate(createOperation);
+          if (createOperation.kind === "day" && pendingDayCreate?.id === createOperation.id)
+            setPendingDayCreate(null);
+          if (
+            createOperation.kind === "exercise" &&
+            pendingExerciseCreate?.id === createOperation.id
+          )
+            setPendingExerciseCreate(null);
+        }
         onError(err instanceof Error ? err.message : t("Не удалось сохранить изменения"));
+      }
       return false;
     } finally {
       running.current = false;
@@ -289,20 +335,106 @@ export function ProgramManager() {
 
   async function addDay(event: FormEvent) {
     event.preventDefault();
-    if (active.length >= MAX_DAYS) return;
-    if (
-      await run(() =>
-        supabase
-          .from("program_days")
-          .insert({ user_id: userId, name: programName(newDay, 60), position: nextPosition(days) })
-          .abortSignal(signal),
-      )
-    )
+    if (active.length >= MAX_DAYS && !pendingDayCreate) return;
+    let operation;
+    try {
+      operation =
+        pendingDayCreate ??
+        prepareProgramCreate(userId, "day", {
+          name: programName(newDay, 60),
+          position: nextPosition(days),
+        });
+      setPendingDayCreate(operation);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("Не удалось сохранить операцию."));
+      return;
+    }
+    const ok = await run(
+      async () => {
+        await executeProgramCreate(
+          operation,
+          () =>
+            supabase
+              .from("program_days")
+              .insert({
+                id: operation.id,
+                user_id: userId,
+                ...(operation.payload as { name: string; position: number }),
+              })
+              .abortSignal(signal),
+          async () => {
+            const { data, error } = await supabase
+              .from("program_days")
+              .select("id, user_id, name, position")
+              .eq("id", operation.id)
+              .eq("user_id", userId)
+              .abortSignal(signal)
+              .maybeSingle();
+            return { row: data, error };
+          },
+        );
+        return { error: null };
+      },
+      setError,
+      operation,
+    );
+    if (ok) {
+      clearPendingProgramCreate(operation);
+      setPendingDayCreate(null);
       setNewDay("");
+    }
   }
   async function addExercise(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
+    if (pendingExerciseCreate) {
+      const operation = pendingExerciseCreate;
+      const ok = await run(
+        async () => {
+          await executeProgramCreate(
+            operation,
+            () =>
+              supabase
+                .from("program_exercises")
+                .insert({
+                  id: operation.id,
+                  user_id: userId,
+                  ...(operation.payload as {
+                    day_id: string;
+                    name: string;
+                    position: number;
+                    target_sets: number;
+                    target_reps: string | null;
+                  }),
+                })
+                .abortSignal(signal),
+            async () => {
+              const { data, error } = await supabase
+                .from("program_exercises")
+                .select("id, user_id, day_id, name, position, target_sets, target_reps")
+                .eq("id", operation.id)
+                .eq("user_id", userId)
+                .abortSignal(signal)
+                .maybeSingle();
+              return { row: data, error };
+            },
+          );
+          return { error: null };
+        },
+        setError,
+        operation,
+      );
+      if (ok) {
+        clearPendingProgramCreate(operation);
+        setPendingExerciseCreate(null);
+        setAddingExercise(false);
+        setNewExerciseName("");
+        setNewExerciseSets("3");
+        setNewExerciseReps("");
+        setNewExerciseDayId("");
+      }
+      return;
+    }
     if (!newExerciseDayId) {
       setError(t("Выберите активный тренировочный день перед добавлением упражнения."));
       return;
@@ -332,35 +464,71 @@ export function ProgramManager() {
       setError(err instanceof Error ? err.message : t("Проверьте данные упражнения."));
       return;
     }
-    const targetSets = Number(newExerciseSets);
-    const targetReps = values.target_reps ?? null;
-    const name = programName(values.name ?? "", 100);
-    const ok = await run(async () => {
-      const dayLookup = supabase
-        .from("program_days")
-        .select("id, archived_at")
-        .eq("id", newExerciseDayId)
-        .eq("user_id", userId)
-        .abortSignal(signal);
-      const { data: latestDay, error: dayError } = await dayLookup.maybeSingle();
-      if (dayError) return { error: dayError };
-      if (!latestDay || latestDay.archived_at)
-        throw new Error(
-          t("Выбранный тренировочный день больше недоступен. Упражнение не создано."),
+    let operation;
+    try {
+      operation = prepareProgramCreate(userId, "exercise", {
+        day_id: newExerciseDayId,
+        name: programName(values.name ?? "", 100),
+        position: nextPosition(exercises.filter((ex) => ex.day_id === newExerciseDayId)),
+        target_sets: Number(newExerciseSets),
+        target_reps: values.target_reps ?? null,
+      });
+      setPendingExerciseCreate(operation);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("Не удалось сохранить операцию."));
+      return;
+    }
+    const ok = await run(
+      async () => {
+        const dayLookup = supabase
+          .from("program_days")
+          .select("id, archived_at")
+          .eq("id", newExerciseDayId)
+          .eq("user_id", userId)
+          .abortSignal(signal);
+        const { data: latestDay, error: dayError } = await dayLookup.maybeSingle();
+        if (dayError) return { error: dayError };
+        if (!latestDay || latestDay.archived_at)
+          throw new ProgramCreateError(
+            "rejected",
+            t("Выбранный тренировочный день больше недоступен. Упражнение не создано."),
+          );
+        await executeProgramCreate(
+          operation,
+          () =>
+            supabase
+              .from("program_exercises")
+              .insert({
+                id: operation.id,
+                user_id: userId,
+                ...(operation.payload as {
+                  day_id: string;
+                  name: string;
+                  position: number;
+                  target_sets: number;
+                  target_reps: string | null;
+                }),
+              })
+              .abortSignal(signal),
+          async () => {
+            const { data, error } = await supabase
+              .from("program_exercises")
+              .select("id, user_id, day_id, name, position, target_sets, target_reps")
+              .eq("id", operation.id)
+              .eq("user_id", userId)
+              .abortSignal(signal)
+              .maybeSingle();
+            return { row: data, error };
+          },
         );
-      return supabase
-        .from("program_exercises")
-        .insert({
-          user_id: userId,
-          day_id: newExerciseDayId,
-          name,
-          position: nextPosition(exercises.filter((ex) => ex.day_id === newExerciseDayId)),
-          target_sets: targetSets,
-          target_reps: targetReps,
-        })
-        .abortSignal(signal);
-    });
+        return { error: null };
+      },
+      setError,
+      operation,
+    );
     if (!ok) return;
+    clearPendingProgramCreate(operation);
+    setPendingExerciseCreate(null);
     setAddingExercise(false);
     setNewExerciseName("");
     setNewExerciseSets("3");
@@ -585,14 +753,16 @@ export function ProgramManager() {
                   maxLength={60}
                   placeholder={t("Новый день")}
                   className="h-12 min-w-0 flex-1 basis-40"
-                  disabled={busy || active.length >= MAX_DAYS}
+                  disabled={busy || !!pendingDayCreate || active.length >= MAX_DAYS}
                 />
                 <Button
                   type="submit"
                   className="h-12 shrink-0"
-                  disabled={busy || !newDay.trim() || active.length >= MAX_DAYS}
+                  disabled={
+                    busy || !newDay.trim() || (active.length >= MAX_DAYS && !pendingDayCreate)
+                  }
                 >
-                  {t("Добавить день")}
+                  {pendingDayCreate ? t("Повторить создание") : t("Добавить день")}
                 </Button>
               </form>
               {active.length >= MAX_DAYS && (
@@ -842,7 +1012,7 @@ export function ProgramManager() {
                   maxLength={100}
                   required
                   autoFocus
-                  disabled={busy}
+                  disabled={busy || !!pendingExerciseCreate}
                   className="h-12"
                 />
               </label>
@@ -858,7 +1028,7 @@ export function ProgramManager() {
                   value={newExerciseSets}
                   onChange={(event) => setNewExerciseSets(event.target.value)}
                   required
-                  disabled={busy}
+                  disabled={busy || !!pendingExerciseCreate}
                   className="h-12"
                 />
               </label>
@@ -871,7 +1041,7 @@ export function ProgramManager() {
                   placeholder="8–12"
                   maxLength={30}
                   required
-                  disabled={busy}
+                  disabled={busy || !!pendingExerciseCreate}
                   className="h-12"
                 />
               </label>
@@ -882,7 +1052,7 @@ export function ProgramManager() {
                   busy || !newExerciseName.trim() || !newExerciseSets || !newExerciseReps.trim()
                 }
               >
-                {t("Сохранить")}
+                {pendingExerciseCreate ? t("Повторить создание") : t("Сохранить")}
               </Button>
             </form>
           </SheetContent>
