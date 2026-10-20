@@ -50,6 +50,7 @@ const fake = vi.hoisted(() => {
     sequence: 0,
     maxRows: Infinity,
     disableLegacySetSynthesis: false,
+    updateRpcResult: null as boolean | null,
     rpc: vi.fn(
       async (
         name: string,
@@ -69,8 +70,11 @@ const fake = vi.hoisted(() => {
             "delete_workout_entry_set",
             "reorder_workout_entry_sets",
           ].includes(name)
-        )
+        ) {
+          if (name === "update_workout_entry_set" && state.updateRpcResult !== null)
+            return { data: state.updateRpcResult, error: null };
           return { data: true, error: null };
+        }
         if (name === "delete_archived_program_day") {
           const day = state.rows.program_days.find(
             (row) => row.id === args._day_id && row.user_id === state.userId,
@@ -328,5 +332,6 @@ export function resetFake() {
   fake.state.sequence = 0;
   fake.state.maxRows = Infinity;
   fake.state.disableLegacySetSynthesis = false;
+  fake.state.updateRpcResult = null;
   fake.state.rpc.mockClear();
 }

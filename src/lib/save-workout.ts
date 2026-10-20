@@ -113,6 +113,14 @@ async function mutateWorkoutSet(
       },
     );
   if (error) throw saveError(error.code);
+  // The update RPC uses false to mean the target set no longer exists. A
+  // fulfilled PostgREST request is not sufficient evidence of a mutation.
+  if (name === "update_workout_entry_set" && data !== true) {
+    throw new SaveWorkoutError(
+      "Подход больше недоступен. История обновлена; проверьте запись.",
+      true,
+    );
+  }
   return data;
 }
 

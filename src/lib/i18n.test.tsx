@@ -98,6 +98,12 @@ it("persists each account's language through reload and never borrows another ac
 it("translates validation errors and handles unavailable storage safely", () => {
   expect(translate("en", "Пароли не совпадают")).toBe("Passwords do not match");
   expect(
+    translateKnown("en", "Этот пароль найден в известных утечках. Выберите другой пароль."),
+  ).toBe("This password appears in known data breaches. Choose a different password.");
+  expect(
+    translateKnown("en", "Результат изменения не подтверждён. Повторите ту же операцию."),
+  ).toBe("The change was not confirmed. Retry the same operation.");
+  expect(
     translateKnown("en", "Заполните подход 4 или явно уберите его кнопкой «Убрать подход»."),
   ).toBe("Fill set 4 or explicitly remove it with Remove set.");
   expect(readLanguage(null)).toBe("ru");

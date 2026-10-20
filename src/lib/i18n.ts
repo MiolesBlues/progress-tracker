@@ -382,6 +382,8 @@ export const english = {
   Пароль: "Password",
   "Подтвердите пароль": "Confirm password",
   "Пароли не совпадают": "Passwords do not match",
+  "Этот пароль найден в известных утечках. Выберите другой пароль.":
+    "This password appears in known data breaches. Choose a different password.",
   "Показать пароль": "Show password",
   "Скрыть пароль": "Hide password",
   "Показать подтверждение пароля": "Show password confirmation",
@@ -454,6 +456,16 @@ export const english = {
     "RIR is missing from one entry; effort cannot be fully compared.",
   "Не удалось загрузить историю тренировок. Расчёты недоступны до полной загрузки.":
     "Could not load workout history. Calculations are unavailable until it finishes loading.",
+  "Подход больше недоступен. История обновлена; проверьте запись.":
+    "This set is no longer available. History was refreshed; check the entry.",
+  "Операция конфликтует с уже сохранёнными значениями.":
+    "This operation conflicts with values already saved.",
+  "Изменение отклонено. Проверьте значения и доступность записи.":
+    "The change was rejected. Check the values and whether the entry is available.",
+  "Результат изменения не подтверждён. Повторите ту же операцию.":
+    "The change was not confirmed. Retry the same operation.",
+  "Результат изменения подходов не подтверждён. Повторите ту же операцию.":
+    "The set change was not confirmed. Retry the same operation.",
   "В истории есть некорректные старые результаты. Расчёты остановлены; данные требуют отдельной проверки.":
     "Older history contains invalid results. Calculations have stopped; these entries need review.",
   "За день: максимальный вес; повторения и объём суммируются. Будущие записи исключены.":
