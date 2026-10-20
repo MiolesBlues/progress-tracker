@@ -67,9 +67,10 @@ Session integration test покрывает поздний workout-set mutation 
 Финальные проверки: Vitest — 32 файла, 304 passed; PGlite/SQL — 61 passed;
 toolchain — 13 passed; typecheck, lint, format, schema preflight, production
 build, bundle scan, Wrangler runtime smoke и dependency checks прошли.
-Полный Playwright прогон — 156 passed, 5 predeclared skipped, 1 сначала failed
-из-за текста для SQL `22023`. После исправления точечный B12 Chromium прошёл
-1/1, B12 WebKit и четыре новые PT-07 E2E сценария прошли в полном прогоне.
+Полный Playwright прогон после исправления — 157 passed, 5 predeclared skipped,
+0 failed (18,8 минуты). Предыдущий прогон зафиксировал старый текст SQL `22023`;
+точечный тест прошёл после исправления, затем весь набор прошёл повторно.
+Четыре новые PT-07 E2E сценария и B12 Chromium/WebKit прошли в финальном прогоне.
 Новые browser tests используют mocked Auth/HTTP и не подтверждают реальные
 hosted JWT/RLS. Запуск frozen install не менял lockfile.
 Hosted staging/prod и production Auth не изменялись.
