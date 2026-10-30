@@ -41,6 +41,8 @@ function createSupabaseAdminClient() {
     projectRef: process.env["SUPABASE_PROJECT_REF"],
     projectId: process.env["SUPABASE_PROJECT_ID"],
     environment: process.env["SUPABASE_ENVIRONMENT"] || "development",
+    allowStagingDevelopment: typeof __ALLOW_STAGING_DEV__ !== "undefined" && __ALLOW_STAGING_DEV__,
+    developmentServer: typeof __IS_VITE_DEV_SERVER__ !== "undefined" && __IS_VITE_DEV_SERVER__,
   });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {

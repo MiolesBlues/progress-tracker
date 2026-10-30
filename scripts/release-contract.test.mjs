@@ -42,6 +42,12 @@ test("the real local env file is not tracked and Vite validates environment befo
   const viteConfig = file("vite.config.ts");
   assert.ok(viteConfig.includes("validateSupabaseEnvironment"));
   assert.ok(viteConfig.includes("SERVICE_ROLE"));
+  assert.match(
+    viteConfig,
+    /loadEnv\(mode, process\.cwd\(\), \["VITE_", "SUPABASE_", "ALLOW_STAGING_DEV"\]\)/,
+  );
+  assert.match(viteConfig, /__ALLOW_STAGING_DEV__/);
+  assert.match(viteConfig, /JSON\.stringify\(allowStagingDev\)/);
   const sample = file(".env.example");
   assert.ok(sample.includes("<publishable-key>"));
   assert.ok(sample.includes("<server-only-secret>"));
@@ -118,10 +124,74 @@ test("Vite rejects service-role-shaped public variables before compilation", () 
           VITE_SUPABASE_URL: "https://workout-e2e.invalid",
           SUPABASE_PUBLISHABLE_KEY: "test-only",
           VITE_SUPABASE_PUBLISHABLE_KEY: "test-only",
+          SUPABASE_PROJECT_REF: "isolated-test",
+          VITE_SUPABASE_PROJECT_REF: "isolated-test",
+          SUPABASE_PROJECT_ID: "isolated-test",
+          VITE_SUPABASE_PROJECT_ID: "isolated-test",
           VITE_SUPABASE_SERVICE_ROLE_KEY: "test-only-secret-marker",
         },
       }),
     (error) => error.stderr?.toString().includes("must remain server-only"),
+  );
+});
+
+test("Vite dev blocks staging without opt-in and blocks production even with opt-in", () => {
+  const vite = ["node_modules/vite/bin/vite.js", "dev", "--host", "127.0.0.1", "--port", "0"];
+  const baseEnvironment = {
+    ...process.env,
+    SUPABASE_ENVIRONMENT: "development",
+    VITE_SUPABASE_ENVIRONMENT: "development",
+    SUPABASE_PUBLISHABLE_KEY: "test-only",
+    VITE_SUPABASE_PUBLISHABLE_KEY: "test-only",
+    SUPABASE_SERVICE_ROLE_KEY: "",
+  };
+  Object.assign(baseEnvironment, {
+    SUPABASE_URL: "https://fdzcwhzszbmpxyawrzzf.supabase.co",
+    VITE_SUPABASE_URL: "https://fdzcwhzszbmpxyawrzzf.supabase.co",
+    SUPABASE_PROJECT_REF: "fdzcwhzszbmpxyawrzzf",
+    VITE_SUPABASE_PROJECT_REF: "fdzcwhzszbmpxyawrzzf",
+    SUPABASE_PROJECT_ID: "fdzcwhzszbmpxyawrzzf",
+    VITE_SUPABASE_PROJECT_ID: "fdzcwhzszbmpxyawrzzf",
+  });
+  delete baseEnvironment.ALLOW_STAGING_DEV;
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, vite, {
+        encoding: "utf8",
+        stdio: "pipe",
+        env: baseEnvironment,
+      }),
+    (error) => `${error.stdout ?? ""}${error.stderr ?? ""}`.includes("ALLOW_STAGING_DEV=true"),
+  );
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, vite, {
+        encoding: "utf8",
+        stdio: "pipe",
+        env: { ...baseEnvironment, ALLOW_STAGING_DEV: "yes" },
+      }),
+    (error) =>
+      `${error.stdout ?? ""}${error.stderr ?? ""}`.includes("must be exactly true or false"),
+  );
+
+  const productionEnvironment = {
+    ...baseEnvironment,
+    ALLOW_STAGING_DEV: "true",
+    SUPABASE_URL: "https://szdmzvsenrnjxgjgregf.supabase.co",
+    VITE_SUPABASE_URL: "https://szdmzvsenrnjxgjgregf.supabase.co",
+    SUPABASE_PROJECT_REF: "szdmzvsenrnjxgjgregf",
+    VITE_SUPABASE_PROJECT_REF: "szdmzvsenrnjxgjgregf",
+    SUPABASE_PROJECT_ID: "szdmzvsenrnjxgjgregf",
+    VITE_SUPABASE_PROJECT_ID: "szdmzvsenrnjxgjgregf",
+  };
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, vite, {
+        encoding: "utf8",
+        stdio: "pipe",
+        env: productionEnvironment,
+      }),
+    (error) => `${error.stdout ?? ""}${error.stderr ?? ""}`.includes("cannot target production"),
   );
 });
 

@@ -19,8 +19,16 @@ const mode =
     : process.argv.some((arg) => arg === "build")
       ? "production"
       : "development";
-const loadedEnv = loadEnv(mode, process.cwd(), ["VITE_", "SUPABASE_"]);
+const loadedEnv = loadEnv(mode, process.cwd(), ["VITE_", "SUPABASE_", "ALLOW_STAGING_DEV"]);
 const env = (key: string) => process.env[key] || loadedEnv[key];
+const isDevelopmentServer = process.argv.some(
+  (argument) => argument === "dev" || argument === "serve",
+);
+const stagingDevelopmentOptIn = env("ALLOW_STAGING_DEV");
+if (stagingDevelopmentOptIn && !["true", "false"].includes(stagingDevelopmentOptIn)) {
+  throw new Error("ALLOW_STAGING_DEV must be exactly true or false");
+}
+const allowStagingDev = isDevelopmentServer && stagingDevelopmentOptIn === "true";
 const serverEnvironment = env("SUPABASE_ENVIRONMENT");
 const browserEnvironment = env("VITE_SUPABASE_ENVIRONMENT");
 if (serverEnvironment !== browserEnvironment) {
@@ -46,9 +54,18 @@ validateSupabaseEnvironment({
     env("VITE_SUPABASE_ENVIRONMENT") ||
     (mode === "test" ? "test" : "development"),
   browserEnvironment,
+  allowStagingDevelopment: allowStagingDev,
+  developmentServer: isDevelopmentServer,
+  requireBrowserServerPair: isDevelopmentServer && allowStagingDev,
 });
 
 export default defineConfig({
+  vite: {
+    define: {
+      __ALLOW_STAGING_DEV__: JSON.stringify(allowStagingDev),
+      __IS_VITE_DEV_SERVER__: JSON.stringify(isDevelopmentServer),
+    },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

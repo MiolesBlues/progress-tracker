@@ -73,6 +73,8 @@ function createSupabaseClient() {
       import.meta.env["VITE_SUPABASE_ENVIRONMENT"] ||
       (import.meta.env.MODE === "test" ? "test" : "development"),
     browserEnvironment: import.meta.env["VITE_SUPABASE_ENVIRONMENT"],
+    allowStagingDevelopment: typeof __ALLOW_STAGING_DEV__ !== "undefined" && __ALLOW_STAGING_DEV__,
+    developmentServer: typeof __IS_VITE_DEV_SERVER__ !== "undefined" && __IS_VITE_DEV_SERVER__,
   });
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
