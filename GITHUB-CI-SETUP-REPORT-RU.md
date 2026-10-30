@@ -70,7 +70,7 @@ GitHub Actions ранее создал workflow run `41070069701` для `main` 
 
 ## 5. Hosted GitHub CI
 
-Статус на момент этой редакции: ветка прошла `git push --dry-run`, но фактическая отправка и hosted workflow ещё не выполнены. Локальные результаты не являются hosted CI PASS. После отправки требуется записать SHA, run URL/run ID и итог каждого job.
+Ветка отправлена в origin без force push. Открыт черновой PR [#1](https://github.com/MiolesBlues/progress-tracker/pull/1) из `ci/github-actions-setup` в `main`; автоматического merge не было. GitHub подтвердил base SHA `2bddc62fe82f6672a9ab1b15c671bc196911d90d` и head SHA на момент открытия `5a9863fbb01375728c4dba21583008c6600f9cc9`.\n\nДля этого head GitHub создал run [41135368845](https://github.com/MiolesBlues/progress-tracker/actions/runs/41135368845), завершившийся `startup_failure`; список jobs пуст. PR diagnostics также возвращают `checks: []`, `statuses: []`, `jobs: []`. Hosted CI: **FAIL/BLOCKED**, обязательные jobs фактически не исполнились, поэтому локальные результаты не являются hosted CI PASS. Запуск на исходном `main` SHA ранее имел такой же результат. Доступных данных недостаточно, чтобы точно установить причину.
 
 ## 6. Внешний deployment и merge gate
 
