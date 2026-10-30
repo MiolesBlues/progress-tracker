@@ -1,0 +1,127 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-hover-strong: var(--primary-hover-strong);
+  --color-primary-hover-foreground: var(--primary-hover-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-primary-text-hover: var(--primary-text-hover);
+  --color-primary-text-active: var(--primary-text-active);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-switch-track: var(--switch-track);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+}
+
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.145 0.005 260);
+  --foreground: oklch(0.96 0.005 260);
+  --card: oklch(0.19 0.006 260);
+  --card-foreground: oklch(0.96 0.005 260);
+  --popover: oklch(0.21 0.006 260);
+  --popover-foreground: oklch(0.96 0.005 260);
+  --primary: oklch(0.88 0.2 128);
+  --primary-foreground: oklch(0.18 0.03 128);
+  --primary-hover: color-mix(in oklab, var(--primary) 90%, transparent);
+  --primary-hover-strong: color-mix(in oklab, var(--primary) 80%, transparent);
+  --primary-hover-foreground: var(--primary-foreground);
+  --primary-text: var(--primary);
+  --primary-text-hover: color-mix(in oklab, var(--primary) 90%, transparent);
+  --primary-text-active: color-mix(in oklab, var(--primary) 80%, transparent);
+  --secondary: oklch(0.24 0.006 260);
+  --secondary-foreground: oklch(0.96 0.005 260);
+  --muted: oklch(0.24 0.006 260);
+  --muted-foreground: oklch(0.65 0.01 260);
+  --accent: oklch(0.27 0.008 260);
+  --accent-foreground: oklch(0.96 0.005 260);
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.8 0.17 150);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --switch-track: var(--input);
+  --ring: oklch(0.88 0.2 128 / 60%);
+  --chart-1: oklch(0.88 0.2 128);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --background: #f7faff;
+  --foreground: #17243a;
+  --card: #ffffff;
+  --card-foreground: #17243a;
+  --popover: #ffffff;
+  --popover-foreground: #17243a;
+  --primary: #268beb;
+  --primary-foreground: #0f223b;
+  --primary-hover: #1672cd;
+  --primary-hover-strong: #1672cd;
+  --primary-hover-foreground: #ffffff;
+  --primary-text: #1672cd;
+  --primary-text-hover: #1672cd;
+  --primary-text-active: #1672cd;
+  --secondary: #eff5fc;
+  --secondary-foreground: #243a56;
+  --muted: #f1f5fa;
+  --muted-foreground: #64748b;
+  --accent: #eaf4ff;
+  --accent-foreground: #163b64;
+  --destructive: oklch(0.53 0.19 26);
+  --destructive-foreground: oklch(0.99 0 0);
+  --success: oklch(0.48 0.12 150);
+  --border: #e3ebf5;
+  --input: #7c8ea7;
+  --switch-track: #d7e2f0;
+  --ring: #1672cd;
+  --chart-1: #268beb;
+  color-scheme: light;
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    overflow-y: scroll;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  input, select, textarea { font-size: 16px; } /* prevent iOS zoom */
+}
+
+@utility safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
+@utility safe-top { padding-top: calc(env(safe-area-inset-top) + 0.75rem); }
+@utility num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

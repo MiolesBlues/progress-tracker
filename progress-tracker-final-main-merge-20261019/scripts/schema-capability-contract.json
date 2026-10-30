@@ -1,0 +1,263 @@
+{
+  "contractVersion": 1,
+  "workoutCapability": "per-set-workout-v4",
+  "columnTypes": {
+    "workout_entries.id": "uuid",
+    "workout_entries.user_id": "uuid",
+    "workout_entries.exercise_id": "uuid",
+    "workout_entries.day_id": "uuid",
+    "workout_entries.performed_on": "date",
+    "workout_entries.weight": "numeric",
+    "workout_entries.reps": "_int4",
+    "workout_entries.rir": "numeric",
+    "workout_entries.notes": "text",
+    "workout_entry_operations.id": "uuid",
+    "workout_entry_operations.user_id": "uuid",
+    "workout_entry_operations.set_snapshot": "jsonb",
+    "workout_entry_sets.id": "uuid",
+    "workout_entry_sets.workout_entry_id": "uuid",
+    "workout_entry_sets.user_id": "uuid",
+    "workout_entry_sets.position": "int4",
+    "workout_entry_sets.weight": "numeric",
+    "workout_entry_sets.reps": "int4",
+    "workout_entry_sets.rir": "numeric",
+    "workout_entry_sets.legacy_snapshot": "bool",
+    "workout_entry_set_tombstones.set_id": "uuid",
+    "training_templates.template_key": "text",
+    "training_templates.version": "int4",
+    "training_template_applications.application_id": "uuid",
+    "training_template_applications.user_id": "uuid"
+  },
+  "legacyPrerequisiteTables": {
+    "program_days": {
+      "columns": ["id", "user_id", "name", "position", "archived_at", "created_at"],
+      "rls": true
+    },
+    "program_exercises": {
+      "columns": [
+        "id",
+        "user_id",
+        "day_id",
+        "day",
+        "name",
+        "position",
+        "working_weight",
+        "target_sets",
+        "target_reps",
+        "example_reps",
+        "archived_at",
+        "created_at"
+      ],
+      "rls": true
+    },
+    "workout_entries": {
+      "columns": [
+        "id",
+        "user_id",
+        "exercise_id",
+        "day_id",
+        "day_name",
+        "day",
+        "performed_on",
+        "weight",
+        "reps",
+        "rir",
+        "notes",
+        "created_at"
+      ],
+      "rls": true
+    },
+    "workout_entry_operations": {
+      "columns": [
+        "user_id",
+        "id",
+        "exercise_id",
+        "day_id",
+        "performed_on",
+        "weight",
+        "reps",
+        "rir",
+        "notes",
+        "set_snapshot"
+      ],
+      "rls": true,
+      "forceRls": true
+    },
+    "workout_entry_operation_tombstones": {
+      "columns": ["user_id", "id"],
+      "rls": true,
+      "forceRls": true
+    }
+  },
+  "authoritativeSetTables": {
+    "workout_entry_sets": {
+      "columns": [
+        "id",
+        "workout_entry_id",
+        "user_id",
+        "position",
+        "weight",
+        "reps",
+        "rir",
+        "set_type",
+        "load_type",
+        "legacy_snapshot",
+        "created_at",
+        "updated_at"
+      ],
+      "constraints": [
+        "workout_entry_sets_pkey",
+        "workout_entry_sets_entry_owner_fkey",
+        "workout_entry_sets_entry_position_key",
+        "workout_entry_sets_position_check",
+        "workout_entry_sets_type_check",
+        "workout_entry_sets_load_type_check",
+        "workout_entry_sets_values_check"
+      ],
+      "indexes": ["workout_entry_sets_entry_order_idx"],
+      "policies": ["workout_entry_sets_select_own"],
+      "rls": true,
+      "forceRls": true
+    },
+    "workout_entry_set_tombstones": {
+      "columns": ["user_id", "workout_entry_id", "set_id", "created_at"],
+      "constraints": [
+        "workout_entry_set_tombstones_pkey",
+        "workout_entry_set_tombstones_user_id_fkey"
+      ],
+      "indexes": [],
+      "policies": [],
+      "rls": true,
+      "forceRls": true
+    }
+  },
+  "libraryTables": {
+    "training_exercise_catalog": {
+      "columns": ["exercise_key", "name_ru", "metadata", "content_sha256", "created_at"],
+      "policy": "published catalog read"
+    },
+    "training_templates": {
+      "columns": [
+        "template_key",
+        "version",
+        "title_ru",
+        "days_per_week",
+        "metadata",
+        "content_sha256",
+        "created_at"
+      ],
+      "policy": "published templates read"
+    },
+    "training_template_days": {
+      "columns": [
+        "template_key",
+        "version",
+        "day_key",
+        "day_order",
+        "weekday",
+        "session_type",
+        "title_ru",
+        "metadata"
+      ],
+      "policy": "published template days read"
+    },
+    "training_template_slots": {
+      "columns": [
+        "template_key",
+        "version",
+        "day_key",
+        "slot_key",
+        "exercise_key",
+        "slot_order",
+        "prescription"
+      ],
+      "policy": "published template slots read"
+    },
+    "training_template_applications": {
+      "columns": ["application_id", "user_id", "template_key", "version", "created_at"],
+      "policy": "own applications read"
+    }
+  },
+  "libraryConstraints": [
+    "training_exercise_catalog_content_sha256_check",
+    "training_exercise_catalog_exercise_key_check",
+    "training_exercise_catalog_name_ru_check",
+    "training_exercise_catalog_pkey",
+    "training_templates_content_sha256_check",
+    "training_templates_days_per_week_check",
+    "training_templates_pkey",
+    "training_templates_template_key_check",
+    "training_templates_template_key_content_sha256_key",
+    "training_templates_version_check",
+    "training_template_days_day_key_check",
+    "training_template_days_day_order_check",
+    "training_template_days_pkey",
+    "training_template_days_session_type_check",
+    "training_template_days_template_key_version_day_order_key",
+    "training_template_days_template_key_version_fkey",
+    "training_template_days_weekday_check",
+    "training_template_slots_exercise_key_fkey",
+    "training_template_slots_pkey",
+    "training_template_slots_slot_key_check",
+    "training_template_slots_slot_order_check",
+    "training_template_slots_template_key_version_day_key_fkey",
+    "training_template_slots_template_key_version_day_key_slot_o_key",
+    "training_template_applications_pkey",
+    "training_template_applications_template_key_version_fkey",
+    "training_template_applications_user_id_template_key_version_key"
+  ],
+  "requiredPolicies": [
+    "published catalog read",
+    "published templates read",
+    "published template days read",
+    "published template slots read",
+    "own applications read"
+  ],
+  "requiredLibraryIndexes": [
+    "training_templates_days_filter_idx",
+    "training_template_slots_lookup_idx",
+    "training_template_applications_user_idx"
+  ],
+  "requiredConstraints": [
+    "program_days_id_user_key",
+    "program_exercises_day_owner_fkey",
+    "workout_entries_day_owner_fkey",
+    "workout_entries_id_user_key",
+    "workout_entry_operations_pkey",
+    "workout_entry_operations_user_id_fkey",
+    "workout_entry_operation_tombstones_pkey",
+    "workout_entry_operation_tombstones_user_id_fkey"
+  ],
+  "perSetRpcs": [
+    { "name": "save_workout_entry_sets", "argumentTypes": "uuid, uuid, uuid, date, jsonb, text" },
+    {
+      "name": "add_workout_entry_set",
+      "argumentTypes": "uuid, uuid, text, integer, text, text, text"
+    },
+    {
+      "name": "update_workout_entry_set",
+      "argumentTypes": "uuid, uuid, text, integer, text, text, text"
+    },
+    { "name": "delete_workout_entry_set", "argumentTypes": "uuid, uuid" },
+    { "name": "reorder_workout_entry_sets", "argumentTypes": "uuid, uuid[]" }
+  ],
+  "requiredLibraryRpcs": [
+    {
+      "name": "list_training_templates",
+      "argumentTypes": "integer, text",
+      "authenticated": true,
+      "anon": false
+    },
+    {
+      "name": "apply_training_template",
+      "argumentTypes": "uuid, text, integer, text[], boolean",
+      "authenticated": true,
+      "anon": false
+    }
+  ],
+  "migrationOwnership": {
+    "canonicalDirectory": "drizzle/migrations",
+    "capabilityMigration": "20261016204330_per_set_workout_v4.sql",
+    "journalPolicy": "Compare applied capability and objects; timestamps alone do not establish equivalence. Never rewrite hosted journals automatically."
+  }
+}
