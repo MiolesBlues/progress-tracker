@@ -5,8 +5,8 @@
 ## A. Git state
 
 - Рабочая ветка: `integration/canonical-release-candidate`.
-- HEAD: `760252d` — `chore: remove committed nested project snapshot`.
-- Родитель: проверенная интеграция `db07b889b55d42501872ae303fcb70bbb735c7d0` (`fix/dev-staging-opt-in`).
+- HEAD: `31f5598` — `docs: record canonical branch integration decisions`.
+- Предыдущий commit `760252d` убрал nested snapshot; его родитель — проверенная интеграция `db07b889b55d42501872ae303fcb70bbb735c7d0` (`fix/dev-staging-opt-in`).
 - Весь Phase 1–5B.1/Track A набор является предком нового HEAD.
 - Новый worktree: `C:\Users\vitvl\Code\progress-tracker`.
 - Исходные 12 worktrees, 29 исходных local branch refs, stash и remote refs сохранены. Dirty исходные копии не очищались.
