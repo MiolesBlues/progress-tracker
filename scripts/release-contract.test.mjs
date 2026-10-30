@@ -153,7 +153,9 @@ test("Vite dev blocks staging without opt-in and blocks production even with opt
     SUPABASE_PROJECT_ID: "fdzcwhzszbmpxyawrzzf",
     VITE_SUPABASE_PROJECT_ID: "fdzcwhzszbmpxyawrzzf",
   });
-  delete baseEnvironment.ALLOW_STAGING_DEV;
+  // Vite loads .env.local from the repository, so explicitly override any
+  // local opt-in when asserting the fail-closed staging behavior.
+  baseEnvironment.ALLOW_STAGING_DEV = "false";
   assert.throws(
     () =>
       execFileSync(process.execPath, vite, {

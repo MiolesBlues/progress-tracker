@@ -20,7 +20,8 @@ const mode =
       ? "production"
       : "development";
 const loadedEnv = loadEnv(mode, process.cwd(), ["VITE_", "SUPABASE_", "ALLOW_STAGING_DEV"]);
-const env = (key: string) => process.env[key] || loadedEnv[key];
+const env = (key: string) =>
+  Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : loadedEnv[key];
 const isDevelopmentServer = process.argv.some(
   (argument) => argument === "dev" || argument === "serve",
 );
