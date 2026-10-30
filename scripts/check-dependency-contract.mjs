@@ -15,8 +15,23 @@ const lock = JSON.parse(
   ),
 );
 assert.equal(lock.lockfileVersion, 3, "An older generator replaced the scoped-override lockfile");
-assert.deepEqual(lock.overrides, manifest.overrides, "Manifest and lockfile overrides differ");
+const normalizedOverrides = { ...lock.overrides };
+for (const [name, expected] of Object.entries(manifest.overrides)) {
+  const actual = normalizedOverrides[name];
+  // Bun v1.4 serializes a version-scoped override such as `undici@^7` as
+  // `{ ".": "7.30.1" }` in bun.lock while keeping it a string in package.json.
+  if (
+    typeof expected === "string" &&
+    actual !== null &&
+    typeof actual === "object" &&
+    Object.keys(actual).length === 1 &&
+    typeof actual["."] === "string"
+  )
+    normalizedOverrides[name] = actual["."];
+}
+assert.deepEqual(normalizedOverrides, manifest.overrides, "Manifest and lockfile overrides differ");
 assert.equal(lock.overrides["@esbuild-kit/core-utils"].esbuild, "0.25.12");
+assert.equal(lock.overrides["undici@^7"]["."], "7.30.1");
 assert.equal(lock.overrides.esbuild, undefined, "Do not override newer Vite/tsx esbuild globally");
 assert.equal(lock.packages.esbuild[0], `esbuild@${manifest.devDependencies.esbuild}`);
 for (const group of ["dependencies", "devDependencies"])

@@ -20,7 +20,20 @@ test("Bun version, manifest and frozen lockfile retain the scoped security overr
     ),
   );
   assert.equal(lock.lockfileVersion, 3);
-  assert.deepEqual(lock.overrides, manifest.overrides);
+  const normalizedOverrides = { ...lock.overrides };
+  for (const [name, expected] of Object.entries(manifest.overrides)) {
+    const actual = normalizedOverrides[name];
+    if (
+      typeof expected === "string" &&
+      actual !== null &&
+      typeof actual === "object" &&
+      Object.keys(actual).length === 1 &&
+      typeof actual["."] === "string"
+    )
+      normalizedOverrides[name] = actual["."];
+  }
+  assert.deepEqual(normalizedOverrides, manifest.overrides);
+  assert.equal(lock.overrides["undici@^7"]["."], "7.30.1");
   assert.equal(lock.overrides["@esbuild-kit/core-utils"].esbuild, "0.25.12");
   assert.equal(lock.overrides.esbuild, undefined); // No global override on Vite/tsx's newer esbuild.
   assert.equal(lock.packages["@esbuild-kit/core-utils/esbuild"][0], "esbuild@0.25.12");
