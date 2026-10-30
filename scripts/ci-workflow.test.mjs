@@ -6,7 +6,7 @@ const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 
 test("quality workflow runs on main PRs, all pushes and manual dispatch with read-only permissions", () => {
   assert.match(workflow, /pull_request:\n\s+branches: \[main\]/);
-  assert.match(workflow, /\n  push:\n/);
+  assert.match(workflow, /\n  push:\n    branches: \["\*\*"\]/);
   assert.match(workflow, /\n  workflow_dispatch:\n/);
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.doesNotMatch(
