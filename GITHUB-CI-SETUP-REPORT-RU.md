@@ -17,7 +17,7 @@ Origin был настроен на прежний URL проекта-плейс
 - `d25bda5` — добавлены проверки контракта CI.
 - `203794a` — trigger push ограничен ветками.
 
-Полный HEAD: `203794a0806c6170a9bb4b7d4a8dc6e8a5f9d369`.
+Полный HEAD реализации workflow: `203794a0806c6170a9bb4b7d4a8dc6e8a5f9d369`. Последующие commits обновили только отчёт: `5a9863f` зафиксировал создание PR и hosted результат, `03a8d55` уточнил причину блокировки. На момент заключительной локальной проверки HEAD ветки и `origin/ci/github-actions-setup` совпадал: `03a8d5554bf895e8c762883a50fca1fb0697450a`; рабочее дерево чистое.
 
 В tracked дереве не обнаружены `.env`, дампы базы или вложенный snapshot проекта. Локальный `.env.local` остаётся вне Git; его значения не читались. Новые отчёты прошли целевой поиск распространённых маркеров секретов (совпадений не найдено); это проверка формата, а не универсальное доказательство отсутствия всех типов чувствительных данных.
 
@@ -70,7 +70,7 @@ GitHub Actions ранее создал workflow run `41070069701` для `main` 
 
 ## 5. Hosted GitHub CI
 
-Ветка отправлена в origin без force push. Открыт черновой PR [#1](https://github.com/MiolesBlues/progress-tracker/pull/1) из `ci/github-actions-setup` в `main`; автоматического merge не было. GitHub подтвердил base SHA `2bddc62fe82f6672a9ab1b15c671bc196911d90d` и head SHA на момент открытия `5a9863fbb01375728c4dba21583008c6600f9cc9`.\n\nДля этого head GitHub создал run [41135368845](https://github.com/MiolesBlues/progress-tracker/actions/runs/41135368845), завершившийся `startup_failure`; список jobs пуст. PR diagnostics также возвращают `checks: []`, `statuses: []`, `jobs: []`. Hosted CI: **FAIL/BLOCKED**, обязательные jobs фактически не исполнились, поэтому локальные результаты не являются hosted CI PASS. Запуск на исходном `main` SHA ранее имел такой же результат. Доступных данных недостаточно, чтобы точно установить причину.
+Ветка отправлена в origin без force push. Открыт черновой PR [#1](https://github.com/MiolesBlues/progress-tracker/pull/1) из `ci/github-actions-setup` в `main`; автоматического merge не было. GitHub подтвердил base SHA `2bddc62fe82f6672a9ab1b15c671bc196911d90d` и head SHA на момент открытия `5a9863fbb01375728c4dba21583008c6600f9cc9`.\n\nДля этого head GitHub создал run [41135368845](https://github.com/MiolesBlues/progress-tracker/actions/runs/41135368845), завершившийся `startup_failure`; список jobs пуст. PR diagnostics также возвращают `checks: []`, `statuses: []`, `jobs: []`. Hosted CI: **FAIL/BLOCKED**, обязательные jobs фактически не исполнились, поэтому локальные результаты не являются hosted CI PASS. Запуск на исходном `main` SHA ранее имел такой же результат. Доступных данных недостаточно, чтобы точно установить причину. Повторная проверка PR diagnostics на финальном SHA `03a8d5554bf895e8c762883a50fca1fb0697450a` вернула пустые `checks/statuses/jobs`; для него подтверждённого hosted PASS нет.
 
 ## 6. Внешний deployment и merge gate
 
