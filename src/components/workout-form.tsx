@@ -135,7 +135,7 @@ function LegacyRetry({
         aria-label={t("Дата и тренировочный день")}
       >
         <div className="flex min-w-0 flex-col gap-1">
-          <label htmlFor="legacy-retry-date" className="block text-xs font-medium">
+          <label htmlFor="legacy-retry-date" className="block max-sm:min-h-8 text-xs font-medium">
             {t("Дата")}
           </label>
           <div className="relative min-w-0">
@@ -665,7 +665,7 @@ function PerSetWorkoutForm({
             aria-label={t("Дата и тренировочный день")}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <label htmlFor="date" className="block text-xs font-medium">
+              <label htmlFor="date" className="block max-sm:min-h-8 text-xs font-medium">
                 {t("Дата")}
               </label>
               <div className="relative min-w-0">
