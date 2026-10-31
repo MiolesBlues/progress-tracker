@@ -159,6 +159,14 @@ jobs:
       - name: Install frozen dependencies
         run: bun install --frozen-lockfile
 
+      - name: Build production assets required by CSS E2E assertions
+        run: bun run build
+
+      - name: Verify production stylesheet is available to E2E tests
+        run: |
+          test -d .output/public/assets
+          test -n "$(find .output/public/assets -maxdepth 1 -type f -name 'styles-*.css' -print -quit)"
+
       - name: Install pinned Playwright browsers
         run: bunx --no-install playwright install --with-deps chromium webkit
 

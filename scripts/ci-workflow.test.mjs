@@ -76,3 +76,13 @@ test("GitHub Actions expressions have balanced delimiters", () => {
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
 });
+
+test("browser E2E builds and verifies production CSS before running the CSS assertions", () => {
+  const browserJob = workflow.split(/\n  browser-e2e:\n/)[1];
+  assert.ok(browserJob, "Missing browser-e2e job");
+  const build = browserJob.indexOf("Build production assets required by CSS E2E assertions");
+  const verifyCss = browserJob.indexOf("Verify production stylesheet is available to E2E tests");
+  const playwright = browserJob.indexOf("Playwright E2E against local mock backend");
+  assert.ok(build >= 0 && build < verifyCss && verifyCss < playwright);
+  assert.match(browserJob, /find \.output\/public\/assets[^\n]*-name 'styles-\*\.css'/);
+});
