@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
+const playwrightConfig = readFileSync("playwright.config.ts", "utf8");
 
 test("quality workflow runs on main PRs, all pushes and manual dispatch with read-only permissions", () => {
   assert.match(workflow, /pull_request:\n\s+branches: \[main\]/);
@@ -15,6 +16,12 @@ test("quality workflow runs on main PRs, all pushes and manual dispatch with rea
   );
   assert.match(workflow, /runs-on: ubuntu-24\.04/g);
   assert.match(workflow, /cancel-in-progress: true/);
+  assert.match(
+    workflow,
+    /github\.event\.pull_request\.head\.repo\.full_name \|\| github\.repository/,
+  );
+  assert.match(workflow, /github\.event\.pull_request\.head\.ref \|\| github\.ref_name/);
+  assert.doesNotMatch(workflow, /github\.event\.pull_request\.number \|\| github\.ref/);
 });
 
 test("all external actions are pinned to full commit SHAs with reviewed release labels", () => {
@@ -65,10 +72,24 @@ test("workflow invokes required local checks and contains no hosted mutation or 
     workflow,
     /wrangler\s+deploy|drizzle-kit\s+push|supabase\s+db\s+(?:push|reset|seed)|preflight:release|lovable[^\n]*(?:deploy|publish)/i,
   );
-  assert.match(workflow, /if: failure\(\)/);
+  assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /actions\/upload-artifact@[a-f0-9]{40}/);
   assert.match(workflow, /retention-days: 7/);
+  assert.match(workflow, /playwright-report\//);
+  assert.match(workflow, /test-results\//);
+  assert.match(workflow, /if-no-files-found: warn/);
+  assert.doesNotMatch(workflow, /continue-on-error:\s*true/);
   assert.match(workflow, /github\.event_name != 'pull_request'/);
+});
+
+test("Playwright retains traces, screenshots and video on failure and always emits HTML", () => {
+  assert.match(
+    playwrightConfig,
+    /\["html", \{ outputFolder: "playwright-report", open: "never" \}\]/,
+  );
+  assert.match(playwrightConfig, /trace: "retain-on-failure"/);
+  assert.match(playwrightConfig, /screenshot: "only-on-failure"/);
+  assert.match(playwrightConfig, /video: "retain-on-failure"/);
 });
 
 test("GitHub Actions expressions have balanced delimiters", () => {

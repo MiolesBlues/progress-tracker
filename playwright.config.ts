@@ -11,7 +11,7 @@ export default defineConfig({
   workers: 1,
   reporter: [
     ["list"],
-    ["html", { open: "never" }],
+    ["html", { outputFolder: "playwright-report", open: "never" }],
     ["json", { outputFile: "test-results/results.json" }],
   ],
   use: {
@@ -20,6 +20,7 @@ export default defineConfig({
     navigationTimeout: 30_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    video: "retain-on-failure",
     hasTouch: true,
     viewport: { width: 390, height: 844 },
   },
