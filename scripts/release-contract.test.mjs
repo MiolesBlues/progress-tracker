@@ -207,15 +207,14 @@ test("release preflight rejects the wrong project URL before opening a connectio
           ...process.env,
           SUPABASE_ENVIRONMENT: "staging",
           SUPABASE_PROJECT_REF: "fdzcwhzszbmpxyawrzzf",
-          RELEASE_DATABASE_URL:
-            "postgresql://postgres:do-not-print@db.szdmzvsenrnjxgjgregf.supabase.co/postgres",
+          RELEASE_DATABASE_URL: "postgresql://test-user:synthetic-only@database.invalid/test",
         },
       }),
     (error) => {
       const output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
       return (
         output.includes("does not identify SUPABASE_PROJECT_REF") &&
-        !output.includes("do-not-print")
+        !output.includes("synthetic-only")
       );
     },
   );
