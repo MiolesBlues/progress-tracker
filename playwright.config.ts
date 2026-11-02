@@ -7,13 +7,17 @@ export default defineConfig({
   forbidOnly: !!process.env["CI"],
   retries: 0,
   expect: { timeout: 10_000 },
-  fullyParallel: false,
+  // Each test gets an isolated Playwright context and its own mock backend state.
+  // This lets the four CI shards balance individual tests instead of whole files.
+  fullyParallel: true,
   workers: 1,
-  reporter: [
-    ["list"],
-    ["html", { outputFolder: "playwright-report", open: "never" }],
-    ["json", { outputFile: "test-results/results.json" }],
-  ],
+  reporter: process.env["CI"]
+    ? [["blob"], ["list"]]
+    : [
+        ["list"],
+        ["html", { outputFolder: "playwright-report", open: "never" }],
+        ["json", { outputFile: "test-results/results.json" }],
+      ],
   use: {
     baseURL: "http://127.0.0.1:4173",
     actionTimeout: 10_000,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { routeCIEvent } from "./ci-event-router.mjs";
@@ -108,13 +109,12 @@ test("router runs PR/manual events, skips duplicate pushes, and fails open safel
   );
 });
 
-test("five stable checks have independent runners and only depend on the event router", () => {
+test("four quick checks remain independent and sharded Playwright keeps one stable aggregation check", () => {
   for (const [id, name] of [
     ["code-quality", "Code Quality"],
     ["unit-tests", "Unit Tests"],
     ["database-contracts", "Database & Contracts"],
     ["build-security", "Build & Security"],
-    ["browser-e2e", "Playwright Chromium and WebKit"],
   ]) {
     const job = jobs[id];
     assert.ok(job, `Missing job ${id}`);
@@ -123,25 +123,32 @@ test("five stable checks have independent runners and only depend on the event r
     assert.match(job, /if: needs\.route\.outputs\.run_ci == 'true'/);
     assert.match(job, /runs-on: ubuntu-24\.04/);
   }
+  assert.ok(jobs["playwright-shards"]);
+  assert.match(jobs["playwright-shards"], /name: Playwright Shard \$\{\{ matrix\.shard \}\}\/4/);
+  assert.match(jobs["playwright-shards"], /fail-fast: false/);
+  assert.match(jobs["playwright-shards"], /shard: \[1, 2, 3, 4\]/);
+  assert.match(jobs["playwright-aggregate"], /name: Playwright Chromium and WebKit/);
+  assert.match(jobs["playwright-aggregate"], /needs: \[route, playwright-shards\]/);
+  assert.match(jobs["playwright-aggregate"], /always\(\)/);
+  assert.match(jobs["playwright-aggregate"], /needs\.route\.outputs\.run_ci == 'true'/);
+  assert.match(jobs["playwright-aggregate"], /needs\.route\.result != 'success'/);
+  assert.match(jobs["playwright-aggregate"], /needs\.playwright-shards\.result/);
   assert.equal((workflow.match(/name: Code Quality/g) ?? []).length, 1);
   assert.equal((workflow.match(/name: Unit Tests/g) ?? []).length, 1);
   assert.equal((workflow.match(/name: Database & Contracts/g) ?? []).length, 1);
   assert.equal((workflow.match(/name: Build & Security/g) ?? []).length, 1);
   assert.equal((workflow.match(/name: Playwright Chromium and WebKit/g) ?? []).length, 1);
-  assert.doesNotMatch(
-    workflow,
-    /needs:.*(?:code-quality|unit-tests|database-contracts|build-security|browser-e2e)/,
-  );
+  for (const id of ["code-quality", "unit-tests", "database-contracts", "build-security"]) {
+    assert.match(jobs[id], /needs: route/);
+    assert.doesNotMatch(
+      jobs[id],
+      /needs:.*(?:code-quality|unit-tests|database-contracts|build-security|playwright-shards)/,
+    );
+  }
 });
 
 test("each CI job performs an independent frozen install with an isolated Bun cache key", () => {
-  for (const id of [
-    "code-quality",
-    "unit-tests",
-    "database-contracts",
-    "build-security",
-    "browser-e2e",
-  ]) {
+  for (const id of ["code-quality", "unit-tests", "database-contracts", "build-security"]) {
     const job = jobs[id];
     assert.match(job, /bun install --frozen-lockfile/);
     assert.match(job, /actions\/cache\/restore@[a-f0-9]{40}/);
@@ -176,7 +183,6 @@ test("fast jobs cover checks exactly once without dependencies between the five 
       "bun run check:client-bundle",
       "bun run smoke:runtime",
     ],
-    "browser-e2e": ["bun run test:e2e"],
   };
   for (const [jobId, commands] of Object.entries(expectedCommands)) {
     for (const command of commands) {
@@ -218,7 +224,7 @@ test("workflow bun run commands resolve to declared package scripts", () => {
 
 test("all external actions are pinned to full commit SHAs with release labels", () => {
   const uses = [...workflow.matchAll(/^\s+uses:\s+([^\s#]+)\s+#\s+([^\s]+)$/gm)];
-  assert.equal(uses.length, 28);
+  assert.equal(uses.length, 35);
   for (const [, reference, release] of uses) {
     assert.match(reference, /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[a-f0-9]{40}$/);
     assert.match(release, /^v\d+\.\d+\.\d+$/);
@@ -250,17 +256,58 @@ test("Playwright retains failure diagnostics and executes after the production C
   assert.match(playwrightConfig, /trace: "retain-on-failure"/);
   assert.match(playwrightConfig, /screenshot: "only-on-failure"/);
   assert.match(playwrightConfig, /video: "retain-on-failure"/);
-  const browserJob = jobs["browser-e2e"];
+  assert.match(playwrightConfig, /fullyParallel: true/);
+  assert.match(playwrightConfig, /workers: 1/);
+  assert.match(playwrightConfig, /\[\["blob"\], \["list"\]\]/);
+  const browserJob = jobs["playwright-shards"];
   const build = browserJob.indexOf("Build production assets required by CSS E2E assertions");
   const verifyCss = browserJob.indexOf("Verify production stylesheet is available to E2E tests");
   const playwright = browserJob.indexOf("Playwright E2E against local mock backend");
   assert.ok(build >= 0 && build < verifyCss && verifyCss < playwright);
   assert.match(browserJob, /find \.output\/public\/assets[^\n]*-name 'styles-\*\.css'/);
   assert.match(browserJob, /playwright install --with-deps chromium webkit/);
+  assert.match(browserJob, /bun run test:e2e -- --shard=\$\{\{ matrix\.shard \}\}\/4/);
+  assert.match(browserJob, /playwright-blob-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.shard \}\}/);
+  assert.match(
+    browserJob,
+    /playwright-diagnostics-\$\{\{ github\.run_id \}\}-\$\{\{ matrix\.shard \}\}/,
+  );
+  assert.match(jobs["playwright-aggregate"], /actions\/download-artifact@[a-f0-9]{40}/);
+  assert.match(
+    jobs["playwright-aggregate"],
+    /playwright merge-reports --reporter html all-blob-reports/,
+  );
 });
 
 test("GitHub Actions expressions have balanced delimiters", () => {
   const openExpressions = [...workflow.matchAll(/\$\{\{/g)].length;
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
+});
+
+test("Bun forwards Playwright shard arguments and four shards cover each test exactly once", () => {
+  const assignments = new Map();
+  const countsByShard = [];
+  for (let shard = 1; shard <= 4; shard += 1) {
+    const result = spawnSync("bun", ["run", "test:e2e", "--", `--shard=${shard}/4`, "--list"], {
+      encoding: "utf8",
+      env: { ...process.env, CI: "" },
+    });
+    assert.equal(result.status, 0, `Playwright --list failed for shard ${shard}: ${result.stderr}`);
+    const listedTests = result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^\[(?:chromium|webkit)\] › /.test(line));
+    assert.ok(
+      listedTests.length > 0,
+      `Shard ${shard} was empty; Bun may have dropped its CLI arguments`,
+    );
+    countsByShard.push(listedTests.length);
+    for (const testId of listedTests) {
+      assert.equal(assignments.has(testId), false, `Test was assigned more than once: ${testId}`);
+      assignments.set(testId, shard);
+    }
+  }
+  assert.equal(assignments.size, 162);
+  assert.ok(Math.max(...countsByShard) - Math.min(...countsByShard) <= 1);
 });
