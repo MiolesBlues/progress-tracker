@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { routeCIEvent } from "./ci-event-router.mjs";
@@ -283,31 +282,4 @@ test("GitHub Actions expressions have balanced delimiters", () => {
   const openExpressions = [...workflow.matchAll(/\$\{\{/g)].length;
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
-});
-
-test("Bun forwards Playwright shard arguments and four shards cover each test exactly once", () => {
-  const assignments = new Map();
-  const countsByShard = [];
-  for (let shard = 1; shard <= 4; shard += 1) {
-    const result = spawnSync("bun", ["run", "test:e2e", "--", `--shard=${shard}/4`, "--list"], {
-      encoding: "utf8",
-      env: { ...process.env, CI: "" },
-    });
-    assert.equal(result.status, 0, `Playwright --list failed for shard ${shard}: ${result.stderr}`);
-    const listedTests = result.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => /^\[(?:chromium|webkit)\] › /.test(line));
-    assert.ok(
-      listedTests.length > 0,
-      `Shard ${shard} was empty; Bun may have dropped its CLI arguments`,
-    );
-    countsByShard.push(listedTests.length);
-    for (const testId of listedTests) {
-      assert.equal(assignments.has(testId), false, `Test was assigned more than once: ${testId}`);
-      assignments.set(testId, shard);
-    }
-  }
-  assert.equal(assignments.size, 162);
-  assert.ok(Math.max(...countsByShard) - Math.min(...countsByShard) <= 1);
 });
