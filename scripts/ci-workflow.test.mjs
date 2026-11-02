@@ -51,6 +51,7 @@ test("concurrency isolates PRs, branches and manual runs while superseding stale
 
 test("push router avoids duplicate PR runs and fails open if GitHub lookup fails", () => {
   assert.match(workflow, /name: Route CI event/);
+  assert.match(jobs.route, /uses: actions\/checkout@[a-f0-9]{40}/);
   assert.match(workflow, /outputs:\n      run_ci: \$\{\{ steps\.route\.outputs\.run_ci \}\}/);
   assert.match(workflow, /run: node scripts\/ci-event-router\.mjs/);
   assert.match(router, /url\.searchParams\.set\("head", `\$\{repositoryOwner\}:\$\{refName\}`\)/);
@@ -217,7 +218,7 @@ test("workflow bun run commands resolve to declared package scripts", () => {
 
 test("all external actions are pinned to full commit SHAs with release labels", () => {
   const uses = [...workflow.matchAll(/^\s+uses:\s+([^\s#]+)\s+#\s+([^\s]+)$/gm)];
-  assert.equal(uses.length, 27);
+  assert.equal(uses.length, 28);
   for (const [, reference, release] of uses) {
     assert.match(reference, /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[a-f0-9]{40}$/);
     assert.match(release, /^v\d+\.\d+\.\d+$/);
