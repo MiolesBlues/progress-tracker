@@ -223,7 +223,7 @@ test("workflow bun run commands resolve to declared package scripts", () => {
 
 test("all external actions are pinned to full commit SHAs with release labels", () => {
   const uses = [...workflow.matchAll(/^\s+uses:\s+([^\s#]+)\s+#\s+([^\s]+)$/gm)];
-  assert.equal(uses.length, 35);
+  assert.equal(uses.length, 34);
   for (const [, reference, release] of uses) {
     assert.match(reference, /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[a-f0-9]{40}$/);
     assert.match(release, /^v\d+\.\d+\.\d+$/);
@@ -276,6 +276,8 @@ test("Playwright retains failure diagnostics and executes after the production C
     jobs["playwright-aggregate"],
     /playwright merge-reports --reporter html all-blob-reports/,
   );
+  assert.match(jobs["playwright-aggregate"], /Set up Bun/);
+  assert.doesNotMatch(jobs["playwright-aggregate"], /Set up Node\.js/);
 });
 
 test("GitHub Actions expressions have balanced delimiters", () => {
