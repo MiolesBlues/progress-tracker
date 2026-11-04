@@ -171,6 +171,21 @@ export const english = {
     "The program changed. Reload and try again.",
   "Не удалось сохранить изменения. Проверьте соединение и повторите попытку.":
     "Could not save changes. Check your connection and try again.",
+  "Повторить создание": "Retry creation",
+  "Не удалось сохранить операцию.": "Could not preserve the operation.",
+  "Не удалось восстановить незавершённое создание.": "Could not restore the pending creation.",
+  "Не удалось сохранить операцию на устройстве. Запрос не отправлен.":
+    "Could not save the operation on this device. The request was not sent.",
+  "Предыдущее создание ещё не подтверждено. Повторите его с сохранёнными значениями.":
+    "The previous creation is not confirmed. Retry it with the saved values.",
+  "Идентификатор создания уже занят другими данными. Объект не изменён.":
+    "This creation ID belongs to different data. The object was not changed.",
+  "Идентификатор создания уже занят. Объект не изменён.":
+    "This creation ID is already in use. The object was not changed.",
+  "Результат создания не подтверждён. Повторите попытку.":
+    "The creation result is not confirmed. Retry the operation.",
+  "Сервер отклонил создание. Проверьте данные и доступ.":
+    "The server rejected the creation. Check the values and access.",
   "Не удалось сохранить изменения": "Could not save changes",
   "Выберите активный тренировочный день перед добавлением упражнения.":
     "Choose an active training day before adding an exercise.",
@@ -298,6 +313,27 @@ export const english = {
     "The save is awaiting confirmation. Retry uses the same values; fields are temporarily locked.",
   "Не удалось прочитать черновик. Сохранённые данные не изменены.":
     "Could not read the draft. Saved data was not changed.",
+  "Не удалось прочитать черновик подходов. Сохранённые данные не изменены.":
+    "Could not read the set draft. Saved data was not changed.",
+  "Не удалось восстановить черновик. Сохранённые данные не изменены.":
+    "Could not restore the draft. Saved data was not changed.",
+  "Не удалось восстановить черновик подходов. Данные не изменены.":
+    "Could not restore the set draft. Data was not changed.",
+  "Дата черновика не совпадает.": "The draft date does not match.",
+  "Повреждена сохранённая операция. Данные не изменены.":
+    "The saved operation is damaged. Data was not changed.",
+  "Операция относится к другому упражнению.": "The operation belongs to a different exercise.",
+  "Данные операции не совпадают с черновиком.": "The operation data does not match the draft.",
+  "Повреждена сохранённая операция подходов. Данные не изменены.":
+    "The saved set operation is damaged. Data was not changed.",
+  "Операция подходов относится к другому упражнению.":
+    "The set operation belongs to a different exercise.",
+  "Данные операции подходов не совпадают с черновиком.":
+    "The set operation does not match the draft.",
+  "Повреждён один из подходов черновика. Данные не изменены.":
+    "One of the draft sets is damaged. Data was not changed.",
+  "В черновике Focus Mode поврежден список подтверждённых подходов.":
+    "The Focus Mode draft contains a damaged confirmed-set list.",
   "Не удалось прочитать черновик выбранной даты. Сохранённые данные не изменены.":
     "Could not read the draft for this date. Saved data was not changed.",
   "Не удалось сохранить операцию на устройстве. Запрос не отправлен; проверьте доступ к хранилищу.":
@@ -382,6 +418,8 @@ export const english = {
   Пароль: "Password",
   "Подтвердите пароль": "Confirm password",
   "Пароли не совпадают": "Passwords do not match",
+  "Этот пароль найден в известных утечках. Выберите другой пароль.":
+    "This password appears in known data breaches. Choose a different password.",
   "Показать пароль": "Show password",
   "Скрыть пароль": "Hide password",
   "Показать подтверждение пароля": "Show password confirmation",
@@ -454,6 +492,16 @@ export const english = {
     "RIR is missing from one entry; effort cannot be fully compared.",
   "Не удалось загрузить историю тренировок. Расчёты недоступны до полной загрузки.":
     "Could not load workout history. Calculations are unavailable until it finishes loading.",
+  "Подход больше недоступен. История обновлена; проверьте запись.":
+    "This set is no longer available. History was refreshed; check the entry.",
+  "Операция конфликтует с уже сохранёнными значениями.":
+    "This operation conflicts with values already saved.",
+  "Изменение отклонено. Проверьте значения и доступность записи.":
+    "The change was rejected. Check the values and whether the entry is available.",
+  "Результат изменения не подтверждён. Повторите ту же операцию.":
+    "The change was not confirmed. Retry the same operation.",
+  "Результат изменения подходов не подтверждён. Повторите ту же операцию.":
+    "The set change was not confirmed. Retry the same operation.",
   "В истории есть некорректные старые результаты. Расчёты остановлены; данные требуют отдельной проверки.":
     "Older history contains invalid results. Calculations have stopped; these entries need review.",
   "За день: максимальный вес; повторения и объём суммируются. Будущие записи исключены.":
@@ -480,7 +528,6 @@ export function translate(
 }
 
 export function translateKnown(language: Language, message: string) {
-  if (language === "ru") return message;
   if (Object.prototype.hasOwnProperty.call(english, message))
     return translate(language, message as TranslationKey);
   const patterns: [RegExp, TranslationKey, (parts: RegExpMatchArray) => Record<string, string>][] =
@@ -530,7 +577,9 @@ export function translateKnown(language: Language, message: string) {
     const match = message.match(pattern);
     if (match) return translate(language, key, values(match));
   }
-  return message;
+  return language === "ru"
+    ? "Произошла ошибка. Повторите попытку."
+    : "Something went wrong. Please try again.";
 }
 
 export function readLanguage(userId: string | null): Language {

@@ -135,7 +135,7 @@ function LegacyRetry({
         aria-label={t("Дата и тренировочный день")}
       >
         <div className="flex min-w-0 flex-col gap-1">
-          <label htmlFor="legacy-retry-date" className="block text-xs font-medium">
+          <label htmlFor="legacy-retry-date" className="block max-sm:min-h-8 text-xs font-medium">
             {t("Дата")}
           </label>
           <div className="relative min-w-0">
@@ -465,21 +465,20 @@ function PerSetWorkoutForm({
       });
       void qc.invalidateQueries({ queryKey: userKeys.entries(userId, exercise.id) });
       void qc.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exercise.id) });
-      if (
-        mounted.current &&
-        draftRef.current.id === operation.id &&
-        !onSaved(exercise.id, dayId, operation.payload.performed_on)
-      ) {
-        const next = newPerSetDraft(userId, exercise.id, {
-          date: operation.payload.performed_on,
-          notes: "",
-          sets: operation.payload.sets.map((set) => ({
-            ...set,
-            reps: String(set.reps),
-            rir: set.rir ?? "",
-          })),
-        });
-        commit(next);
+      if (mounted.current && draftRef.current.id === operation.id) {
+        const advanced = onSaved(exercise.id, dayId, operation.payload.performed_on);
+        if (!advanced) {
+          const next = newPerSetDraft(userId, exercise.id, {
+            date: operation.payload.performed_on,
+            notes: "",
+            // A successful save closes this UUID lifecycle. Keep the entered values,
+            // but never reuse the persisted entry or set identifiers in the next draft.
+            sets: operation.payload.sets.map((set, index) =>
+              newSet(index + 1, String(set.weight), String(set.reps), set.rir ?? ""),
+            ),
+          });
+          commit(next);
+        }
       }
     } catch (reason) {
       if (!mounted.current || !isCurrent()) return;
@@ -666,7 +665,7 @@ function PerSetWorkoutForm({
             aria-label={t("Дата и тренировочный день")}
           >
             <div className="flex min-w-0 flex-col gap-1">
-              <label htmlFor="date" className="block text-xs font-medium">
+              <label htmlFor="date" className="block max-sm:min-h-8 text-xs font-medium">
                 {t("Дата")}
               </label>
               <div className="relative min-w-0">

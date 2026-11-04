@@ -68,6 +68,39 @@ it("a late acknowledgement cannot remove a newer draft of the same exercise", ()
   removeSavedDraft("A", "ex", old.id, old.fields.date);
   expect(readDraft("A", "ex")?.fields.notes).toBe("Новая тренировка");
 });
+it("isolates V2 drafts by tab and a save acknowledgement cannot erase another tab's edits", () => {
+  const first = newPerSetDraft("A", "ex", setFields);
+  first.dirty.sets = true;
+  first.operation = { id: first.id, payload: validatePerSetWorkout(first.fields, "ex", "day") };
+  writePerSetDraft(first);
+  const firstTab = sessionStorage.getItem("workout:draft:tab-id");
+  sessionStorage.setItem("workout:draft:tab-id", "second-tab");
+  const second = newPerSetDraft("A", "ex", { ...setFields, notes: "Вкладка два" });
+  second.dirty.notes = true;
+  writePerSetDraft(second);
+
+  sessionStorage.setItem("workout:draft:tab-id", firstTab!);
+  removeSavedPerSetDraft("A", "ex", first.id, first.fields.date);
+  expect(readPerSetDraft("A", "ex")).toBeNull();
+  sessionStorage.setItem("workout:draft:tab-id", "second-tab");
+  expect(readPerSetDraft("A", "ex")?.id).toBe(second.id);
+});
+it("forks a mutable legacy V2 draft into independent per-tab entry and set IDs", () => {
+  const legacy = newPerSetDraft("A", "ex", setFields);
+  legacy.dirty.sets = true;
+  localStorage.setItem(perSetDraftKey("A", "ex"), JSON.stringify(legacy));
+  sessionStorage.setItem("workout:draft:tab-id", "tab-one");
+  const first = readPerSetDraft("A", "ex")!;
+  sessionStorage.setItem("workout:draft:tab-id", "tab-two");
+  const second = readPerSetDraft("A", "ex")!;
+  expect(first.id).not.toBe(legacy.id);
+  expect(second.id).not.toBe(first.id);
+  expect(first.fields.sets.map((set) => set.id)).not.toEqual(legacy.fields.sets.map((s) => s.id));
+  expect(second.fields.sets.map((set) => set.id)).not.toEqual(
+    first.fields.sets.map((set) => set.id),
+  );
+  expect(localStorage.getItem(perSetDraftKey("A", "ex"))).toBe(JSON.stringify(legacy));
+});
 it("rejects a foreign-owner draft even if it is placed under the current user's key", () => {
   const raw = JSON.stringify(newDraft("B", "ex", fields));
   localStorage.setItem(draftKey("A", "ex"), raw);

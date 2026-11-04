@@ -1,0 +1,29 @@
+name: Read-only Supabase schema gate
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Supabase project to inspect
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+permissions:
+  contents: read
+jobs:
+  schema-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_ENVIRONMENT: ${{ inputs.environment }}
+      SUPABASE_PROJECT_REF: ${{ inputs.environment == 'production' && 'szdmzvsenrnjxgjgregf' || 'fdzcwhzszbmpxyawrzzf' }}
+      RELEASE_DATABASE_URL: ${{ inputs.environment == 'production' && secrets.PRODUCTION_SUPABASE_DATABASE_URL || secrets.STAGING_SUPABASE_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Inspect target schema in a read-only transaction
+        run: bun run preflight:release

@@ -180,7 +180,9 @@ export function WorkoutPage() {
     <div className={focusMode ? "min-w-0 space-y-2" : "flex min-w-0 flex-col gap-1"}>
       <label
         id="training-day-label"
-        className={focusMode ? "block text-sm font-medium" : "block text-xs font-medium"}
+        className={
+          focusMode ? "block text-sm font-medium" : "block max-sm:min-h-8 text-xs font-medium"
+        }
       >
         {t("Тренировочный день")}
       </label>

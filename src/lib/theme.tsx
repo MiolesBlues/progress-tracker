@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 export type ThemeMode = "system" | "light" | "dark";
 const STORAGE_KEY = "app:theme:v1";
 const MEDIA_QUERY = "(prefers-color-scheme: dark)";
+export const themePrepaintScript = `(function(){var m="system";try{m=localStorage.getItem("app:theme:v1")||"system"}catch(e){}var d=m==="dark"||(m==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.dataset.theme=d?"dark":"light";r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light"})()`;
 
 function readThemeMode(): ThemeMode {
   if (typeof window === "undefined") return "system";

@@ -83,4 +83,7 @@ it("confirms successful signOut and uses Russian error messages", async () => {
     /Не удалось войти через Google/,
   );
   expect(authMessage(new Error("Invalid login credentials"))).toBe("Неверный email или пароль.");
+  expect(authMessage(new Error("Password has been leaked"))).toBe(
+    "Этот пароль найден в известных утечках. Выберите другой пароль.",
+  );
 });

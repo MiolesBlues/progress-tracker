@@ -1,52 +1,457 @@
 name: Quality checks
+
 on:
   pull_request:
+    branches: [main]
   push:
-    branches: [main, "fix/**"]
+    branches: ["**"]
+  workflow_dispatch:
+
 permissions:
   contents: read
+  pull-requests: read
+
+# Keep event classes isolated. A new push supersedes older pushes to that branch;
+# a PR synchronize supersedes older runs for that PR; manual runs are separate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && format('push-{0}', github.ref) || format('manual-{0}', github.ref) }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  SUPABASE_ENVIRONMENT: test
+  VITE_SUPABASE_ENVIRONMENT: test
+  SUPABASE_URL: https://workout-e2e.invalid
+  VITE_SUPABASE_URL: https://workout-e2e.invalid
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_only
+  VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_only
+  SUPABASE_SERVICE_ROLE_KEY: ""
+  SUPABASE_PROJECT_REF: ""
+  VITE_SUPABASE_PROJECT_REF: ""
+  SUPABASE_PROJECT_ID: ""
+  VITE_SUPABASE_PROJECT_ID: ""
+  ALLOW_STAGING_DEV: "false"
+  RELEASE_DATABASE_URL: ""
+
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CI: "true"
-      VITE_SUPABASE_URL: https://workout-e2e.invalid
-      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_only
-      SUPABASE_URL: https://workout-e2e.invalid
-      SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_test_only
-      SUPABASE_SERVICE_ROLE_KEY: ""
+  route:
+    name: Route CI event
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_ci: ${{ steps.route.outputs.run_ci }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24"
-      - uses: oven-sh/setup-bun@v2
+          node-version: 24.14.0
+
+      - name: Select the canonical run for this event
+        id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF_NAME: ${{ github.ref_name }}
+        run: node scripts/ci-event-router.mjs
+
+  code-quality:
+    name: Code Quality
+    needs: route
+    if: needs.route.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.14.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.3"
-      - name: Reject manifest, lockfile or generator drift before install
+
+      - name: Restore Bun package cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-code-quality
+          restore-keys: |
+            ${{ runner.os }}-bun-1.4.3-
+
+      - name: Reject local environment and database artifacts
+        run: |
+          if [[ -e .env || -e .env.local ]]; then
+            echo "Local environment files must not be present in CI workspace" >&2
+            exit 1
+          fi
+          tracked_env="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -Ev '(^|/)\.env\.example$' || true)"
+          if [[ -n "$tracked_env" ]]; then
+            echo "Tracked environment files are forbidden in CI" >&2
+            exit 1
+          fi
+          tracked_data="$(git ls-files | grep -Ei '(^|/)(pgdata|database-data)(/|$)|\.(dump|backup|pgdump)$' || true)"
+          if [[ -n "$tracked_data" ]]; then
+            echo "Tracked database artifacts are forbidden in CI" >&2
+            exit 1
+          fi
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Preserve committed dependency files and whitespace integrity
+        run: |
+          git diff --exit-code -- package.json bun.lock
+          git diff --check
+
+      - name: Save Bun package cache for trusted branch runs
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-code-quality
+
+      - name: TypeScript
+        run: bun run typecheck
+
+      - name: ESLint
+        run: bun run lint
+
+      - name: Prettier
+        run: bun run format:check
+
+  unit-tests:
+    name: Unit Tests
+    needs: route
+    if: needs.route.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.14.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Restore Bun package cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-unit-tests
+          restore-keys: |
+            ${{ runner.os }}-bun-1.4.3-
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Save Bun package cache for trusted branch runs
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-unit-tests
+
+      - name: Vitest
+        run: bun run test
+
+  database-contracts:
+    name: Database & Contracts
+    needs: route
+    if: needs.route.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.14.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Restore Bun package cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-database-contracts
+          restore-keys: |
+            ${{ runner.os }}-bun-1.4.3-
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Save Bun package cache for trusted branch runs
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-database-contracts
+
+      - name: SQL and PGlite tests
+        run: bun run test:db
+
+      - name: Toolchain and release contracts
+        run: bun run test:toolchain
+
+      - name: Local schema capability contract
+        run: bun run preflight:schema-contract
+
+  build-security:
+    name: Build & Security
+    needs: route
+    if: needs.route.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.14.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Restore Bun package cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-build-security
+          restore-keys: |
+            ${{ runner.os }}-bun-1.4.3-
+
+      - name: Reject local environment and database artifacts
+        run: |
+          if [[ -e .env || -e .env.local ]]; then
+            echo "Local environment files must not be present in CI workspace" >&2
+            exit 1
+          fi
+          tracked_env="$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -Ev '(^|/)\.env\.example$' || true)"
+          if [[ -n "$tracked_env" ]]; then
+            echo "Tracked environment files are forbidden in CI" >&2
+            exit 1
+          fi
+          tracked_data="$(git ls-files | grep -Ei '(^|/)(pgdata|database-data)(/|$)|\.(dump|backup|pgdump)$' || true)"
+          if [[ -n "$tracked_data" ]]; then
+            echo "Tracked database artifacts are forbidden in CI" >&2
+            exit 1
+          fi
+
+      - name: Dependency contract
         run: bun run check:dependencies
-      - name: Clean frozen install (Bun 1.4.3)
-        run: bun install --frozen-lockfile --ignore-scripts
-      - name: Installation must preserve committed dependency files
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Preserve committed dependency files
         run: git diff --exit-code -- package.json bun.lock
-      - run: bun run typecheck
-      - run: bun run lint
-      - run: bun run format:check
-      - run: bun run test
-      - run: bun run test:db
-      - run: bun run test:toolchain
-      - run: bun run build
-      - run: bun run audit
+
+      - name: Save Bun package cache for trusted branch runs
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-build-security
+
+      - name: Dependency audit
+        run: bun audit
+
+      - name: Production build with synthetic environment
+        run: bun run build
+
+      - name: Client bundle secret scan
+        run: bun run check:client-bundle
+
+      - name: Cloudflare Worker runtime smoke
+        run: bun run smoke:runtime
+
+  playwright-shards:
+    name: Playwright Shard ${{ matrix.shard }}/4
+    needs: route
+    if: needs.route.outputs.run_ci == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.14.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Restore Bun package cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-playwright
+          restore-keys: |
+            ${{ runner.os }}-bun-1.4.3-
+
+      - name: Reject local environment files
+        run: |
+          if [[ -e .env || -e .env.local ]]; then
+            echo "Local environment files must not be present in CI workspace" >&2
+            exit 1
+          fi
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build production assets required by CSS E2E assertions
+        run: bun run build
+
+      - name: Verify production stylesheet is available to E2E tests
+        run: |
+          test -d .output/public/assets
+          test -n "$(find .output/public/assets -maxdepth 1 -type f -name 'styles-*.css' -print -quit)"
+
       - name: Install pinned Playwright browsers
         run: bunx --no-install playwright install --with-deps chromium webkit
-      - name: Release E2E (mock API, Chromium and WebKit)
-        run: bun run test:e2e
-      - uses: actions/upload-artifact@v4
-        if: always()
+
+      - name: Initialize shard result
+        run: |
+          mkdir -p shard-result
+          printf 'shard=%s status=not-started\n' '${{ matrix.shard }}' > shard-result/result.txt
+
+      - name: Playwright E2E against local mock backend
+        id: e2e
+        run: |
+          started_at="$(date +%s)"
+          set +e
+          bun run test:e2e -- --shard=${{ matrix.shard }}/4
+          test_status=$?
+          set -e
+          finished_at="$(date +%s)"
+          duration_seconds=$((finished_at - started_at))
+          if [[ "$test_status" -eq 0 ]]; then result_status=success; else result_status=failure; fi
+          printf 'shard=%s status=%s duration_seconds=%s\n' '${{ matrix.shard }}' "$result_status" "$duration_seconds" > shard-result/result.txt
+          exit "$test_status"
+
+      - name: Save Bun package cache for trusted branch runs
+        if: success() && github.event_name != 'pull_request'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          name: browser-test-results
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-1.4.3-${{ hashFiles('bun.lock') }}-playwright
+
+      - name: Upload shard blob report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: playwright-blob-${{ github.run_id }}-${{ matrix.shard }}
+          path: blob-report/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload shard diagnostics and timing
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: playwright-diagnostics-${{ github.run_id }}-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
+            shard-result/
+          if-no-files-found: warn
+          retention-days: 7
+
+  playwright-aggregate:
+    name: Playwright Chromium and WebKit
+    needs: [route, playwright-shards]
+    # A duplicate push intentionally skips E2E; a router failure must still fail this stable check.
+    if: ${{ always() && (needs.route.outputs.run_ci == 'true' || needs.route.result != 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install frozen dependencies for report merge
+        run: bun install --frozen-lockfile
+
+      - name: Verify event router and all four shards succeeded
+        env:
+          ROUTE_RESULT: ${{ needs.route.result }}
+          RUN_CI: ${{ needs.route.outputs.run_ci }}
+          SHARDS_RESULT: ${{ needs.playwright-shards.result }}
+        run: |
+          if [[ "$ROUTE_RESULT" != "success" || "$RUN_CI" != "true" ]]; then
+            echo "CI routing failed or did not authorize E2E" >&2
+            exit 1
+          fi
+          if [[ "$SHARDS_RESULT" != "success" ]]; then
+            echo "At least one Playwright shard failed, was cancelled, or was skipped" >&2
+            exit 1
+          fi
+
+      - name: Download all shard blob reports
+        uses: actions/download-artifact@0d2ec9d4cbcefe257d822f108de2a1f15f8da9f6 # v7.0.0
+        with:
+          pattern: playwright-blob-${{ github.run_id }}-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Download and verify four shard timing records
+        uses: actions/download-artifact@0d2ec9d4cbcefe257d822f108de2a1f15f8da9f6 # v7.0.0
+        with:
+          pattern: playwright-diagnostics-${{ github.run_id }}-*
+          path: shard-diagnostics
+
+      - name: Verify all shard records and merge HTML report
+        run: |
+          set -euo pipefail
+          for shard in 1 2 3 4; do
+            result_file="shard-diagnostics/playwright-diagnostics-${GITHUB_RUN_ID}-${shard}/shard-result/result.txt"
+            test -s "$result_file"
+            grep -qx "shard=${shard} status=success duration_seconds=[0-9][0-9]*" "$result_file"
+          done
+          test "$(find all-blob-reports -maxdepth 1 -type f -name '*.zip' | wc -l)" -eq 4
+          bunx --no-install playwright merge-reports --reporter html all-blob-reports
+
+      - name: Upload unified Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          if-no-files-found: warn
           retention-days: 7

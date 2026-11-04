@@ -82,5 +82,10 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
     [8, 7, 6],
   ]);
   expect(new Set(entries.map((row) => row.id)).size).toBe(3);
+  const savedSets = backend.rows["workout_entry_sets"]!.filter((row) =>
+    entries.some((entry) => entry.id === row["workout_entry_id"]),
+  );
+  expect(savedSets).toHaveLength(9);
+  expect(new Set(savedSets.map((row) => row.id)).size).toBe(9);
   expect(new Set(backend.saveCalls).size).toBe(3);
 });

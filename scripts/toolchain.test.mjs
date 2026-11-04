@@ -20,15 +20,30 @@ test("Bun version, manifest and frozen lockfile retain the scoped security overr
     ),
   );
   assert.equal(lock.lockfileVersion, 3);
-  assert.deepEqual(lock.overrides, manifest.overrides);
+  const normalizedOverrides = { ...lock.overrides };
+  for (const [name, expected] of Object.entries(manifest.overrides)) {
+    const actual = normalizedOverrides[name];
+    if (
+      typeof expected === "string" &&
+      actual !== null &&
+      typeof actual === "object" &&
+      Object.keys(actual).length === 1 &&
+      typeof actual["."] === "string"
+    )
+      normalizedOverrides[name] = actual["."];
+  }
+  assert.deepEqual(normalizedOverrides, manifest.overrides);
+  assert.equal(lock.overrides["undici@^7"]["."], "7.30.1");
   assert.equal(lock.overrides["@esbuild-kit/core-utils"].esbuild, "0.25.12");
   assert.equal(lock.overrides.esbuild, undefined); // No global override on Vite/tsx's newer esbuild.
   assert.equal(lock.packages["@esbuild-kit/core-utils/esbuild"][0], "esbuild@0.25.12");
   const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
   assert.ok(workflow.includes(`bun-version: "${version}"`));
+  const buildSecurity = workflow.split("  build-security:\n")[1]?.split("\n  browser-e2e:\n")[0];
+  assert.ok(buildSecurity, "Missing Build & Security job");
   assert.ok(
-    workflow.indexOf("bun run check:dependencies") <
-      workflow.indexOf("bun install --frozen-lockfile"),
+    buildSecurity.indexOf("bun run check:dependencies") <
+      buildSecurity.indexOf("bun install --frozen-lockfile"),
   );
   assert.ok(workflow.includes("git diff --exit-code -- package.json bun.lock"));
 });

@@ -186,6 +186,66 @@ test("backfill preserves legacy entry rows and creates ordered working sets with
   );
 });
 
+test("V4 replay refuses a second application without changing legacy or set rows", async () => {
+  const beforeEntries = await rows(
+    "SELECT to_jsonb(w)::text AS row FROM workout_entries w ORDER BY id",
+  );
+  const beforeSetCount = (await rows("SELECT count(*)::int AS n FROM workout_entry_sets"))[0].n;
+  await assert.rejects(
+    db.exec(file("drizzle/migrations/20261016204330_per_set_workout_v4.sql")),
+    /already exists|duplicate_object/i,
+  );
+  await db.exec("ROLLBACK");
+  assert.deepEqual(
+    await rows("SELECT to_jsonb(w)::text AS row FROM workout_entries w ORDER BY id"),
+    beforeEntries,
+  );
+  assert.equal(
+    (await rows("SELECT count(*)::int AS n FROM workout_entry_sets"))[0].n,
+    beforeSetCount,
+  );
+});
+
+test("V4 transaction rolls back all its DDL after a simulated partial pre-existing table", async () => {
+  const isolated = new PGlite();
+  try {
+    await isolated.exec(`CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
+      CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
+      CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+      GRANT USAGE ON SCHEMA auth,public TO anon,authenticated,service_role;
+      GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated,service_role;`);
+    for (const name of [
+      "0000_workout_schema",
+      "0001_program_fields_soft_delete_restrict_fk",
+      "0002_personal_program_days",
+      "0003_program_management",
+      "0004_workout_data_integrity",
+      "20261015202500_archived_object_deletion",
+    ])
+      await isolated.exec(file(`drizzle/migrations/${name}.sql`));
+    await isolated.exec("CREATE TABLE public.workout_entry_sets(partial_marker integer)");
+    await assert.rejects(
+      isolated.exec(file("drizzle/migrations/20261016204330_per_set_workout_v4.sql")),
+      /already exists|duplicate_object/i,
+    );
+    await isolated.exec("ROLLBACK");
+    const rolledBack = await isolated.query(`
+      SELECT
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workout_entry_operations' AND column_name='set_snapshot') AS set_snapshot_added,
+        EXISTS(SELECT 1 FROM pg_constraint WHERE conname='workout_entries_id_user_key') AS entry_owner_key_added,
+        to_regprocedure('public.legacy_workout_set_id(uuid,integer)') IS NOT NULL AS helper_added,
+        EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='workout_entry_sets' AND column_name='partial_marker') AS partial_table_preserved`);
+    assert.deepEqual(rolledBack.rows[0], {
+      set_snapshot_added: false,
+      entry_owner_key_added: false,
+      helper_added: false,
+      partial_table_preserved: true,
+    });
+  } finally {
+    await isolated.close();
+  }
+});
+
 test("backfill key is deterministic and replay does not duplicate any legacy set", async () => {
   const before = await rows(
     "SELECT id,workout_entry_id,position FROM workout_entry_sets ORDER BY workout_entry_id,position",

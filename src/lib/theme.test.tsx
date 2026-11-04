@@ -1,6 +1,34 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ThemeProvider, useTheme } from "./theme";
+import { ThemeProvider, themePrepaintScript, useTheme } from "./theme";
+
+it.each([
+  ["dark", true, "dark"],
+  ["light", true, "light"],
+  ["system", true, "dark"],
+  ["system", false, "light"],
+] as const)(
+  "pre-paint theme initializer honors %s and system dark=%s",
+  (saved, systemDark, expected) => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockReturnValue(saved === "system" ? null : saved);
+    vi.stubGlobal("matchMedia", () => ({ matches: systemDark }));
+    new Function(themePrepaintScript)();
+    expect(document.documentElement.dataset["theme"]).toBe(expected);
+    expect(document.documentElement.style.colorScheme).toBe(expected);
+    getItem.mockRestore();
+  },
+);
+
+it("pre-paint initializer still respects the system when localStorage is inaccessible", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new DOMException("blocked", "SecurityError");
+  });
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  new Function(themePrepaintScript)();
+  expect(document.documentElement.dataset["theme"]).toBe("light");
+});
 
 let systemDark = false;
 let listeners: Set<(event: MediaQueryListEvent) => void>;
@@ -41,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

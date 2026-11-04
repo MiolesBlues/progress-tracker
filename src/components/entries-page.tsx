@@ -1,12 +1,19 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ChevronDown, Pencil, X } from "lucide-react";
-import { daysQuery, entriesQuery, lastEntryQuery, programQuery, userKeys } from "@/lib/queries";
+import {
+  daysQuery,
+  entriesPageQuery,
+  entriesQuery,
+  lastEntryQuery,
+  programQuery,
+  userKeys,
+} from "@/lib/queries";
 import { useUserSession } from "@/lib/session";
 import { effectiveSets, toISO, workoutMetrics } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
-import { useI18n, setsCount } from "@/lib/i18n";
+import { useI18n, setsCount, translateKnown } from "@/lib/i18n";
 import { useArchivePreferences } from "@/lib/archive-preferences";
 import { ArrowDownUp, Check } from "lucide-react";
 import {
@@ -190,40 +197,49 @@ function ExerciseEntries({
 }) {
   const { t, number, date, language } = useI18n();
   const today = toISO(new Date());
-  const result = useQuery(entriesQuery(userId, exerciseId, "0001-01-01", today));
   const [period, setPeriod] = useState<Period>(30);
   const [sort, setSort] = useState<Sort>(() => readSortPreference(userId));
   const [page, setPage] = useState(0);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(() => new Set());
+  const since =
+    period === "today" ? today : period === "all" ? "0001-01-01" : daysAgo(period - 1, today);
+  const recentPage = useQuery(entriesPageQuery(userId, exerciseId, since, today, page, PAGE_SIZE));
+  const completeHistory = useQuery(
+    entriesQuery(userId, exerciseId, "0001-01-01", today, sort !== "recent"),
+  );
+  const result = sort === "recent" ? recentPage : completeHistory;
+  const displaySort = sort !== "recent" && completeHistory.data ? sort : "recent";
   if (result.isError)
     return (
       <LoadError onRetry={() => void result.refetch()}>
         {t("Не удалось загрузить записи упражнения.")}
       </LoadError>
     );
-  if (result.isPending) return <Loading>{t("Загрузка записей…")}</Loading>;
+  if (result.isPending && !(sort !== "recent" && recentPage.data))
+    return <Loading>{t("Загрузка записей…")}</Loading>;
 
-  const since =
-    period === "today" ? today : period === "all" ? "0001-01-01" : daysAgo(period - 1, today);
-  const filtered = result.data.filter(
-    (entry) => entry.performed_on >= since && entry.performed_on <= today,
-  );
+  const filtered = displaySort === "recent" ? recentPage.data!.entries : completeHistory.data!;
   const recentOrder = (a: (typeof filtered)[number], b: (typeof filtered)[number]) =>
     b.performed_on.localeCompare(a.performed_on) ||
     b.created_at.localeCompare(a.created_at) ||
     b.id.localeCompare(a.id);
-  const records = [...filtered].sort((a, b) => {
-    if (sort === "weight-desc")
+  const sortedRecords = [...filtered].sort((a, b) => {
+    if (displaySort === "weight-desc")
       return (
         workoutMetrics(b).maxWorkingWeight - workoutMetrics(a).maxWorkingWeight || recentOrder(a, b)
       );
-    if (sort === "weight-asc")
+    if (displaySort === "weight-asc")
       return (
         workoutMetrics(a).maxWorkingWeight - workoutMetrics(b).maxWorkingWeight || recentOrder(a, b)
       );
     return recentOrder(a, b);
   });
-  const pages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const records =
+    displaySort === "recent"
+      ? sortedRecords
+      : sortedRecords.filter((entry) => entry.performed_on >= since && entry.performed_on <= today);
+  const recordCount = displaySort === "recent" ? recentPage.data!.count : records.length;
+  const pages = Math.max(1, Math.ceil(recordCount / PAGE_SIZE));
   const pageIndex = Math.min(page, pages - 1);
 
   return (
@@ -256,7 +272,7 @@ function ExerciseEntries({
         </div>
       </div>
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <h2 className="min-w-0 font-bold">{t("Записи · {count}", { count: records.length })}</h2>
+        <h2 className="min-w-0 font-bold">{t("Записи · {count}", { count: recordCount })}</h2>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -310,7 +326,10 @@ function ExerciseEntries({
         </p>
       ) : (
         <ul className="min-w-0 divide-y divide-border/60">
-          {records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE).map((entry) => (
+          {(displaySort === "recent"
+            ? records
+            : records.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE)
+          ).map((entry) => (
             <li key={entry.id} className="min-w-0 py-1 text-sm">
               <button
                 type="button"
@@ -419,7 +438,7 @@ function HistorySetRow({
   exerciseId: string;
   set: NonNullable<HistoryEntry["sets"]>[number];
 }) {
-  const { t, number } = useI18n();
+  const { t, number, language } = useI18n();
   const { userId, signal, isCurrent } = useUserSession();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -464,8 +483,14 @@ function HistorySetRow({
       void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
       void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
     } catch (reason) {
-      if (isCurrent())
-        setError(reason instanceof Error ? reason.message : "Не удалось изменить подход.");
+      if (isCurrent()) {
+        const message = reason instanceof Error ? reason.message : "Не удалось изменить подход.";
+        setError(translateKnown(language, message));
+        if (reason instanceof Error && /больше недоступен/.test(reason.message)) {
+          void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
+          void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
+        }
+      }
     } finally {
       if (isCurrent()) setSaving(false);
     }

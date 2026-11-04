@@ -91,6 +91,25 @@ test("RPC grants deny anonymous calls and direct table DELETE", async () => {
   });
 });
 
+test("account data orphan preflight detects legacy rows without deleting them", async () => {
+  const preflight = file("scripts/account-data-preflight.sql");
+  const before = await rows(preflight);
+  assert.ok(before.every((row) => Number(row.orphan_rows) === 0));
+  await db.query(
+    "INSERT INTO public.program_days(user_id,name,position) VALUES ($1,'orphan-day',0)",
+    [C],
+  );
+  const detected = await rows(preflight);
+  assert.equal(Number(detected.find((row) => row.table_name === "program_days").orphan_rows), 1);
+  assert.equal(
+    Number(
+      (await rows("SELECT count(*)::int AS n FROM public.program_days WHERE user_id=$1", [C]))[0].n,
+    ),
+    1,
+  );
+  await db.query("DELETE FROM public.program_days WHERE user_id=$1", [C]);
+});
+
 test("archived day deletion keeps exercises and every meaningful history field", async () => {
   await asUser(A, async () => {
     await db.query("SELECT setup_program($1::text[])", [["First", "Second"]]);

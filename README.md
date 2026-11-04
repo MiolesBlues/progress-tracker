@@ -48,7 +48,26 @@ bun run test:e2e
 - [Исправления V2: данные](V2-DATA-INTEGRITY-RU.md), [сборка и E2E](V2-BUILD-AND-E2E-RU.md).
 - [Итоговая готовность V2](RELEASE-READINESS-V2.md), [план настоящей staging-приёмки](docs/STAGING-V2-RU.md).
 - [Первый этап A01–A03](SECURITY-FIXES-RU.md), [второй этап](WORKOUT-DATA-INTEGRITY-RU.md).
+- [Жизненный цикл персональных данных и удаления аккаунта](docs/PHASE4-DATA-LIFECYCLE-RU.md) — текущая схема, read-only orphan preflight и предложенная политика, требующая продуктового решения.
+- [Phase 5A: функциональная целостность и границы производительности](docs/PHASE5A-FUNCTIONAL-INTEGRITY-RU.md).
 
 SQL-файлы `drizzle/migrations/0000…0004` — источник схемы. Перед применением нужны read-only preflight, просмотр старых нарушений, резервная копия и проверенная репетиция. `drizzle-kit push` использовать нельзя: `drizzle/schema.ts` и snapshots не описывают эту схему. Production-миграции требуют отдельного согласования; приложение с новым сохранением требует RPC из 0004 и не использует небезопасный fallback INSERT.
+
+Локальный `.env` не хранится в Git; используйте `.env.example` как безопасный шаблон. Для remote Supabase задавайте одинаковые `SUPABASE_ENVIRONMENT` (server runtime) и `VITE_SUPABASE_ENVIRONMENT` (browser build-time), а также согласованные URL/ref. Runtime contract сверяет browser/server URL и project refs. Production ref запрещён для development всегда. Staging ref разрешён в `bun run dev` только с точным opt-in `ALLOW_STAGING_DEV=true`; без него запуск завершается ошибкой. Opt-in действует только для Vite dev server, не снимает проверки парных refs, известных project refs или защиты от production и не публикуется как `VITE_*`. Для локальной разработки со staging задайте значения текущей PowerShell-сессии:
+
+```powershell
+$env:SUPABASE_ENVIRONMENT = 'development'
+$env:VITE_SUPABASE_ENVIRONMENT = 'development'
+$env:SUPABASE_PROJECT_REF = 'fdzcwhzszbmpxyawrzzf'
+$env:VITE_SUPABASE_PROJECT_REF = 'fdzcwhzszbmpxyawrzzf'
+$env:SUPABASE_PROJECT_ID = 'fdzcwhzszbmpxyawrzzf'
+$env:VITE_SUPABASE_PROJECT_ID = 'fdzcwhzszbmpxyawrzzf'
+$env:SUPABASE_URL = 'https://fdzcwhzszbmpxyawrzzf.supabase.co'
+$env:VITE_SUPABASE_URL = 'https://fdzcwhzszbmpxyawrzzf.supabase.co'
+$env:ALLOW_STAGING_DEV = 'true'
+bun run dev
+```
+
+Publishable keys остаются в `.env`; не добавляйте service-role или другие секреты в `VITE_*`. После работы удалите временный opt-in: `Remove-Item Env:ALLOW_STAGING_DEV`. Vite загружает `.env`, `.env.local`, затем mode-specific `.env.[mode]` и `.env.[mode].local`; значения из процесса ОС имеют наивысший приоритет. `bunfig.toml` отключает Bun auto-load, чтобы он не обходил приоритет Vite. Неизвестные env-значения, неизвестные hosted refs, несовпадения browser/server refs, HTTP remote URL и сторонние хосты отвергаются. В `supabase/config.toml` намеренно нет project ID, чтобы CLI не выбрал hosted project автоматически.
 
 Проект связан с [Lovable](https://lovable.dev/projects/c7efcdd9-ad98-4274-8b6f-fd8abfebd574). Изменения связанной ветки синхронизируются с редактором; не переписывайте опубликованную историю. Merge, push и deploy выполняются только отдельным согласованным действием.

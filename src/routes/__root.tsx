@@ -15,7 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionProvider } from "@/lib/session";
 import { LanguageProvider } from "@/lib/i18n-provider";
-import { ThemeProvider } from "@/lib/theme";
+import { ThemeProvider, themePrepaintScript } from "@/lib/theme";
 import { useI18n } from "@/lib/i18n";
 import { useLocation } from "@tanstack/react-router";
 
@@ -39,7 +39,6 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const { t } = useI18n();
-  console.error(error);
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
@@ -94,8 +93,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themePrepaintScript }} />
         <HeadContent />
       </head>
       <body>

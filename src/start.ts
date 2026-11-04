@@ -11,7 +11,8 @@ const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
     if (error != null && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
-    console.error(error);
+    // Do not serialize request exceptions; errors may contain auth or workout data.
+    void error;
     return errorPageResponse(requestLanguage(request));
   }
 });

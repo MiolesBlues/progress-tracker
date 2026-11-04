@@ -58,6 +58,7 @@
   --primary-text: var(--primary);
   --primary-text-hover: color-mix(in oklab, var(--primary) 90%, transparent);
   --primary-text-active: color-mix(in oklab, var(--primary) 80%, transparent);
+  --nav-active-text: #b6ef55;
   --secondary: oklch(0.24 0.006 260);
   --secondary-foreground: oklch(0.96 0.005 260);
   --muted: oklch(0.24 0.006 260);
@@ -90,6 +91,7 @@
   --primary-text: #1672cd;
   --primary-text-hover: #1672cd;
   --primary-text-active: #1672cd;
+  --nav-active-text: #0b4f8a;
   --secondary: #eff5fc;
   --secondary-foreground: #243a56;
   --muted: #f1f5fa;
@@ -108,7 +110,9 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
+  * {
+    border-color: var(--color-border);
+  }
   html {
     -webkit-tap-highlight-color: transparent;
     overflow-y: scroll;
@@ -119,9 +123,20 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
-  input, select, textarea { font-size: 16px; } /* prevent iOS zoom */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  } /* prevent iOS zoom */
 }
 
-@utility safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem); }
-@utility safe-top { padding-top: calc(env(safe-area-inset-top) + 0.75rem); }
-@utility num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+@utility safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
+}
+@utility safe-top {
+  padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+}
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

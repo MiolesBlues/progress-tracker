@@ -231,6 +231,18 @@ it("starts a new workout with empty results and submits independent set values",
     ],
   });
   expect(new Set((args?.["_sets"] as { id: string }[]).map((set) => set.id)).size).toBe(3);
+  await waitFor(() => {
+    const tabId = sessionStorage.getItem("workout:draft:tab-id");
+    const saved = JSON.parse(
+      localStorage.getItem(`${perSetDraftKey(USER, EXERCISE)}:tab:${tabId}`) ?? "null",
+    ) as { id: string; fields: { sets: { id: string }[] }; operation: unknown } | null;
+    expect(saved).not.toBeNull();
+    expect(saved?.operation).toBeNull();
+    expect(saved?.id).not.toBe(args?.["_id"]);
+    expect(saved?.fields.sets.map((set) => set.id)).not.toEqual(
+      (args?.["_sets"] as { id: string }[]).map((set) => set.id),
+    );
+  });
 });
 
 it("restores saved sets for the selected workout date, without importing an earlier day", async () => {
@@ -244,6 +256,27 @@ it("restores saved sets for the selected workout date, without importing an earl
   expect(screen.getByLabelText("Вес подхода 3")).toHaveValue("40.00");
   expect(screen.getByLabelText("Повторения подхода 3")).toHaveValue("6");
   expect(screen.getByLabelText("RIR подхода 3")).toHaveValue("");
+});
+
+it("creates fresh entry and set UUIDs after saving even when history refresh fails", async () => {
+  fake.state.readErrors["workout_entries"] = "history offline";
+  mount();
+  await screen.findByLabelText("Вес подхода 1");
+  enterThreeSets();
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(fake.state.saveRpc).toHaveBeenCalledOnce());
+  const args = fake.state.saveRpc.mock.calls[0]?.[0];
+  const tabId = sessionStorage.getItem("workout:draft:tab-id");
+  await waitFor(() => {
+    const next = JSON.parse(
+      localStorage.getItem(`${perSetDraftKey(USER, EXERCISE)}:tab:${tabId}`) ?? "null",
+    ) as { id: string; fields: { sets: { id: string }[] }; operation: unknown } | null;
+    expect(next?.operation).toBeNull();
+    expect(next?.id).not.toBe(args?.["_id"]);
+    expect(next?.fields.sets.map((set) => set.id)).not.toEqual(
+      (args?.["_sets"] as { id: string }[]).map((set) => set.id),
+    );
+  });
 });
 
 it("opens the native date picker when the calendar icon is clicked", async () => {
@@ -272,7 +305,8 @@ it("reorders sets by keyboard without separating stable IDs from their values", 
   mount();
   await screen.findByLabelText("Вес подхода 1");
   enterThreeSets();
-  const draft = JSON.parse(localStorage.getItem(perSetDraftKey(USER, EXERCISE))!) as {
+  const draftKey = `${perSetDraftKey(USER, EXERCISE)}:tab:${sessionStorage.getItem("workout:draft:tab-id")}`;
+  const draft = JSON.parse(localStorage.getItem(draftKey)!) as {
     fields: { sets: { id: string }[] };
   };
   const originalIds = draft.fields.sets.map((set) => set.id);

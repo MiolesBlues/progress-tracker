@@ -38,6 +38,7 @@ before(async () => {
     CREATE ROLE anon NOLOGIN;
     CREATE ROLE authenticated NOLOGIN;
     CREATE ROLE service_role NOLOGIN BYPASSRLS;
+    CREATE ROLE supabase_admin NOLOGIN;
     CREATE SCHEMA auth;
     CREATE TABLE auth.users(id uuid PRIMARY KEY);
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
@@ -83,6 +84,29 @@ before(async () => {
     ),
   ];
   await db.exec(file("drizzle/migrations/20261016150000_training_template_library.sql"));
+  // Reproduce the broad grants observed on hosted project metadata before
+  // applying the forward-only privilege correction.
+  await db.exec(`GRANT ALL ON public.training_exercise_catalog, public.training_templates,
+    public.training_template_days, public.training_template_slots,
+    public.training_template_applications TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+    GRANT ALL ON TABLES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+    GRANT ALL ON SEQUENCES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`);
+  // Supabase-managed role defaults are not modifiable by the postgres role.
+  // Model them explicitly so the release contract cannot silently ignore them.
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT ALL ON TABLES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT ALL ON SEQUENCES TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`);
+  await db.exec(`ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin
+    GRANT EXECUTE ON FUNCTIONS TO PUBLIC`);
+  await db.exec(file("drizzle/migrations/20261020100000_training_library_least_privilege.sql"));
+  await db.exec(file("drizzle/migrations/20261020120000_public_helper_function_privileges.sql"));
 });
 
 after(async () => db?.close());
@@ -481,4 +505,196 @@ test("seven-day template requires explicit daily opt-in", async () => {
       .find((p) => p.days_per_week === 7)
       .sessions.reduce((n, d) => n + d.exercises.length, 0),
   );
+});
+
+test("training library ACLs are minimal for browser roles after correcting hosted drift", async () => {
+  const rowsByTable = await rows(`
+    SELECT c.relname AS table_name,
+      has_table_privilege('anon', c.oid, 'SELECT') AS anon_select,
+      has_table_privilege('anon', c.oid, 'INSERT') AS anon_insert,
+      has_table_privilege('anon', c.oid, 'UPDATE') AS anon_update,
+      has_table_privilege('anon', c.oid, 'DELETE') AS anon_delete,
+      has_table_privilege('anon', c.oid, 'TRUNCATE') AS anon_truncate,
+      has_table_privilege('authenticated', c.oid, 'SELECT') AS auth_select,
+      has_table_privilege('authenticated', c.oid, 'INSERT') AS auth_insert,
+      has_table_privilege('authenticated', c.oid, 'UPDATE') AS auth_update,
+      has_table_privilege('authenticated', c.oid, 'DELETE') AS auth_delete,
+      has_table_privilege('authenticated', c.oid, 'TRUNCATE') AS auth_truncate
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname='public' AND c.relname LIKE 'training_%' AND c.relkind='r'
+    ORDER BY c.relname`);
+  for (const row of rowsByTable) {
+    assert.equal(row.anon_select, false, `${row.table_name} anon SELECT`);
+    assert.equal(row.auth_select, true, `${row.table_name} auth SELECT`);
+    for (const privilege of ["insert", "update", "delete", "truncate"]) {
+      assert.equal(row[`anon_${privilege}`], false, `${row.table_name} anon ${privilege}`);
+      assert.equal(row[`auth_${privilege}`], false, `${row.table_name} authenticated ${privilege}`);
+    }
+  }
+  assert.equal(
+    (
+      await rows(
+        "SELECT bool_and(has_table_privilege('service_role', c.oid, 'TRUNCATE')) AS retained FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname LIKE 'training_%' AND c.relkind='r'",
+      )
+    )[0].retained,
+    true,
+    "service_role retains its administrative grants",
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('anon','public.apply_training_template(uuid,text,integer,text[],boolean)','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('authenticated','public.apply_training_template(uuid,text,integer,text[],boolean)','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    true,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('anon','public.list_training_templates(integer,text)','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('authenticated','public.list_training_templates(integer,text)','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    true,
+  );
+  await db.exec("CREATE TABLE public.future_training_object(id integer)");
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_table_privilege('anon','public.future_training_object','SELECT') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_table_privilege('authenticated','public.future_training_object','INSERT') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  await db.exec(
+    "CREATE FUNCTION public.future_training_helper() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$",
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('anon','public.future_training_helper()','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+    "new public functions do not inherit PUBLIC EXECUTE",
+  );
+  await db.exec("CREATE SEQUENCE public.future_training_sequence");
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_sequence_privilege('anon','public.future_training_sequence','USAGE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+    "new public sequences do not inherit browser grants",
+  );
+  await db.exec("CREATE ROLE inherited_test_writer NOLOGIN");
+  await db.exec(
+    "GRANT INSERT ON public.future_training_object TO inherited_test_writer; GRANT inherited_test_writer TO authenticated",
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_table_privilege('authenticated','public.future_training_object','INSERT') AS allowed",
+      )
+    )[0].allowed,
+    true,
+    "effective privilege checks include inherited role grants",
+  );
+  await db.exec(
+    "REVOKE ALL ON public.future_training_object FROM inherited_test_writer; REVOKE inherited_test_writer FROM authenticated; DROP ROLE inherited_test_writer",
+  );
+  await db.exec(file("drizzle/migrations/20261020100000_training_library_least_privilege.sql"));
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_table_privilege('authenticated','public.future_training_object','INSERT') AS allowed",
+      )
+    )[0].allowed,
+    false,
+    "replaying the ACL correction is safe and idempotent",
+  );
+});
+
+test("ACL repair clears postgres defaults, inventories managed supabase_admin defaults, and keeps app tables postgres-owned", async () => {
+  const defaults = await rows(file("scripts/default-privileges-preflight.sql"));
+  assert.ok(defaults.some((row) => row.owner === "supabase_admin"));
+  assert.ok(defaults.every((row) => row.owner !== "postgres"));
+  const applicationOwners = await rows(`
+    SELECT DISTINCT pg_get_userbyid(c.relowner) AS owner
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relname IN (
+      'training_exercise_catalog','training_templates','training_template_days',
+      'training_template_slots','training_template_applications'
+    )
+  `);
+  assert.deepEqual(applicationOwners, [{ owner: "postgres" }]);
+});
+
+test("helper functions are callable only by their intended application path", async () => {
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('anon','public.valid_workout_reps(integer[])','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    false,
+  );
+  assert.equal(
+    (
+      await rows(
+        "SELECT has_function_privilege('authenticated','public.valid_workout_reps(integer[])','EXECUTE') AS allowed",
+      )
+    )[0].allowed,
+    true,
+  );
+  for (const role of ["anon", "authenticated"])
+    assert.equal(
+      (
+        await rows(
+          "SELECT has_function_privilege($1,'public.snapshot_entry_day()','EXECUTE') AS allowed",
+          [role],
+        )
+      )[0].allowed,
+      false,
+    );
+  assert.equal(
+    (
+      await rows(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f',p.proowner))) a
+          WHERE p.oid='public.snapshot_entry_day()'::regprocedure
+            AND a.grantee=0 AND a.privilege_type='EXECUTE'
+        ) AS allowed
+      `)
+    )[0].allowed,
+    false,
+  );
+  const saved = await asRole("authenticated", C, async () =>
+    rows("SELECT public.valid_workout_reps(ARRAY[8,8]) AS allowed"),
+  );
+  assert.deepEqual(saved, [{ allowed: true }]);
 });

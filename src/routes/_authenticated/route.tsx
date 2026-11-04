@@ -103,8 +103,8 @@ function SessionLayout() {
             <Link
               key={to}
               to={to}
-              className="flex flex-col items-center gap-1 py-2.5 text-xs text-muted-foreground"
-              activeProps={{ className: "text-primary" }}
+              className="flex flex-col items-center gap-1 rounded-sm py-2.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              activeProps={{ className: "text-[color:var(--nav-active-text)]" }}
             >
               <Icon className="h-5 w-5" />
               {t(label)}

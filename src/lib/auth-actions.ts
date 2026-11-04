@@ -3,6 +3,8 @@ import type { SessionStore } from "./session";
 
 export function authMessage(error: unknown, action: "login" | "google" | "session" = "login") {
   const value = error instanceof Error ? error.message : "";
+  if (/leaked|compromised|pwned|weakpassword/i.test(value))
+    return "Этот пароль найден в известных утечках. Выберите другой пароль.";
   if (/invalid login/i.test(value)) return "Неверный email или пароль.";
   if (/email not confirmed/i.test(value)) return "Подтвердите email по ссылке в письме.";
   if (/already registered/i.test(value)) return "Этот email уже зарегистрирован. Попробуйте войти.";
