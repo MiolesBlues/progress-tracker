@@ -1,30 +1,57 @@
 <!-- LOVABLE:BEGIN -->
 
 > [!IMPORTANT]
-> This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
-> published git history — force pushing, or rebasing/amending/squashing commits
-> that are already pushed — as it rewrites history on Lovable's side and the
-> user will likely lose their project history.
+> Проект связан с [Lovable](https://lovable.dev). Не переписывайте опубликованную Git-историю: force push, rebase, amend, squash уже опубликованных коммитов могут нарушить историю проекта в Lovable.
 >
-> Commits you push to the connected branch sync back to Lovable and show up in
-> the editor, so keep the branch in a working state.
+> Коммиты, отправленные в подключённую ветку, синхронизируются с Lovable и появляются в редакторе. Сохраняйте рабочее состояние ветки.
 
 <!-- LOVABLE:END -->
 
-# Project rules
+# Обязательные правила проекта
 
-- UI supports Russian and English, is mobile-first, and supports Light, Dark, and System appearance modes across iPhone and desktop.
-- Data access goes through the browser client with strict per-user RLS (`auth.uid() = user_id`); no shared/global training data — users must be fully isolated.
-- Signup does not create a program. Onboarding lets each user start with an empty 1–7 day program or choose an optional published template; do not restore the deprecated signup trigger.
-- Signed-in pages live under `src/routes/_authenticated/` (client-only gate) — session is in localStorage.
-- Metric/week-comparison math lives in `src/lib/workout.ts` with tests — keep it pure and tested.
-- Program days and exercises are archived by default. Separately confirmed permanent deletion is available only for archived objects through owner-checked RPCs; exercise deletion removes its own history and records tombstones. Workout-entry ownership FKs are RESTRICT, including composite owner references. Account deletion is a separate lifecycle decision and is not implemented by these archive RPCs.
+- Интерфейс поддерживает русский и английский языки, мобильную раскладку и режимы оформления Light, Dark и System.
+- Данные пользователей изолируются. Клиентские запросы используют Supabase; окончательную изоляцию обеспечивают PostgreSQL RLS и проверки владельца. Не создавайте общие тренировочные данные пользователей.
+- Регистрация не создаёт программу автоматически. При первоначальной настройке пользователь может создать личную программу с 1–7 днями или выбрать необязательный опубликованный шаблон. Не восстанавливайте удалённый триггер автоматического создания программы.
+- Защищённые страницы находятся в `src/routes/_authenticated/` и работают без SSR; состояние Supabase Auth хранится браузерным storage.
+- Расчёты тренировок и сравнений держите чистыми функциями в `src/lib/workout.ts` и покрывайте целевыми тестами.
+- Дни и упражнения по умолчанию архивируются. Отдельно подтверждённое окончательное удаление доступно только архивным объектам через проверяющие владельца RPC. Удаление упражнения удаляет его историю и оставляет tombstones для защиты от повторного применения старых операций. Внешние ключи записей ограничивают удаление владельческих строк. Удаление аккаунта — отдельный жизненный цикл и не реализовано этими RPC.
 
-## CI and verification
+## Загрузка контекста и проверка кода
 
-- For each change, run the fastest relevant local checks first, then commit the verified change.
-- Push only when the task explicitly authorizes pushing and only to the approved working branch. Never push directly to `main` unless explicitly requested.
-- After an authorized push, verify the GitHub Actions run for the exact pushed SHA. Do not describe local checks as hosted CI results.
-- Treat the GitHub Actions Playwright job as the default full E2E executor after an authorized push. Run the full local Playwright suite only for targeted debugging or when GitHub Actions cannot run.
-- If hosted E2E fails, inspect the failing job logs, fix the underlying issue, and rerun CI before reporting completion.
-- CI tests must use the local mock backend and synthetic `.invalid` Supabase URLs. Never use production or staging credentials, hosted migrations, seeds, or deployment steps in CI.
+Перед каждой задачей разработки:
+
+1. Прочитайте этот `AGENTS.md` и `docs/PROJECT_CONTEXT.md`.
+2. Прочитайте относящиеся к задаче разделы `docs/ARCHITECTURE.md` и ADR в `docs/DECISIONS/`.
+3. Изучите реальный затронутый исходный код до редактирования.
+
+Документация помогает найти код, но не доказывает его поведение. Если описание расходится с исходниками, исследуйте и сообщите о расхождении; не реализуйте задачу вслепую по устаревшему тексту.
+
+Обновляйте контекст и ADR, если существенно изменились возможности продукта, доменное поведение, архитектурные границы, модель данных, API, авторизация, схема развёртывания или принятые решения. Для мелких CSS-правок, текстов, обычных исправлений и рефакторинга без изменения архитектуры документацию обновлять не нужно. Сначала исправляйте существующий раздел; не дублируйте описание.
+
+## Политика ветвления Git
+
+- До правок проверьте Git status, текущую ветку, область задачи и подходящие активные ветки/worktrees. Если пользователь назвал безопасную рабочую ветку — используйте её. Продолжайте подходящую активную ветку той же задачи, не создавайте дубль. Для read-only расследования ветка не нужна.
+- Не вносите обычные изменения прямо в `main`. Для новой задачи используйте актуальный `origin/main` как основу и создайте одну короткоживущую ветку `<категория>/<задача>` по основной цели: `frontend/`, `backend/`, `database/`, `testing/`, `infra/`, `security/`, `docs/`, `refactor/`, `hotfix/` или `ios/`. Используйте короткий slug в нижнем регистре через дефисы; не создавайте имена вроде `fix1`, `temp-work` или `final-final`.
+- Одна самостоятельная задача — одна тематическая ветка. Допускайте связанные межслойные изменения, если они образуют одну целостную функцию; фиксируйте затронутые области. Не создавайте постоянные `frontend`/`backend`-ветки. Новые ветки начинайте от `main`, а не от другой feature-ветки, кроме явно обоснованной зависимости.
+- Используйте основной checkout и каталог `progress-tracker-features`. Не создавайте worktree для последовательных небольших задач; создавайте его только для параллельных независимых задач. Не используйте Recovery как рабочую папку и не изменяйте архивную Git-систему.
+- Не создавайте commit, PR, push или merge, не удаляйте ветки, не делайте force push и не переписывайте историю без явного разрешения пользователя. Не меняйте production Supabase и не запускайте deployment без отдельного разрешения.
+- Перед реализацией зафиксируйте scope, категорию и текущую ветку, затрагиваемые модули и нужные проверки. Для изменений базы проверьте миграции, контракты и совместимость; для UI — релевантную адаптивность; для backend — авторизацию, валидацию и идемпотентность.
+
+## Локальная политика тестирования
+
+- До начала работы выберите минимальные проверки по изменённым файлам и риску. Проверьте `package.json`, конфиги тестов и workflow на доступные скрипты и аргументы. Не выдумывайте команды и не отключайте проверки ради PASS.
+- Для TypeScript используйте typecheck; для изменённых TS/TSX — адресные ESLint и Prettier, если поддерживаются установленными инструментами; для логики — целевые Vitest tests; для БД — целевые SQL/PGlite tests; для CI — YAML/actionlint при наличии. Выполняйте быструю сборку, если затронуты конфигурация сборки, импорты, SSR или runtime.
+- По умолчанию не запускайте локально полный Playwright E2E/все четыре shard, полный Vitest, полный SQL/PGlite suite, повторные полные production builds и длительные regression suites. Полную регрессию выполняет GitHub Actions. Для диагностики бага, изменений тестовой инфраструктуры, недоступности CI или прямой просьбы пользователя сначала выбирайте наименьшее полезное воспроизведение.
+- Не меняйте тесты только ради зелёного результата, не скрывайте ошибки через `continue-on-error`, не увеличивайте retries flaky tests без обоснования и не обходите required checks. Сохраняйте необходимые логи и traces для диагностики.
+
+## GitHub Actions и безопасность CI
+
+- Источник полной регрессии — существующий `.github/workflows/quality.yml`: Code Quality, Unit Tests, Database & Contracts, Build & Security, четыре Playwright shards для Chromium и WebKit и стабильный aggregate check. Не меняйте CI-архитектуру без необходимости конкретной задачи.
+- Локальные быстрые проверки не являются результатом CI. После разрешённого push запишите SHA и проверьте GitHub Actions для этой версии. Учитывайте `scripts/ci-event-router.mjs`: push-run может пропустить дублирующие проверки при открытом PR; это не PASS. Убедитесь, что отдельный PR-run охватывает текущий head PR, дождитесь обязательных checks и не объявляйте PASS по старому SHA.
+- При сбое CI изучите первую реальную ошибку и её логи, устраните причину и повторите CI на новом SHA. Skipped checks не считаются успешными required checks.
+- Тесты CI используют локальный mock backend и синтетические Supabase URL с `.invalid`. Не используйте production/staging credentials, hosted migrations, seeds или deployment в CI.
+- Не отправляйте push без явного разрешения и только в согласованную рабочую ветку. Никогда не отправляйте прямо в `main` без отдельной прямой просьбы. После разрешённого push проверяйте Actions-run для соответствующего SHA; не выдавайте локальные проверки за hosted CI.
+
+## Отчёт агента
+
+В конце каждой задачи кратко укажите ветку, scope, изменённые файлы, локальные проверки и непроверенные области, Git status, обновлялись ли контекст/ADR и почему, а также нужен ли PR. Укажите commit SHA только если коммит действительно создан.
