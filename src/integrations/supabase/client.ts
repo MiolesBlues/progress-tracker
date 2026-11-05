@@ -2,10 +2,10 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { brokeredPreviewStorage } from "./previewAuthStorage";
-import { validateSupabaseEnvironment } from "./env-contract";
+import { validateSupabaseEnvironment, validateSupabasePublishableKey } from "./env-contract";
 
 function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
+  return value.startsWith("sb_publishable_");
 }
 
 // The public URL can be reachable only from the browser, so server requests go to the runtime URL of the same backend.
@@ -87,6 +87,7 @@ function createSupabaseClient() {
     throw new Error(message);
   }
 
+  validateSupabasePublishableKey(SUPABASE_PUBLISHABLE_KEY);
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: {
       fetch: createSupabaseFetch(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY),
