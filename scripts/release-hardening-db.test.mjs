@@ -1,3 +1,4 @@
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 import { test, before, after } from "node:test";
@@ -45,9 +46,10 @@ before(async () => {
     GRANT USAGE ON SCHEMA auth,public TO anon,authenticated,service_role,public_probe;
     GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role;`);
-  const journal = JSON.parse(file("drizzle/migrations/meta/_journal.json"));
-  for (const entry of journal.entries.filter((entry) => !tags.includes(entry.tag)))
-    await db.exec(file(`drizzle/migrations/${entry.tag}.sql`));
+  for (const migration of canonicalMigrations().filter(
+    (migration) => !tags.includes(migration.file.slice(0, -4)),
+  ))
+    await db.exec(migration.sql);
   await db.query("INSERT INTO auth.users VALUES ($1),($2)", [A, B]);
   await asUser(A, async () => {
     await db.query("SELECT setup_program($1::text[])", [["Первый", "Второй"]]);
