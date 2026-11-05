@@ -25,6 +25,7 @@
     "test:e2e": "playwright test",
     "audit": "bun audit",
     "format:check": "prettier --check .",
+    "test:worker": "playwright test --config playwright.worker.config.ts",
     "test:concurrency": "node --test scripts/postgres-concurrency.test.mjs"
   },
   "packageManager": "bun@1.4.3",

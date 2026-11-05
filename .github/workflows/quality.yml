@@ -306,6 +306,23 @@ jobs:
       - name: Cloudflare Worker runtime smoke
         run: bun run smoke:runtime
 
+      - name: Install Chromium for the built Worker journey
+        run: bunx --no-install playwright install --with-deps chromium
+
+      - name: Browser journey against the built local Worker
+        run: bun run test:worker
+
+      - name: Upload Worker browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: worker-browser-${{ github.run_id }}
+          path: |
+            test-results/worker/
+            playwright-report/worker/
+          if-no-files-found: warn
+          retention-days: 7
+
   playwright-shards:
     name: Playwright Shard ${{ matrix.shard }}/4
     needs: route

@@ -91,6 +91,7 @@ erDiagram
 - Перед компиляцией Vite и при создании public client проверяется тип значения publishable key: `sb_publishable_*` или legacy JWT с `role=anon`. Secret/service-role и неизвестные значения отклоняются без вывода значения; это не проверка подписи или действительности ключа. Server-only service-role helper остаётся отдельным доверенным путём.
 - `supabase/config.toml` не выбирает hosted project по умолчанию. Для операций с hosted базой требуется явная проверка целевого project ref и отдельное разрешение задачи.
 - CI направляет тесты на локальные mock-сервисы и синтетические URL `.invalid`. Workflow `quality.yml` выполняет качество кода, unit/database/contracts, build/security и четыре Playwright shard; агрегированный check зависит от них. Событийная маршрутизация может пропустить дублирующий push-run при открытом PR, поэтому проверяйте PR-run на точном SHA.
+- `bun run test:worker` выполняет один Chromium-сценарий auth → программа → save → records/reload на `.output/server/wrangler.json` через локальный `wrangler dev --local`. Запускается после существующей сборки в Build & Security; четыре dev-server shard сохранены. Mock перехватывает Supabase `.invalid`, внешние запросы блокируются, service workers выключены. Это проверка production artifact, не hosted Auth/DB или deployment.
 - В репозитории не обнаружен workflow deployment. Это не доказывает, что приложение нигде не развёрнуто.
 
 ## Тестирование
