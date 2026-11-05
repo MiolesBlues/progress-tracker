@@ -92,6 +92,7 @@
 
 ## 8. Важные ссылки
 
+- [Workflow четырёх агентов и approval gate](AGENT_WORKFLOW.md): основная сессия показывает полные prompts до одобрения; после него Orchestrator автономно выполняет только выбранный scope. Project defaults read-only/on-request не являются отдельным sandbox каждой роли. Решение: [ADR 0007](DECISIONS/0007-approval-gated-agent-workflow.md).
 - [README проекта](../README.md)
 - [Архитектура](ARCHITECTURE.md)
 - [Решения ADR](DECISIONS/README.md)
