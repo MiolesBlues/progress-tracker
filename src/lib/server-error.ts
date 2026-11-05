@@ -6,10 +6,15 @@ type Boundary = "server_entry" | "request_middleware" | "framework_response";
 function errorKind(error: unknown): string {
   // Only fixed classifications cross the logging boundary. Never inspect names,
   // messages, causes or stacks supplied by application/dependency exceptions.
-  if (error instanceof TypeError) return "type_error";
-  if (error instanceof RangeError) return "range_error";
-  if (error instanceof SyntaxError) return "syntax_error";
-  return error instanceof Error ? "unexpected_error" : "thrown_value";
+  try {
+    if (error instanceof TypeError) return "type_error";
+    if (error instanceof RangeError) return "range_error";
+    if (error instanceof SyntaxError) return "syntax_error";
+    return error instanceof Error ? "unexpected_error" : "thrown_value";
+  } catch {
+    // Even prototype inspection can throw for a dependency's thrown Proxy.
+    return "thrown_value";
+  }
 }
 
 export function serverErrorResponse(

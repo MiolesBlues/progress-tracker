@@ -9,6 +9,17 @@ it.each([
   [new SyntaxError("private payload"), "syntax_error"],
   [new Error("private password", { cause: "private cause" }), "unexpected_error"],
   [{ name: "private name", message: "private message" }, "thrown_value"],
+  [
+    new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error("private prototype diagnostic");
+        },
+      },
+    ),
+    "thrown_value",
+  ],
 ])("emits only an allowlisted diagnostic classification", async (error, kind) => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   const response = serverErrorResponse(
