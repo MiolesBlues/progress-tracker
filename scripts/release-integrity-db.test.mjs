@@ -1,5 +1,6 @@
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 import { PGlite } from "@electric-sql/pglite";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { workoutIntegritySql, workoutIntegrityFailures } from "./workout-integrity-preflight.mjs";
@@ -70,11 +71,9 @@ before(async () => {
       SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     GRANT USAGE ON SCHEMA auth,public TO anon,authenticated,service_role;
     GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated,service_role;`);
-  const names = readdirSync(new URL("../drizzle/migrations/", import.meta.url))
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-  for (const name of names.filter((name) => name < "0004"))
-    await db.exec(file(`drizzle/migrations/${name}`));
+  const migrations = canonicalMigrations();
+  for (const migration of migrations.filter(({ file }) => file < "0004"))
+    await db.exec(migration.sql);
   await db.query("INSERT INTO auth.users VALUES ($1),($2)", [A, B]);
   await asUser(A, async () => {
     await db.query("SELECT setup_program($1::text[])", [["Synthetic A", "Synthetic B"]]);
@@ -97,8 +96,8 @@ before(async () => {
     // historical row with NULL day_id before the immutable UPDATE guard exists.
     await db.query("UPDATE workout_entries SET day_id=NULL WHERE id=$1", [LEGACY_NO_DAY]);
   });
-  for (const name of names.filter((name) => name >= "0004"))
-    await db.exec(file(`drizzle/migrations/${name}`));
+  for (const migration of migrations.filter(({ file }) => file >= "0004"))
+    await db.exec(migration.sql);
 });
 beforeEach(() => db.exec("BEGIN"));
 afterEach(() => db.exec("ROLLBACK"));

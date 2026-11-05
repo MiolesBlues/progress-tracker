@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { validateRestoreApproval } from "./recovery-contract.mjs";
 import { workoutIntegritySql, workoutIntegrityFailures } from "./workout-integrity-preflight.mjs";
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 
 const contract = JSON.parse(
   readFileSync(new URL("./schema-capability-contract.json", import.meta.url), "utf8"),
@@ -28,6 +29,7 @@ function requireProjectRef(databaseUrl, expectedRef) {
 }
 
 function requireLocalContract() {
+  canonicalMigrations();
   const librarySql = readFileSync(
     new URL("../drizzle/migrations/20261016150000_training_template_library.sql", import.meta.url),
     "utf8",

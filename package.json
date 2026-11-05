@@ -21,7 +21,7 @@
     "verify:restore-target": "node scripts/verify-restore-target.mjs",
     "check:client-bundle": "node scripts/check-client-bundle.mjs",
     "test:watch": "vitest",
-    "test:toolchain": "node --test scripts/toolchain.test.mjs scripts/release-contract.test.mjs scripts/recovery-contract.test.mjs scripts/recovery-infrastructure.test.mjs scripts/ci-workflow.test.mjs",
+    "test:toolchain": "node --test scripts/canonical-migrations.test.mjs scripts/toolchain.test.mjs scripts/release-contract.test.mjs scripts/recovery-contract.test.mjs scripts/recovery-infrastructure.test.mjs scripts/ci-workflow.test.mjs",
     "test:e2e": "playwright test",
     "audit": "bun audit",
     "format:check": "prettier --check ."

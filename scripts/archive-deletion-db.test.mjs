@@ -1,3 +1,4 @@
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 import { before, after, test } from "node:test";
@@ -28,8 +29,7 @@ before(async () => {
       $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     GRANT USAGE ON SCHEMA auth,public TO anon,authenticated,service_role;
     GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated;`);
-  const journal = JSON.parse(file("drizzle/migrations/meta/_journal.json"));
-  for (const entry of journal.entries) await db.exec(file(`drizzle/migrations/${entry.tag}.sql`));
+  for (const migration of canonicalMigrations()) await db.exec(migration.sql);
   await db.query("INSERT INTO auth.users VALUES ($1),($2)", [A, B]);
 });
 after(async () => db?.close());
