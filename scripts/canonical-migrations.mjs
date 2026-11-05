@@ -39,7 +39,7 @@ export function canonicalMigrations() {
       .map((name) => [name, readFileSync(new URL(name, root), "utf8")]),
   );
   return validateMigrationInventory(
-    json("meta/canonical-manifest.json"),
+    json("../canonical-manifest.json"),
     json("meta/_journal.json"),
     files,
   );
