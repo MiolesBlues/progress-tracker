@@ -3,20 +3,22 @@ import { resolveProgressSelection } from "./progress-selection";
 import type { Day, Exercise } from "./queries";
 
 const days: Day[] = [
-  { id: "day-1", name: "Push", position: 0, archived_at: null },
+  { revision: 0, id: "day-1", name: "Push", position: 0, archived_at: null },
   {
+    revision: 0,
     id: "day-2",
     name: "Длинное название личного тренировочного дня",
     position: 1,
     archived_at: null,
   },
-  { id: "day-3", name: "Old", position: 2, archived_at: "2026-01-01" },
+  { revision: 0, id: "day-3", name: "Old", position: 2, archived_at: "2026-01-01" },
 ];
 const exercise = (
   id: string,
   day_id: string | null,
   archived_at: string | null = null,
 ): Exercise => ({
+  revision: 0,
   id,
   day_id,
   archived_at,

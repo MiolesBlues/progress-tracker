@@ -175,6 +175,8 @@ export const english = {
   "{count} подх.": "{count} sets",
   "{count} повт.": "{count} reps",
   "Не удалось загрузить программу.": "Could not load the program.",
+  "Программа изменена в другом окне. Ввод сохранён; отмените редактирование и откройте его снова.":
+    "The program changed in another window. Your input is preserved; cancel editing and reopen it to review the latest version.",
   "Программа изменилась. Обновите страницу и повторите действие.":
     "The program changed. Reload and try again.",
   "Не удалось сохранить изменения. Проверьте соединение и повторите попытку.":

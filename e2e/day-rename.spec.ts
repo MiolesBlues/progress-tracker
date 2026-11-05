@@ -24,8 +24,11 @@ for (const width of [320, 375, 390, 768]) {
       (request) => request.method() === "PATCH" && request.url().includes("/program_days"),
     );
     await dialog.getByRole("button", { name: "Сохранить", exact: true }).click();
-    expect((await request).postDataJSON()).toEqual({ name: renamed });
+    const patchRequest = await request;
+    expect(patchRequest.postDataJSON()).toEqual({ name: renamed, revision: 1 });
+    expect(new URL(patchRequest.url()).searchParams.get("revision")).toBe("eq.0");
     await expect.poll(() => backend.rows["program_days"]![0]!["name"]).toBe(renamed);
+    expect(backend.rows["program_days"]![0]!["revision"]).toBe(1);
     await noOverflow(page);
     await page.reload();
     await page.getByRole("button", { name: "Изменить дни", exact: true }).click();

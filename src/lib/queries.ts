@@ -5,9 +5,16 @@ import { toISO } from "./workout";
 import type { HistoryEntry } from "./analytics";
 import { MAX_SETS, MAX_WEIGHT, MAX_REPS, isWorkoutDate } from "./workout-input";
 
-export type Day = { id: string; name: string; position: number; archived_at: string | null };
+export type Day = {
+  revision: number;
+  id: string;
+  name: string;
+  position: number;
+  archived_at: string | null;
+};
 
 export type Exercise = {
+  revision: number;
   id: string;
   day_id: string | null;
   name: string;
@@ -41,7 +48,7 @@ export const daysQuery = (userId: string) =>
         (from, to) =>
           supabase
             .from("program_days")
-            .select("id, name, position, archived_at", { count: "exact" })
+            .select("id, name, position, archived_at, revision", { count: "exact" })
             .eq("user_id", userId)
             .order("position")
             .order("created_at")
@@ -63,7 +70,7 @@ export const programQuery = (userId: string) =>
           supabase
             .from("program_exercises")
             .select(
-              "id, day_id, name, position, target_sets, target_reps, target_rir_min, target_rir_max, working_weight, example_reps, archived_at",
+              "id, day_id, name, position, target_sets, target_reps, target_rir_min, target_rir_max, working_weight, example_reps, archived_at, revision",
               { count: "exact" },
             )
             .eq("user_id", userId)

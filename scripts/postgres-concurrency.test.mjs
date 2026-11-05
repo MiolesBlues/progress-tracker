@@ -248,3 +248,33 @@ test(
     );
   },
 );
+
+test(
+  "competing program PATCH rechecks revision after waiting on the row lock",
+  { timeout: 15000 },
+  async () => {
+    await overlap(
+      () =>
+        query(
+          left,
+          "UPDATE program_days SET name='New program name',revision=1 WHERE id=$1 AND revision=0 RETURNING revision",
+          [day],
+        ),
+      () =>
+        query(
+          right,
+          "UPDATE program_days SET name='Stale program name',revision=1 WHERE id=$1 AND revision=0 RETURNING revision",
+          [day],
+        ),
+      async ({ value, error }) => {
+        assert.ifError(error);
+        assert.equal(value.length, 0);
+        await query(right, "COMMIT");
+      },
+    );
+    const [current] = await query(observer, "SELECT name,revision FROM program_days WHERE id=$1", [
+      day,
+    ]);
+    assert.deepEqual(current, { name: "New program name", revision: 1 });
+  },
+);

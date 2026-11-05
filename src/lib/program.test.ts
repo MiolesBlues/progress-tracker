@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { exercisePatch } from "@/lib/program";
 
-const days = [{ id: "day", name: "Произвольный день", position: 0, archived_at: null }];
+const days = [
+  { revision: 0, id: "day", name: "Произвольный день", position: 0, archived_at: null },
+];
 const values = { name: "Жим", dayId: "day", sets: "4", reps: "6–8", weight: "52,5" };
 describe("program input", () => {
   it.each(["0", "21", "3.5", "3abc"])("rejects invalid set count %s", (sets) => {

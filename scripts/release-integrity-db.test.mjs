@@ -221,7 +221,9 @@ test("gate accepts archived-day deletion without rewriting the original save sna
     "SELECT to_jsonb(o) AS row FROM workout_entry_operations o ORDER BY id",
   );
   await asUser(A, async () => {
-    await db.query("UPDATE program_days SET archived_at=now() WHERE id=$1", [day]);
+    await db.query("UPDATE program_days SET revision=revision+1,archived_at=now() WHERE id=$1", [
+      day,
+    ]);
     await db.query("SELECT delete_archived_program_day($1)", [day]);
   });
   await assertGatePass();
@@ -467,4 +469,71 @@ test("browser legacy metrics are immutable while metadata, safe edits and exact 
     "updated metadata",
   );
   await assertGatePass();
+});
+
+test("program semantic writes require the next revision and reject stale or unconditional PATCHes", async () => {
+  await asUser(A, async () => {
+    for (const [table, id] of [
+      ["program_days", day],
+      ["program_exercises", exercise],
+    ]) {
+      await db.query(
+        `UPDATE ${table} SET name='First edit',revision=1 WHERE id=$1 AND revision=0`,
+        [id],
+      );
+      await rejectsSql(
+        () => db.query(`UPDATE ${table} SET name='Stale edit',revision=1 WHERE id=$1`, [id]),
+        "40001",
+      );
+      await rejectsSql(
+        () => db.query(`UPDATE ${table} SET name='Unsafe client' WHERE id=$1`, [id]),
+        "40001",
+      );
+      await rejectsSql(
+        () => db.query(`UPDATE ${table} SET name='Skipped revision',revision=8 WHERE id=$1`, [id]),
+        "40001",
+      );
+      const current = (await rows(`SELECT name,revision FROM ${table} WHERE id=$1`, [id]))[0];
+      assert.deepEqual(current, { name: "First edit", revision: 1 });
+      const retry = await rows(
+        `UPDATE ${table} SET name='First edit',revision=1 WHERE id=$1 AND revision=0 RETURNING id`,
+        [id],
+      );
+      assert.equal(retry.length, 0); // Lost-response retry cannot overwrite a newer row.
+    }
+  });
+});
+
+test("program reorder advances revisions without breaking invoker RPCs or RLS", async () => {
+  await asUser(A, async () => {
+    const before = await rows("SELECT id,revision FROM program_days ORDER BY position");
+    await db.query("SELECT reorder_program_days($1::uuid[])", [
+      before.map((row) => row.id).reverse(),
+    ]);
+    for (const row of before) {
+      assert.equal(
+        (await rows("SELECT revision FROM program_days WHERE id=$1", [row.id]))[0].revision,
+        row.revision + 1,
+      );
+    }
+    await rejectsSql(
+      () =>
+        db.query("UPDATE program_days SET name='Stale after reorder',revision=1 WHERE id=$1", [
+          day,
+        ]),
+      "40001",
+    );
+    await db.query("SELECT reorder_program_exercises($1,$2::uuid[])", [day, [exercise]]);
+  });
+  await asUser(B, async () => {
+    assert.equal(
+      (
+        await rows(
+          "UPDATE program_exercises SET name='Foreign',revision=1 WHERE id=$1 RETURNING id",
+          [exercise],
+        )
+      ).length,
+      0,
+    );
+  });
 });
