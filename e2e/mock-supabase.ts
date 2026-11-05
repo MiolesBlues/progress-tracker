@@ -5,6 +5,7 @@ import { Buffer } from "node:buffer";
 type Row = Record<string, unknown> & { id: string; user_id: string };
 export async function mockSupabase(page: Page) {
   const users = new Map<string, string>();
+  const editOperations = new Map<string, { payload: string; revision: number }>();
   const rows: Record<string, Row[]> = {
     program_days: [],
     program_exercises: [],
@@ -98,6 +99,40 @@ export async function mockSupabase(page: Page) {
     if (url.pathname.includes("/rpc/")) {
       const args = json ?? {};
       state.rpcCalls.push({ name: url.pathname.split("/").at(-1)!, userId: id, args });
+      if (url.pathname.endsWith("/edit_workout_entry_set")) {
+        const entry = rows["workout_entries"]!.find(
+          (row) => row.id === args["_entry_id"] && row.user_id === id,
+        );
+        if (!entry) return respond({ code: "42501", message: "entry unavailable" }, 403);
+        const key = `${id}:${String(args["_operation_id"])}`;
+        const payload = JSON.stringify(args);
+        const previous = editOperations.get(key);
+        if (previous)
+          return previous.payload === payload
+            ? respond(previous.revision)
+            : respond({ code: "22023", message: "operation conflict" }, 400);
+        const set = rows["workout_entry_sets"]!.find(
+          (row) =>
+            row.id === args["_set_id"] &&
+            row["workout_entry_id"] === entry.id &&
+            row.user_id === id,
+        );
+        if (!set) return respond({ code: "P0002", message: "set unavailable" }, 404);
+        const revision = Number(set["revision"] ?? 0);
+        if (revision !== args["_expected_revision"])
+          return respond({ code: "40001", message: "revision conflict" }, 409);
+        Object.assign(set, {
+          weight: args["_weight"],
+          reps: args["_reps"],
+          rir: args["_rir"],
+          set_type: args["_set_type"],
+          load_type: args["_load_type"],
+          revision: revision + 1,
+          legacy_snapshot: false,
+        });
+        editOperations.set(key, { payload, revision: revision + 1 });
+        return respond(revision + 1);
+      }
       if (url.pathname.endsWith("/list_training_templates")) {
         if (!state.trainingLibraryAvailable)
           return respond({ code: "PGRST202", message: "Function not found" }, 404);
@@ -288,6 +323,10 @@ export async function mockSupabase(page: Page) {
     }
     const table = url.pathname.split("/").at(-1)!;
     if (!rows[table]) return respond({ message: "Unknown endpoint" }, 404);
+    if (table === "workout_entry_sets")
+      rows[table]!.forEach((row) => {
+        row["revision"] ??= 0;
+      });
     if (
       request.method() === "GET" &&
       state.failCreateReconciliationRead?.table === table &&

@@ -26,7 +26,8 @@
     "training_templates.template_key": "text",
     "training_templates.version": "int4",
     "training_template_applications.application_id": "uuid",
-    "training_template_applications.user_id": "uuid"
+    "training_template_applications.user_id": "uuid",
+    "workout_entry_sets.revision": "int4"
   },
   "legacyPrerequisiteTables": {
     "program_days": {
@@ -103,7 +104,8 @@
         "load_type",
         "legacy_snapshot",
         "created_at",
-        "updated_at"
+        "updated_at",
+        "revision"
       ],
       "constraints": [
         "workout_entry_sets_pkey",
@@ -125,6 +127,22 @@
         "workout_entry_set_tombstones_pkey",
         "workout_entry_set_tombstones_user_id_fkey"
       ],
+      "indexes": [],
+      "policies": [],
+      "rls": true,
+      "forceRls": true
+    },
+    "workout_set_edit_operations": {
+      "columns": [
+        "user_id",
+        "operation_id",
+        "workout_entry_id",
+        "set_id",
+        "expected_revision",
+        "payload",
+        "result_revision"
+      ],
+      "constraints": ["workout_set_edit_operations_pkey"],
       "indexes": [],
       "policies": [],
       "rls": true,
@@ -229,17 +247,31 @@
     "workout_entry_operation_tombstones_user_id_fkey"
   ],
   "perSetRpcs": [
-    { "name": "save_workout_entry_sets", "argumentTypes": "uuid, uuid, uuid, date, jsonb, text" },
+    {
+      "name": "save_workout_entry_sets",
+      "argumentTypes": "uuid, uuid, uuid, date, jsonb, text"
+    },
     {
       "name": "add_workout_entry_set",
       "argumentTypes": "uuid, uuid, text, integer, text, text, text"
     },
     {
       "name": "update_workout_entry_set",
-      "argumentTypes": "uuid, uuid, text, integer, text, text, text"
+      "argumentTypes": "uuid, uuid, text, integer, text, text, text",
+      "authenticated": false
     },
-    { "name": "delete_workout_entry_set", "argumentTypes": "uuid, uuid" },
-    { "name": "reorder_workout_entry_sets", "argumentTypes": "uuid, uuid[]" }
+    {
+      "name": "delete_workout_entry_set",
+      "argumentTypes": "uuid, uuid"
+    },
+    {
+      "name": "reorder_workout_entry_sets",
+      "argumentTypes": "uuid, uuid[]"
+    },
+    {
+      "name": "edit_workout_entry_set",
+      "argumentTypes": "uuid, uuid, uuid, integer, text, integer, text, text, text"
+    }
   ],
   "requiredLibraryRpcs": [
     {

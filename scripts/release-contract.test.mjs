@@ -7,14 +7,16 @@ const file = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 
 test("machine-readable capability contract names local library and V4 objects", () => {
   const contract = JSON.parse(file("scripts/schema-capability-contract.json"));
-  const v4 = file("drizzle/migrations/20261016204330_per_set_workout_v4.sql");
+  const v4 =
+    file("drizzle/migrations/20261016204330_per_set_workout_v4.sql") +
+    file("drizzle/migrations/20261105010000_workout_set_edit_revisions.sql");
   const library = file("drizzle/migrations/20261016150000_training_template_library.sql");
   for (const table of Object.keys(contract.authoritativeSetTables))
     assert.ok(v4.includes(`public.${table}`));
   for (const rpc of contract.perSetRpcs) assert.ok(v4.includes(`public.${rpc.name}`));
   for (const table of Object.keys(contract.libraryTables))
     assert.ok(library.includes(`public.${table}`));
-  assert.equal(contract.perSetRpcs.length, 5);
+  assert.equal(contract.perSetRpcs.length, 6);
 });
 
 test("release preflight uses a read-only transaction and has no database repair path", () => {

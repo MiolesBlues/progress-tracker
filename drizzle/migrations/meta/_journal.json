@@ -78,6 +78,13 @@
       "when": 1792176210000,
       "tag": "20261016204330_per_set_workout_v4",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793840400000,
+      "tag": "20261105010000_workout_set_edit_revisions",
+      "breakpoints": true
     }
   ]
 }

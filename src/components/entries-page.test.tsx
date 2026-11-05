@@ -194,7 +194,7 @@ it("edits one saved set through the owner-scoped per-set RPC", async () => {
   fireEvent.click(within(entryItem).getByRole("button", { name: "Сохранить подход 1" }));
   await waitFor(() =>
     expect(fake.state.rpc).toHaveBeenCalledWith(
-      "update_workout_entry_set",
+      "edit_workout_entry_set",
       expect.objectContaining({
         _entry_id: "editable",
         _set_id: "set-to-edit",
@@ -257,6 +257,61 @@ it("keeps multiple workout records open and preserves set order and missing RIR"
   expect(table).toHaveTextContent(/2\s*39 кг\s*10\s*—/);
   expect(table).toHaveTextContent(/3\s*39 кг\s*9\s*—/);
   expect(table).toHaveTextContent(/4\s*39 кг\s*8\s*—/);
+});
+
+async function openEditableSet() {
+  fake.state.rows.workout_entries = [entry("edit-race", dateDaysAgo(0), 50, [8])];
+  fake.state.rows.workout_entry_sets = [
+    {
+      id: "race-set",
+      user_id: "A",
+      workout_entry_id: "edit-race",
+      revision: 0,
+      position: 1,
+      weight: "50",
+      reps: 8,
+      rir: "2",
+      set_type: "working",
+      load_type: "external",
+    },
+  ];
+  mount();
+  const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
+  const item = within(diary).getAllByRole("listitem")[0]!;
+  fireEvent.click(within(item).getByRole("button"));
+  fireEvent.click(within(item).getByRole("button", { name: "Изменить подход 1" }));
+  fireEvent.change(within(item).getByLabelText("Вес подхода 1"), { target: { value: "51.5" } });
+  return item;
+}
+
+it("preserves unsaved values and the original base revision on a conflict/refetch", async () => {
+  const item = await openEditableSet();
+  fake.state.rows.workout_entry_sets[0]!["revision"] = 1;
+  fake.state.rows.workout_entry_sets[0]!["weight"] = "70";
+  fake.state.editErrorCode = "40001";
+  fireEvent.click(within(item).getByRole("button", { name: "Сохранить подход 1" }));
+  expect(await within(item).findByText(/Подход изменён в другом окне/)).toBeVisible();
+  expect(within(item).getByLabelText("Вес подхода 1")).toHaveValue("51.5");
+  expect(fake.state.rpc).toHaveBeenCalledTimes(1);
+  expect(fake.state.rpc).toHaveBeenCalledWith(
+    "edit_workout_entry_set",
+    expect.objectContaining({ _expected_revision: 0 }),
+  );
+});
+
+it("retries a lost edit response with the same UUID and frozen payload", async () => {
+  const item = await openEditableSet();
+  fake.state.rpc.mockRejectedValueOnce(new Error("lost response"));
+  fireEvent.click(within(item).getByRole("button", { name: "Сохранить подход 1" }));
+  expect(await within(item).findByText(/Результат изменения не подтверждён/)).toBeVisible();
+  expect(within(item).getByLabelText("Вес подхода 1")).toBeDisabled();
+  const first = fake.state.rpc.mock.calls[0];
+  fireEvent.click(within(item).getByRole("button", { name: "Сохранить подход 1" }));
+  await waitFor(() => expect(fake.state.rpc).toHaveBeenCalledTimes(2));
+  expect(fake.state.rpc.mock.calls[1]).toEqual(first);
+  await waitFor(() =>
+    expect(within(item).queryByLabelText("Вес подхода 1")).not.toBeInTheDocument(),
+  );
 });
 
 it("uses the current day name immediately after rename without changing historical snapshots", async () => {

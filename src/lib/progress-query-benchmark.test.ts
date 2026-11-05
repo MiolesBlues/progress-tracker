@@ -15,6 +15,7 @@ function fixture(size: number, setsPerEntry: number) {
     const id = "entry-" + String(index).padStart(5, "0");
     const entrySets = Array.from({ length: setsPerEntry }, (_, setIndex) => ({
       id: "set-" + index + "-" + setIndex,
+      revision: 0,
       position: setIndex + 1,
       weight: 20 + ((index + setIndex) % 100),
       weightExact: String(20 + ((index + setIndex) % 100)),
