@@ -25,11 +25,15 @@ test("release preflight uses a read-only transaction and has no database repair 
   assert.ok(preflight.includes('environment === "recovery"'));
   assert.ok(preflight.includes("has_table_privilege"));
   assert.ok(preflight.includes("has_function_privilege"));
+  assert.ok(preflight.includes("await tx.unsafe(workoutIntegritySql)"));
+  assert.ok(preflight.includes("workoutIntegrityFailures(assertions[0])"));
+  const integritySql = file("scripts/workout-integrity-preflight.sql");
   assert.ok(
     !/\b(INSERT\s+INTO|UPDATE\s+\w|DELETE\s+FROM|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b/i.test(
-      preflight,
+      preflight + integritySql,
     ),
   );
+  assert.ok(file("package.json").includes("scripts/release-integrity-db.test.mjs"));
 });
 
 test("the real local env file is not tracked and Vite validates environment before builds", () => {
