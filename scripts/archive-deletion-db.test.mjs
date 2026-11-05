@@ -133,7 +133,10 @@ test("archived day deletion keeps exercises and every meaningful history field",
         "SELECT save_workout_entry($1,$2,$3,'2026-10-15',52.5,'{8,8,7,6}',2,'Keep me')",
         [id, exerciseId, first.id],
       );
-    await db.query("UPDATE program_exercises SET day_id=$1 WHERE id=$2", [second.id, moved.id]);
+    await db.query("UPDATE program_exercises SET revision=revision+1,day_id=$1 WHERE id=$2", [
+      second.id,
+      moved.id,
+    ]);
     const beforeRows = await rows(
       "SELECT id,exercise_id,user_id,performed_on,weight,reps,rir,notes,day_name,created_at FROM workout_entries WHERE user_id=$1 ORDER BY id",
       [A],
@@ -142,7 +145,9 @@ test("archived day deletion keeps exercises and every meaningful history field",
       db.query("UPDATE workout_entries SET day_id=NULL WHERE user_id=$1", [A]),
       (error) => error.code === "42501",
     );
-    await db.query("UPDATE program_days SET archived_at=now() WHERE id=$1", [first.id]);
+    await db.query("UPDATE program_days SET revision=revision+1,archived_at=now() WHERE id=$1", [
+      first.id,
+    ]);
     assert.equal(
       (await rows("SELECT delete_archived_program_day($1) AS deleted", [first.id]))[0].deleted,
       true,
@@ -173,7 +178,10 @@ test("archived day deletion keeps exercises and every meaningful history field",
     );
     assert.equal(exercises.find((row) => row.id === linked.id).day_id, null);
     assert.equal(exercises.find((row) => row.id === moved.id).day_id, second.id);
-    await db.query("UPDATE program_exercises SET day_id=$1 WHERE id=$2", [second.id, linked.id]);
+    await db.query("UPDATE program_exercises SET revision=revision+1,day_id=$1 WHERE id=$2", [
+      second.id,
+      linked.id,
+    ]);
     assert.equal(
       (await rows("SELECT day_id FROM program_exercises WHERE id=$1", [linked.id]))[0].day_id,
       second.id,
@@ -199,7 +207,9 @@ test("a lost save reply can be retried exactly after day deletion, while changed
       (await rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8) AS id", original))[0].id,
       id,
     );
-    await db.query("UPDATE program_days SET archived_at=now() WHERE id=$1", [day.id]);
+    await db.query("UPDATE program_days SET revision=revision+1,archived_at=now() WHERE id=$1", [
+      day.id,
+    ]);
     assert.equal(
       (await rows("SELECT delete_archived_program_day($1) AS ok", [day.id]))[0].ok,
       true,
@@ -242,7 +252,10 @@ test("permanent exercise deletion removes payload history but prevents UUID reus
     const id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     const args = [id, exercise.id, day.id, "2026-10-15", 60, [8, 8], 2, "private note"];
     await rows("SELECT save_workout_entry($1,$2,$3,$4,$5,$6,$7,$8)", args);
-    await db.query("UPDATE program_exercises SET archived_at=now() WHERE id=$1", [exercise.id]);
+    await db.query(
+      "UPDATE program_exercises SET revision=revision+1,archived_at=now() WHERE id=$1",
+      [exercise.id],
+    );
     assert.equal(
       (await rows("SELECT delete_archived_program_exercise($1) AS ok", [exercise.id]))[0].ok,
       true,
@@ -321,7 +334,10 @@ test("active and foreign objects cannot be deleted; archived exercise removes on
         .deleted,
       false,
     );
-    await db.query("UPDATE program_exercises SET archived_at=now() WHERE id=$1", [foreign.id]);
+    await db.query(
+      "UPDATE program_exercises SET revision=revision+1,archived_at=now() WHERE id=$1",
+      [foreign.id],
+    );
     assert.equal(
       (await rows("SELECT delete_archived_program_exercise($1) AS deleted", [foreign.id]))[0]
         .deleted,

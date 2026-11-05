@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       program_days: {
         Row: {
+          revision: number
           archived_at: string | null
           created_at: string
           id: string
@@ -26,6 +27,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          revision?: number
           archived_at?: string | null
           created_at?: string
           id?: string
@@ -36,6 +38,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          revision?: number
           archived_at?: string | null
           created_at?: string
           id?: string
@@ -49,6 +52,7 @@ export type Database = {
       }
       program_exercises: {
         Row: {
+          revision: number
           archived_at: string | null
           created_at: string
           day: string
@@ -68,6 +72,7 @@ export type Database = {
           template_exercise_key: string | null
         }
         Insert: {
+          revision?: number
           archived_at?: string | null
           created_at?: string
           day?: string
@@ -87,6 +92,7 @@ export type Database = {
           template_exercise_key?: string | null
         }
         Update: {
+          revision?: number
           archived_at?: string | null
           created_at?: string
           day?: string

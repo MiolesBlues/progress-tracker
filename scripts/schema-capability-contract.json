@@ -27,11 +27,13 @@
     "training_templates.version": "int4",
     "training_template_applications.application_id": "uuid",
     "training_template_applications.user_id": "uuid",
-    "workout_entry_sets.revision": "int4"
+    "workout_entry_sets.revision": "int4",
+    "program_days.revision": "int4",
+    "program_exercises.revision": "int4"
   },
   "legacyPrerequisiteTables": {
     "program_days": {
-      "columns": ["id", "user_id", "name", "position", "archived_at", "created_at"],
+      "columns": ["id", "user_id", "name", "position", "archived_at", "created_at", "revision"],
       "rls": true
     },
     "program_exercises": {
@@ -47,7 +49,8 @@
         "target_reps",
         "example_reps",
         "archived_at",
-        "created_at"
+        "created_at",
+        "revision"
       ],
       "rls": true
     },
@@ -315,6 +318,13 @@
       "authenticated": false,
       "anon": false,
       "public": false
+    },
+    {
+      "name": "guard_program_edit_revision",
+      "argumentTypes": "",
+      "authenticated": false,
+      "anon": false,
+      "public": false
     }
   ],
   "migrationOwnership": {
@@ -332,6 +342,16 @@
       "table": "workout_entries",
       "name": "workout_entries_legacy_metrics_guard",
       "function": "guard_legacy_workout_metrics"
+    },
+    {
+      "table": "program_days",
+      "name": "program_days_revision",
+      "function": "guard_program_edit_revision"
+    },
+    {
+      "table": "program_exercises",
+      "name": "program_exercises_revision",
+      "function": "guard_program_edit_revision"
     }
   ]
 }

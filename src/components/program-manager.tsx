@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/select";
 
 type Result = { error: { message: string; code?: string } | null };
+type DayEditDraft = { name: string; revision: number };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
 const selectCls = "h-12 w-full min-w-0 rounded-md border border-input bg-card px-3 text-foreground";
 function safePendingCreate(userId: string, kind: "day" | "exercise") {
@@ -124,6 +125,16 @@ export function ProgramManager() {
   const [archiveExpandedByUser, setArchiveExpandedByUser] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [exerciseError, setExerciseError] = useState("");
+  // Keep rename input by stable ID even if a refetch moves a day into archive.
+  const [dayEditDrafts, setDayEditDrafts] = useState<Record<string, DayEditDraft>>({});
+  const changeDayDraft = (id: string, draft: DayEditDraft | undefined) => {
+    setDayEditDrafts((old) => {
+      const next = { ...old };
+      if (draft) next[id] = draft;
+      else delete next[id];
+      return next;
+    });
+  };
   const running = useRef(false);
   const selectedDay = active.find((day) => day.id === selected) ?? active[0];
   const dayId = selectedDay?.id ?? "";
@@ -209,6 +220,17 @@ export function ProgramManager() {
           throw new Error(t("Можно иметь не более 7 активных дней."));
         if (message.includes("хотя бы один активный день"))
           throw new Error(t("Нужен хотя бы один активный день."));
+        if (result.error.code === "40001" || result.error.code === "PGRST116") {
+          await Promise.all([
+            qc.invalidateQueries({ queryKey: userKeys.days(userId) }),
+            qc.invalidateQueries({ queryKey: userKeys.program(userId) }),
+          ]);
+          throw new Error(
+            t(
+              "Программа изменена в другом окне. Ввод сохранён; отмените редактирование и откройте его снова.",
+            ),
+          );
+        }
         if (result.error.code === "22023" || result.error.code === "PGRST116")
           throw new Error(t("Программа изменилась. Обновите страницу и повторите действие."));
         throw new Error(
@@ -536,30 +558,54 @@ export function ProgramManager() {
     setNewExerciseDayId("");
     toast.success(t("Упражнение добавлено"));
   }
-  const updateDay = async (id: string, patch: { name?: string; archived_at?: string | null }) => {
+  const updateDay = async (
+    id: string,
+    patch: { name?: string; archived_at?: string | null },
+    revision: number,
+  ) => {
     const result = await supabase
       .from("program_days")
-      .update(patch)
+      .update({ ...patch, revision: revision + 1 })
       .eq("id", id)
       .eq("user_id", userId)
-      .select("id")
+      .eq("revision", revision)
+      .select("id, revision")
       .abortSignal(signal)
       .single();
+    if (
+      !result.error &&
+      (!result.data || result.data.id !== id || result.data.revision !== revision + 1)
+    )
+      return { error: { code: "40001", message: "Program update was not confirmed" } };
     if (!result.error && result.data && isCurrent())
       qc.setQueryData<Day[]>(userKeys.days(userId), (old) =>
-        old?.map((day) => (day.id === id ? { ...day, ...patch } : day)),
+        old?.map((day) =>
+          day.id === id ? { ...day, ...patch, revision: result.data.revision } : day,
+        ),
       );
     return result;
   };
-  const updateExercise = (id: string, patch: TablesUpdate<"program_exercises">) =>
-    supabase
+  const updateExercise = async (
+    id: string,
+    patch: TablesUpdate<"program_exercises">,
+    revision: number,
+  ) => {
+    const result = await supabase
       .from("program_exercises")
-      .update(patch)
+      .update({ ...patch, revision: revision + 1 })
       .eq("id", id)
       .eq("user_id", userId)
-      .select("id")
+      .eq("revision", revision)
+      .select("id, revision")
       .abortSignal(signal)
       .single();
+    if (
+      !result.error &&
+      (!result.data || result.data.id !== id || result.data.revision !== revision + 1)
+    )
+      return { error: { code: "40001", message: "Program update was not confirmed" } };
+    return result;
+  };
 
   if (daysResult.isPending || programResult.isPending)
     return (
@@ -635,9 +681,13 @@ export function ProgramManager() {
           disabled={busy}
           onClick={() =>
             void run(() =>
-              updateExercise(ex.id, {
-                archived_at: ex.archived_at ? null : new Date().toISOString(),
-              }),
+              updateExercise(
+                ex.id,
+                {
+                  archived_at: ex.archived_at ? null : new Date().toISOString(),
+                },
+                ex.revision,
+              ),
             )
           }
           className="shrink-0 text-muted-foreground"
@@ -735,10 +785,12 @@ export function ProgramManager() {
                 render={(day, handle) => (
                   <DayEditor
                     day={day}
+                    draft={dayEditDrafts[day.id]}
+                    changeDraft={(draft) => changeDayDraft(day.id, draft)}
                     handle={handle}
                     busy={busy}
                     run={run}
-                    save={(patch) => updateDay(day.id, patch)}
+                    save={(patch, revision) => updateDay(day.id, patch, revision)}
                     canArchive={active.length > 1}
                     canRestore={false}
                     deleteControl={null}
@@ -779,9 +831,11 @@ export function ProgramManager() {
                       <div key={day.id}>
                         <DayEditor
                           day={day}
+                          draft={dayEditDrafts[day.id]}
+                          changeDraft={(draft) => changeDayDraft(day.id, draft)}
                           busy={busy}
                           run={run}
-                          save={(patch) => updateDay(day.id, patch)}
+                          save={(patch, revision) => updateDay(day.id, patch, revision)}
                           canArchive={false}
                           canRestore={active.length < MAX_DAYS}
                           deleteControl={
@@ -956,7 +1010,7 @@ export function ProgramManager() {
             </DialogHeader>
             {editingEx && (
               <ExerciseEditor
-                key={editingEx.id + editingEx.day_id}
+                key={editingEx.id}
                 exercise={editingEx}
                 days={days}
                 busy={busy}
@@ -966,7 +1020,7 @@ export function ProgramManager() {
                   if (ok) setEditing(null);
                   return ok;
                 }}
-                save={(patch) => updateExercise(editingEx.id, patch)}
+                save={(patch, revision) => updateExercise(editingEx.id, patch, revision)}
                 nextPosition={(target) =>
                   nextPosition(exercises.filter((item) => item.day_id === target))
                 }
@@ -1064,16 +1118,23 @@ export function ProgramManager() {
 
 type DayEditorProps = {
   day: Day;
+  draft: DayEditDraft | undefined;
+  changeDraft: (draft: DayEditDraft | undefined) => void;
   handle?: ReactNode;
   busy: boolean;
   run: Run;
-  save: (patch: { name?: string; archived_at?: string | null }) => PromiseLike<Result>;
+  save: (
+    patch: { name?: string; archived_at?: string | null },
+    revision: number,
+  ) => PromiseLike<Result>;
   canArchive: boolean;
   canRestore: boolean;
   deleteControl: ReactNode;
 };
 function DayEditor({
   day,
+  draft,
+  changeDraft,
   handle,
   busy,
   run,
@@ -1083,11 +1144,14 @@ function DayEditor({
   deleteControl,
 }: DayEditorProps) {
   const { t } = useI18n();
-  const [name, setName] = useState(day.name);
-  const [editing, setEditing] = useState(false);
+  const name = draft?.name ?? day.name;
+  const editing = !!draft;
+  const baseRevision = draft?.revision ?? day.revision;
+  const setName = (name: string) => changeDraft({ name, revision: baseRevision });
   async function rename(event: FormEvent) {
     event.preventDefault();
-    if (await run(() => save({ name: programName(name, 60) }))) setEditing(false);
+    if (await run(() => save({ name: programName(name, 60) }, baseRevision)))
+      changeDraft(undefined);
   }
   const archiveLabel = day.archived_at ? t("Восстановить день") : t("Архивировать день");
   const archiveDisabled = busy || (day.archived_at ? !canRestore : !canArchive);
@@ -1121,8 +1185,7 @@ function DayEditor({
               aria-label={t("Отменить переименование")}
               disabled={busy}
               onClick={() => {
-                setName(day.name);
-                setEditing(false);
+                changeDraft(undefined);
               }}
             >
               <X className="h-4 w-4" />
@@ -1139,8 +1202,7 @@ function DayEditor({
               aria-label={t("Переименовать день: {name}", { name: day.name })}
               disabled={busy}
               onClick={() => {
-                setName(day.name);
-                setEditing(true);
+                changeDraft({ name: day.name, revision: day.revision });
               }}
             >
               <Pencil className="h-4 w-4" />
@@ -1157,7 +1219,12 @@ function DayEditor({
           title={archiveLabel}
           disabled={archiveDisabled}
           onClick={() =>
-            void run(() => save({ archived_at: day.archived_at ? null : new Date().toISOString() }))
+            void run(() =>
+              save(
+                { archived_at: day.archived_at ? null : new Date().toISOString() },
+                day.revision,
+              ),
+            )
           }
         >
           {day.archived_at ? (
@@ -1180,7 +1247,7 @@ type ExerciseEditorProps = {
   busy: boolean;
   error: string;
   run: Run;
-  save: (patch: TablesUpdate<"program_exercises">) => PromiseLike<Result>;
+  save: (patch: TablesUpdate<"program_exercises">, revision: number) => PromiseLike<Result>;
   nextPosition: (dayId: string) => number;
 };
 function ExerciseEditor({
@@ -1193,6 +1260,8 @@ function ExerciseEditor({
   nextPosition: positionFor,
 }: ExerciseEditorProps) {
   const { t, language } = useI18n();
+  const [baseRevision] = useState(ex.revision);
+  const [baseDayId] = useState(ex.day_id);
   const [name, setName] = useState(ex.name);
   const [dayId, setDayId] = useState(ex.day_id ?? "");
   const [sets, setSets] = useState(String(ex.target_sets ?? ""));
@@ -1200,12 +1269,12 @@ function ExerciseEditor({
   function submit(event: FormEvent) {
     event.preventDefault();
     void run(() => {
-      if (dayId !== ex.day_id && dayId && days.find((day) => day.id === dayId)?.archived_at)
+      if (dayId !== baseDayId && dayId && days.find((day) => day.id === dayId)?.archived_at)
         throw new Error(t("Перенос возможен только в активный день"));
       const patch = exercisePatch({ name, dayId, sets, reps, weight: "" }, days);
       delete patch.working_weight;
-      if (patch.day_id !== ex.day_id && patch.day_id) patch.position = positionFor(patch.day_id);
-      return save(patch);
+      if (patch.day_id !== baseDayId && patch.day_id) patch.position = positionFor(patch.day_id);
+      return save(patch, baseRevision);
     });
   }
   return (

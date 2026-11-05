@@ -61,6 +61,10 @@
     {
       "file": "20261105020000_legacy_workout_write_contract.sql",
       "sha256": "4a4126629e55d65ab34804df1989b1486889dee3991f793bb252f4daefc44da9"
+    },
+    {
+      "file": "20261105030000_program_edit_revisions.sql",
+      "sha256": "0ee865af2b91f22e123c51b6d7e5e804556ca7430587ddba7d09dd8cf92503d4"
     }
   ]
 }

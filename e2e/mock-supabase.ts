@@ -360,6 +360,8 @@ export async function mockSupabase(page: Page) {
             }),
           ]
         : rows[table]!;
+    if (["program_days", "program_exercises"].includes(table))
+      sourceRows.forEach((row) => (row["revision"] ??= 0));
     const matches = (r: Row) =>
       r.user_id === id &&
       [...url.searchParams].every(([key, filter]) => {

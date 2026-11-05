@@ -195,7 +195,7 @@ const fake = vi.hoisted(() => {
           }));
         });
       }
-      if (table === "workout_entry_sets")
+      if (["workout_entry_sets", "program_days", "program_exercises"].includes(table))
         rows.forEach((row) => {
           row["revision"] ??= 0;
         });
@@ -212,6 +212,7 @@ const fake = vi.hoisted(() => {
           return { data: null, error: { code: "23505", message: "duplicate key" } };
         const row = {
           id: String(values.id ?? `new-${++state.sequence}`),
+          revision: 0,
           archived_at: null,
           target_sets: null,
           target_reps: null,
