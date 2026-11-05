@@ -6,7 +6,10 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { loadEnv } from "vite";
-import { validateSupabaseEnvironment } from "./src/integrations/supabase/env-contract.js";
+import {
+  validateSupabaseEnvironment,
+  validateSupabasePublishableKey,
+} from "./src/integrations/supabase/env-contract.js";
 
 // Keep Nitro's generated Worker date supported by the pinned Wrangler runtime.
 // Bump it together with Wrangler after validating the new workerd runtime.
@@ -59,6 +62,10 @@ validateSupabaseEnvironment({
   developmentServer: isDevelopmentServer,
   requireBrowserServerPair: isDevelopmentServer && allowStagingDev,
 });
+validateSupabasePublishableKey(env("VITE_SUPABASE_PUBLISHABLE_KEY"));
+// The SSR public client must not accept a privileged key either.
+if (env("SUPABASE_PUBLISHABLE_KEY"))
+  validateSupabasePublishableKey(env("SUPABASE_PUBLISHABLE_KEY"));
 
 export default defineConfig({
   vite: {

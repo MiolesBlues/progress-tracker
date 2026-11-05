@@ -3,10 +3,10 @@ import { createMiddleware } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
-import { validateSupabaseEnvironment } from "./env-contract";
+import { validateSupabaseEnvironment, validateSupabasePublishableKey } from "./env-contract";
 
 function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
+  return value.startsWith("sb_publishable_");
 }
 
 function createSupabaseFetch(supabaseKey: string): typeof fetch {
@@ -56,6 +56,7 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       throw new Error(message);
     }
 
+    validateSupabasePublishableKey(SUPABASE_PUBLISHABLE_KEY);
     const request = getRequest();
 
     if (!request?.headers) {

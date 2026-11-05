@@ -219,3 +219,49 @@ test("release preflight rejects the wrong project URL before opening a connectio
     },
   );
 });
+
+test("Vite rejects privileged values under the public key name before compilation without echo", () => {
+  const jwt = (role) =>
+    [
+      Buffer.from('{"alg":"HS256"}').toString("base64url"),
+      Buffer.from(JSON.stringify({ role })).toString("base64url"),
+      "synthetic-signature",
+    ].join(".");
+  for (const candidate of ["sb_secret_synthetic_private_marker", jwt("service_role")]) {
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          ["node_modules/vite/bin/vite.js", "build", "--mode", "test"],
+          {
+            encoding: "utf8",
+            stdio: "pipe",
+            timeout: 15000,
+            env: {
+              ...process.env,
+              SUPABASE_ENVIRONMENT: "test",
+              VITE_SUPABASE_ENVIRONMENT: "test",
+              SUPABASE_URL: "https://workout-e2e.invalid",
+              VITE_SUPABASE_URL: "https://workout-e2e.invalid",
+              SUPABASE_PROJECT_REF: "",
+              VITE_SUPABASE_PROJECT_REF: "",
+              SUPABASE_PROJECT_ID: "",
+              VITE_SUPABASE_PROJECT_ID: "",
+              SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_only",
+              VITE_SUPABASE_PUBLISHABLE_KEY: candidate,
+              SUPABASE_SERVICE_ROLE_KEY: "",
+              ALLOW_STAGING_DEV: "false",
+            },
+          },
+        ),
+      (error) => {
+        const output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+        return (
+          output.includes("public key must be a publishable key or a legacy anon JWT") &&
+          !output.includes(candidate) &&
+          !output.includes("modules transformed")
+        );
+      },
+    );
+  }
+});
