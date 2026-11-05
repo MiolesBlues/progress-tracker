@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { validateRestoreApproval } from "./recovery-contract.mjs";
+import { workoutIntegritySql, workoutIntegrityFailures } from "./workout-integrity-preflight.mjs";
 
 const contract = JSON.parse(
   readFileSync(new URL("./schema-capability-contract.json", import.meta.url), "utf8"),
@@ -406,36 +407,8 @@ async function runRemotePreflight() {
         tableByName.has("workout_entry_sets") &&
         tableByName.has("workout_entry_operations")
       ) {
-        const assertions = await tx`
-          SELECT
-            (SELECT count(*)::int FROM public.workout_entries w
-              LEFT JOIN LATERAL (
-                SELECT array_agg(s.reps ORDER BY s.position) AS set_reps
-                FROM public.workout_entry_sets s
-                WHERE s.workout_entry_id=w.id AND s.user_id=w.user_id
-              ) actual ON true
-              WHERE actual.set_reps IS DISTINCT FROM w.reps) AS reps_mismatch,
-            (SELECT count(*)::int FROM public.workout_entries w
-              WHERE EXISTS (SELECT 1 FROM public.workout_entry_sets s
-                WHERE s.workout_entry_id=w.id AND s.user_id=w.user_id AND s.legacy_snapshot)
-                AND EXISTS (
-                  SELECT 1 FROM unnest(w.reps) WITH ORDINALITY expected(reps,position)
-                  LEFT JOIN public.workout_entry_sets s
-                    ON s.workout_entry_id=w.id AND s.user_id=w.user_id AND s.position=expected.position
-                  WHERE s.id IS NULL OR s.reps IS DISTINCT FROM expected.reps
-                    OR s.weight IS DISTINCT FROM w.weight OR s.rir IS DISTINCT FROM w.rir
-                    OR s.set_type IS DISTINCT FROM 'working' OR s.load_type IS DISTINCT FROM 'external'
-                    OR NOT s.legacy_snapshot
-                )) AS legacy_value_mismatch,
-            (SELECT count(*)::int FROM public.workout_entry_operations o
-              JOIN public.workout_entries w ON w.id=o.id AND w.user_id=o.user_id
-              WHERE o.set_snapshot IS NULL) AS missing_operation_snapshot`;
-        if (assertions[0].reps_mismatch)
-          failures.push("entry reps differ from ordered authoritative sets");
-        if (assertions[0].legacy_value_mismatch)
-          failures.push("legacy set snapshot differs from source reps, weight, RIR or ordering");
-        if (assertions[0].missing_operation_snapshot)
-          failures.push("existing operation rows lack a per-set retry snapshot");
+        const assertions = await tx.unsafe(workoutIntegritySql);
+        failures.push(...workoutIntegrityFailures(assertions[0]));
       }
       const defaultAclSql = readFileSync(
         new URL("./default-privileges-preflight.sql", import.meta.url),

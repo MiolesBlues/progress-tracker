@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs",
+    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs scripts/release-integrity-db.test.mjs",
     "preflight:schema-contract": "node scripts/release-schema-preflight.mjs --check-contract",
     "preflight:release": "node scripts/release-schema-preflight.mjs",
     "verify:backup-manifest": "node scripts/verify-backup-manifest.mjs",
