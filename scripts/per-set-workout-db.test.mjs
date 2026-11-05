@@ -269,9 +269,11 @@ test("backfill key is deterministic and replay does not duplicate any legacy set
   );
 });
 
-test("new save is atomic, stores different per-set weights/RIR and is safe to retry in parallel", async () => {
+test("new save is atomic, stores different per-set weights/RIR and is safe to retry through queued PGlite calls", async () => {
   await asUser(A, async () => {
     const sets = payload();
+    // One PGlite instance queues these calls. Real overlapping PostgreSQL
+    // transactions are covered separately in postgres-concurrency.test.mjs.
     const results = await Promise.all(
       Array.from({ length: 4 }, () => saveSets(NEW_ENTRY, exerciseA, dayA, sets)),
     );

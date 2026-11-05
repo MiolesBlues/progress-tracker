@@ -101,6 +101,8 @@ erDiagram
 
 Доступные команды см. в `package.json`; конфигурации — `vitest.config.ts`, `playwright.config.ts`, `playwright.staging.config.ts` и `.github/workflows/quality.yml`.
 
+Межсоединительная конкуренция отдельно проверяется `bun run test:concurrency` на disposable PostgreSQL 18.6. Три различных backend PID используются для двух транзакций и наблюдателя `pg_blocking_pids`: проверяются реальное ожидание блокировки, create retry, stale edit SQLSTATE 40001 и повтор старой операции после новой правки. CI использует официальный образ `library/postgres:18.6` по digest `sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583` ([provenance](https://hub.docker.com/v2/repositories/library/postgres/tags/18.6)). Только явно названная passwordless loopback fixture DB допускается как control endpoint; каждый запуск создаёт новую синтетическую базу. Hosted URL отклоняется до соединения. Локальные fixture DB сохраняются до отдельной очистки, CI service исчезает вместе с job. Проверки PostgreSQL 18 не подтверждают версии/настройки hosted PostgreSQL и не заменяют отдельную rehearsal.
+
 ## Расширение архитектуры
 
 - Новые персональные данные должны получать владельца, RLS policies и серверные проверки; сначала изучите существующие миграции и тестовые контракты.

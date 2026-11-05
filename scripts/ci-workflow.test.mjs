@@ -285,3 +285,19 @@ test("GitHub Actions expressions have balanced delimiters", () => {
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
 });
+
+test("database job runs a digest-pinned disposable PostgreSQL concurrency probe", () => {
+  const job = jobs["database-contracts"];
+  assert.match(job, /image: postgres:18\.6@sha256:[a-f0-9]{64}/);
+  assert.match(job, /POSTGRES_DB: pt_concurrency_fixtures/);
+  assert.match(job, /127\.0\.0\.1:55432:5432/);
+  assert.match(
+    job,
+    /CONCURRENCY_DATABASE_URL: postgresql:\/\/postgres@127\.0\.0\.1:55432\/pt_concurrency_fixtures/,
+  );
+  assert.match(job, /run: bun run test:concurrency/);
+  assert.equal(
+    packageScripts["test:concurrency"],
+    "node --test scripts/postgres-concurrency.test.mjs",
+  );
+});
