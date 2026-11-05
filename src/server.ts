@@ -1,5 +1,4 @@
-import { errorPageResponse } from "./lib/error-page";
-import { requestLanguage } from "./lib/ssr-language";
+import { serverErrorResponse } from "./lib/server-error";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -32,7 +31,7 @@ async function normalizeCatastrophicSsrResponse(
   // h3 has already discarded request-local error details. Do not correlate a
   // process-global captured exception here: concurrent Worker requests can
   // otherwise expose another request's error. Keep the public response generic.
-  return errorPageResponse(requestLanguage(request));
+  return serverErrorResponse(request, "framework_response");
 }
 
 function isH3SwallowedErrorBody(body: string): boolean {
@@ -53,8 +52,7 @@ export default {
     } catch (error) {
       // Do not serialize arbitrary request errors: they may contain tokens or
       // user workout data. The generic response remains request-local.
-      void error;
-      return errorPageResponse(requestLanguage(request));
+      return serverErrorResponse(request, "server_entry", error);
     }
   },
 };

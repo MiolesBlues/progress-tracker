@@ -73,5 +73,18 @@ it("keeps overlapping SSR failures request-local and does not log private diagno
   ]);
   expect(en.headers.get("content-language")).toBe("en");
   expect(ru.headers.get("content-language")).toBe("ru");
-  expect(logged).not.toHaveBeenCalled();
+  const events = logged.mock.calls.map(([message]) => JSON.parse(message as string));
+  expect(events).toHaveLength(2);
+  expect(events.map((event) => event.correlation_id).sort()).toEqual(
+    [en.headers.get("x-pt-error-id"), ru.headers.get("x-pt-error-id")].sort(),
+  );
+  expect(new Set(events.map((event) => event.correlation_id)).size).toBe(2);
+  for (const event of events) {
+    expect(event).toEqual({
+      event: "ssr_failure",
+      boundary: "framework_response",
+      kind: "framework_swallowed",
+      correlation_id: expect.any(String),
+    });
+  }
 });
