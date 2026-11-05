@@ -1,25 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 
-/**
- * RPCs defined in drizzle/migrations 0003/0004 that are not yet applied to the
- * backend (awaiting user approval), so generated types do not list them yet.
- * Remove this helper once the migrations are applied and types regenerate.
- */
-type PendingRpc =
-  | "reorder_program_days"
-  | "reorder_program_exercises"
-  | "save_workout_entry"
-  | "save_workout_entry_sets"
-  | "add_workout_entry_set"
-  | "update_workout_entry_set"
-  | "delete_workout_entry_set"
-  | "reorder_workout_entry_sets";
+type Functions = Database["public"]["Functions"];
 
-export function pendingRpc(name: PendingRpc, args: Record<string, unknown>) {
-  return (
-    supabase.rpc as unknown as (
-      n: string,
-      a: Record<string, unknown>,
-    ) => ReturnType<typeof supabase.rpc>
-  )(name, args);
+// Resolve the lazy client only on invocation. The generated contract couples
+// each function name to its exact argument shape and SDK result builder.
+export function pendingRpc<Name extends keyof Functions>(
+  name: Name,
+  args: Functions[NoInfer<Name>]["Args"],
+  options?: Parameters<typeof supabase.rpc>[2],
+) {
+  return supabase.rpc<Name, Functions[Name]["Args"]>(name, args, options);
 }
