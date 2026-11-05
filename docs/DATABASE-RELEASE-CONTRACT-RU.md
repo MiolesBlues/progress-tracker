@@ -20,6 +20,9 @@
 
 - Канонический исходник схемы — вручную поддерживаемые SQL в `drizzle/migrations/`. Каталог содержит исходный baseline `0000…0004` и feature-миграции.
 - `drizzle/schema.ts` и Drizzle snapshots пусты/неполны. `drizzle-kit push` и генерацию DDL из них запрещено использовать.
+- Канонический полный упорядоченный список: `drizzle/canonical-manifest.json` (SHA-256 UTF-8 SQL с CRLF→LF). `scripts/canonical-migrations.mjs` проверяет точное соответствие всех SQL-файлов, порядка, checksum и `_journal.json`; fresh/legacy-upgrade PGlite используют этот же список, включая обе ACL-миграции. Historical subset-тесты могут явно исключать миграции для воспроизведения старого состояния.
+- Каталог `migrations/meta` зарезервирован Drizzle для snapshots/journal. Canonical inventory хранится вне него: иначе `drizzle-kit check` пытается разобрать его как snapshot и отклоняет конфигурацию.
+- Журнал дополнен двумя ранее отсутствовавшими ACL entries с исходными календарными timestamps; существующие SQL и timestamps не переписаны. Это исправление локального inventory, а не команда remote migration. База с более поздним applied timestamp могла пропустить ранний ACL: нельзя полагаться только на `max(timestamp)` и повторять весь список. Нужны capability/ACL preflight и отдельно одобренный forward-only план по фактическому состоянию; SQL автоматически не исполняется.
 - Hosted `supabase_migrations` — свидетельство того, что конкретный проект применял, но его timestamps не обязаны совпадать с локальными именами. Не выравнивать, не удалять и не переписывать journal rows автоматически.
 - Перед разрешением выпуска проверяются capability-объекты, сигнатуры, constraints, RLS, policies и effective ACL. Машиночитаемый контракт находится в `scripts/schema-capability-contract.json`.
 - Fresh install проверяется миграционными тестами PGlite; upgrade проверяется на baseline с существующими legacy workout rows. Это изолированные тесты, а не hosted rehearsal.
@@ -69,5 +72,28 @@ Emergency rollback: до появления новых per-set записей д
 ## Preflight и восстановление
 
 Команда `bun run preflight:schema-contract` проверяет локальный контракт и наличие исходников migrations. `bun run preflight:release` без параметров подключения завершится ошибкой. Ручной workflow запрашивает `SUPABASE_ENVIRONMENT`, ref и `RELEASE_DATABASE_URL`, сначала сравнивает ref с хостом/именем пользователя, затем выполняет только SELECT в `READ ONLY` транзакции. Любой отсутствующий объект, signature, constraint, policy, grant или несовпадающая версия capability блокируют выпуск. Исправлений на remote он не выполняет.
+
+### Исходный снимок и текущие подходы (ARCH-001)
+
+`workout_entry_operations.set_snapshot` хранит исходный payload создания записи, а `workout_entry_sets` — текущее редактируемое состояние. Legacy-поля `workout_entries.weight/reps/rir` сохраняют совместимый исходный результат и не пересчитываются RPC редактирования подходов. Поэтому gate не требует равенства текущих подходов legacy-массиву повторений.
+
+Общие read-only assertions находятся в `scripts/workout-integrity-preflight.sql`; тот же SQL исполняют regression tests `scripts/release-integrity-db.test.mjs` в PGlite. Проверяются:
+
+- структура, уникальные ID, исходные позиции и согласованность operation snapshot с исходными weight/reps/RIR; соответствие legacy-полей записи исходному ledger;
+- наличие 1–20 текущих подходов, владелец, последовательные позиции и ограничения новых значений;
+- неизменённые legacy-подходы (`legacy_snapshot=true`) по стабильному ID и значениям, без требования сохранять исходную позицию;
+- наличие каждого исходного подхода либо tombstone того же владельца и записи; отсутствие удалённых ID среди текущих подходов.
+
+Старые записи с `day_id=NULL`, для которых ledger изначально не создавался, проверяются по детерминированному legacy-снимку из сохранённых полей записи. Gate не придумывает им operation payload. Допустимые изменения, reorder и подтверждённое удаление проходят; отсутствие подходов, нарушения ownership/order и повреждение доступного исходного свидетельства блокируют выпуск. Проверки объектов, RLS и ACL сохраняются отдельно.
+
+Это проверка внутренних контрактов, а не криптографическое доказательство неизменности истории: согласованное привилегированное изменение всех источников без независимой резервной копии по текущим таблицам установить нельзя. Изменяемые наборы не восстанавливаются из snapshot автоматически. Отсутствие ledger у старой записи также ограничивает независимую проверку её исходных полей.
+
+Исправление не требует новой SQL-миграции и не меняет RLS, права, RPC или сохранённые данные. Hosted schema gate в рамках ARCH-001 не запускался; текущее состояние production/staging остаётся неизвестным.
+
+### Legacy write contract (ARCH-003)
+
+Forward-миграция `20261105020000_legacy_workout_write_contract.sql` запрещает `authenticated`/`anon` менять `workout_entries.weight/reps/rir` прямым UPDATE. Эти поля остаются исходным совместимым результатом; редактируются authoritative sets через проверяющий revision RPC. No-op UPDATE метрик, metadata updates и старый create/retry сохраняются. Защита владельца и snapshot дня остаётся прежней.
+
+Gate требует включённые BEFORE UPDATE guards для revision подходов и legacy-метрик. Наличие SQL-файла не подтверждает hosted применение. В рамках remediation подготовлена и проверена только локальная миграция; её применение требует отдельного разрешения и rehearsal. Старые клиенты, изменяющие legacy-метрики, должны перейти на per-set API. Привилегированное обслуживание PostgreSQL остаётся вне browser trust boundary и не считается защищённым от администратора этим trigger.
 
 Существующие backup/restore отчёты не подтверждают полную recoverability: backup report — `BACKUP NOT VERIFIED`, restore report — `RESTORE NOT VERIFIED`; Storage bytes отдельно не проверялись. Успех локальных PGlite тестов не заменяет restore rehearsal.

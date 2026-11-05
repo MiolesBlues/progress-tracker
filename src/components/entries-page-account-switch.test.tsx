@@ -96,7 +96,7 @@ it("does not apply a late account A set mutation to account B UI or cache", asyn
   await waitFor(() => expect(fake.state.rpcIdentityCalls).toHaveLength(1));
   const request = fake.state.rpcIdentityCalls[0]!;
   expect(request).toMatchObject({
-    name: "update_workout_entry_set",
+    name: "edit_workout_entry_set",
     userId: "A",
     args: { _entry_id: "entry-A", _set_id: "set-A", _weight: "52.5" },
   });

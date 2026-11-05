@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { decimal } from "@/lib/workout-input";
-import { updateWorkoutSet } from "@/lib/save-workout";
+import { SaveWorkoutError } from "@/lib/save-workout";
+import { editWorkoutSet, WorkoutEditConflict, type WorkoutSetEdit } from "@/lib/edit-workout-set";
 import { toast } from "sonner";
 import type { HistoryEntry } from "@/lib/analytics";
 import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
@@ -444,6 +445,8 @@ function HistorySetRow({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [baseRevision, setBaseRevision] = useState(set.revision);
+  const [pending, setPending] = useState<WorkoutSetEdit | null>(null);
   const [values, setValues] = useState({
     weight: set.weightExact ?? String(set.weight),
     reps: String(set.reps),
@@ -464,9 +467,16 @@ function HistorySetRow({
         throw new Error("Укажите целое количество повторений.");
       const rirText = values.rir.trim().replace(",", ".");
       if (rirText) decimal(rirText, "RIR", 10, 1);
-      await updateWorkoutSet(
+      if (!Number.isSafeInteger(baseRevision) || baseRevision === undefined || baseRevision < 0)
+        throw new SaveWorkoutError(
+          "Версия подхода недоступна. Обновите запись после обновления базы.",
+          true,
+        );
+      const operation = pending ?? {
+        operationId: crypto.randomUUID(),
         entryId,
-        {
+        expectedRevision: baseRevision,
+        set: {
           id: set.id,
           position: set.position,
           weight,
@@ -475,10 +485,12 @@ function HistorySetRow({
           set_type: set.set_type,
           load_type: set.load_type,
         },
-        signal,
-      );
+      };
+      setPending(operation);
+      await editWorkoutSet(operation, signal);
       if (!isCurrent()) return;
       setEditing(false);
+      setPending(null);
       toast.success(t("Подход обновлён"), { id: `set-updated-${set.id}`, duration: 2500 });
       void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
       void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
@@ -486,7 +498,11 @@ function HistorySetRow({
       if (isCurrent()) {
         const message = reason instanceof Error ? reason.message : "Не удалось изменить подход.";
         setError(translateKnown(language, message));
-        if (reason instanceof Error && /больше недоступен/.test(reason.message)) {
+        if (reason instanceof SaveWorkoutError && reason.rejected) setPending(null);
+        if (
+          reason instanceof WorkoutEditConflict ||
+          (reason instanceof Error && /больше недоступен/.test(reason.message))
+        ) {
           void queryClient.invalidateQueries({ queryKey: userKeys.entries(userId, exerciseId) });
           void queryClient.invalidateQueries({ queryKey: userKeys.lastEntry(userId, exerciseId) });
         }
@@ -504,6 +520,7 @@ function HistorySetRow({
       {editing ? (
         <Input
           aria-label={t("Вес подхода {number}", { number: set.position })}
+          disabled={saving || !!pending}
           inputMode="decimal"
           value={values.weight}
           onChange={(event) => setValues({ ...values, weight: event.target.value })}
@@ -517,6 +534,7 @@ function HistorySetRow({
       {editing ? (
         <Input
           aria-label={t("Повторения подхода {number}", { number: set.position })}
+          disabled={saving || !!pending}
           inputMode="numeric"
           value={values.reps}
           onChange={(event) => setValues({ ...values, reps: event.target.value })}
@@ -528,6 +546,7 @@ function HistorySetRow({
       {editing ? (
         <Input
           aria-label={t("RIR подхода {number}", { number: set.position })}
+          disabled={saving || !!pending}
           inputMode="decimal"
           value={values.rir}
           onChange={(event) => setValues({ ...values, rir: event.target.value })}
@@ -554,7 +573,7 @@ function HistorySetRow({
               size="icon"
               variant="ghost"
               aria-label={t("Отмена редактирования подхода")}
-              disabled={saving}
+              disabled={saving || !!pending}
               onClick={() => {
                 setValues({
                   weight: set.weightExact ?? String(set.weight),
@@ -562,6 +581,8 @@ function HistorySetRow({
                   rir: set.rir === null ? "" : String(set.rir),
                 });
                 setEditing(false);
+                setPending(null);
+                setError("");
               }}
             >
               <X className="h-4 w-4" />
@@ -580,6 +601,8 @@ function HistorySetRow({
                 rir: set.rir === null ? "" : String(set.rir),
               });
               setEditing(true);
+              setBaseRevision(set.revision);
+              setError("");
             }}
           >
             <Pencil className="h-4 w-4" />

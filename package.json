@@ -14,18 +14,19 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs",
+    "test:db": "node --test scripts/program-db.test.mjs scripts/workout-db.test.mjs scripts/privileges-db.test.mjs scripts/release-hardening-db.test.mjs scripts/archive-deletion-db.test.mjs scripts/training-library-db.test.mjs scripts/per-set-workout-db.test.mjs scripts/release-integrity-db.test.mjs",
     "preflight:schema-contract": "node scripts/release-schema-preflight.mjs --check-contract",
     "preflight:release": "node scripts/release-schema-preflight.mjs",
     "verify:backup-manifest": "node scripts/verify-backup-manifest.mjs",
     "verify:restore-target": "node scripts/verify-restore-target.mjs",
     "check:client-bundle": "node scripts/check-client-bundle.mjs",
     "test:watch": "vitest",
-    "test:toolchain": "node --test scripts/toolchain.test.mjs scripts/release-contract.test.mjs scripts/recovery-contract.test.mjs scripts/recovery-infrastructure.test.mjs scripts/ci-workflow.test.mjs",
+    "test:toolchain": "node --test scripts/canonical-migrations.test.mjs scripts/toolchain.test.mjs scripts/release-contract.test.mjs scripts/recovery-contract.test.mjs scripts/recovery-infrastructure.test.mjs scripts/ci-workflow.test.mjs",
     "test:e2e": "playwright test",
     "audit": "bun audit",
     "format:check": "prettier --check .",
-    "test:worker": "playwright test --config playwright.worker.config.ts"
+    "test:worker": "playwright test --config playwright.worker.config.ts",
+    "test:concurrency": "node --test scripts/postgres-concurrency.test.mjs"
   },
   "packageManager": "bun@1.4.3",
   "engines": {

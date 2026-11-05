@@ -180,6 +180,16 @@ export async function keyboardSwap(page: Page, handle: Locator) {
   await handle.focus();
   await page.keyboard.press("Space");
   await expect(handle).toHaveAttribute("aria-pressed", "true");
+  // KeyboardSensor registers its keydown listener in a zero-delay task after
+  // activation; aria-pressed can appear before that task or droppable measuring
+  // finishes. Let the activation render, layout effects and queued task settle
+  // before sending the single movement key (no gesture retries or fixed sleep).
+  await handle.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 0))),
+      ),
+  );
   await page.keyboard.press("ArrowDown");
   await expect
     .poll(() => handle.locator("xpath=ancestor::li[1]").getAttribute("style"))

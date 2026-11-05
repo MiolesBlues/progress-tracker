@@ -1148,3 +1148,65 @@ it("reconciles a late delete after switching A to B and back to A", async () => 
   expect(localStorage.getItem("workout:draft:v1:A:Old lift")).toBeNull();
   expect(screen.queryByText("B lift")).toBeNull();
 });
+
+it("preserves a stale day rename input and only uses a new revision after cancel/reopen", async () => {
+  mount();
+  await openDayManagement();
+  fireEvent.click(await screen.findByRole("button", { name: "Переименовать день: Первый" }));
+  fireEvent.change(screen.getByLabelText("Название дня"), { target: { value: "My pending name" } });
+  const row = fake.state.rows.program_days[0]!;
+  row["name"] = "Other window";
+  row["revision"] = 1;
+  await act(async () => {
+    await qc.invalidateQueries({ queryKey: userKeys.days("A") });
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await screen.findByText(/Программа изменена в другом окне/);
+  expect(screen.getByLabelText("Название дня")).toHaveValue("My pending name");
+  expect(row["name"]).toBe("Other window");
+  fireEvent.click(screen.getByRole("button", { name: "Отменить переименование" }));
+  fireEvent.click(screen.getByRole("button", { name: "Переименовать день: Other window" }));
+  expect(screen.getByLabelText("Название дня")).toHaveValue("Other window");
+  fireEvent.change(screen.getByLabelText("Название дня"), { target: { value: "Reviewed name" } });
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(row["name"]).toBe("Reviewed name"));
+  expect(row["revision"]).toBe(2);
+});
+
+it("does not reset exercise input or rebase its revision when another window moves it", async () => {
+  fake.state.rows.program_days.push(day("Second", 1));
+  fake.state.rows.program_exercises = [exercise("Exercise", "Первый")];
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Редактировать: Exercise" }));
+  fireEvent.change(screen.getByLabelText("Название упражнения", { exact: true }), {
+    target: { value: "My draft" },
+  });
+  const row = fake.state.rows.program_exercises[0]!;
+  row["day_id"] = "Second";
+  row["revision"] = 1;
+  await act(async () => {
+    await qc.invalidateQueries({ queryKey: userKeys.program("A") });
+  });
+  expect(screen.getByLabelText("Название упражнения", { exact: true })).toHaveValue("My draft");
+  fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+  await screen.findByText(/Программа изменена в другом окне/);
+  expect(screen.getByLabelText("Название упражнения", { exact: true })).toHaveValue("My draft");
+  expect(row["day_id"]).toBe("Second");
+  expect(row["name"]).toBe("Exercise");
+});
+
+it("keeps a day rename draft by ID when a refetch moves it into the archive", async () => {
+  fake.state.rows.program_days.push(day("Second", 1));
+  mount();
+  await openDayManagement();
+  fireEvent.click(await screen.findByRole("button", { name: "Переименовать день: Первый" }));
+  fireEvent.change(screen.getByLabelText("Название дня"), { target: { value: "Preserved draft" } });
+  const row = fake.state.rows.program_days[0]!;
+  row["archived_at"] = "2026-11-05T00:00:00Z";
+  row["revision"] = 1;
+  await act(async () => {
+    await qc.invalidateQueries({ queryKey: userKeys.days("A") });
+  });
+  expect(screen.getByLabelText("Название дня")).toHaveValue("Preserved draft");
+  expect(row["name"]).toBe("Первый");
+});

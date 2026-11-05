@@ -25,6 +25,7 @@ flowchart LR
 
 - `src/routes/` содержит корневой layout, страницу входа и защищённую группу `_authenticated`.
 - Защищённые маршруты работают с `ssr: false`; проверка сессии выполняется через Supabase Auth в браузере. `AccountBoundary` препятствует отображению кеша предыдущего аккаунта при смене пользователя.
+- Необработанные SSR ошибки возвращают generic HTML с `x-pt-error-id`. Сервер пишет только событие `ssr_failure`, фиксированные `boundary`/`kind` и случайный ID; message, stack, cause, URL, headers и пользовательские данные не записываются. Для swallowed h3 response причина уже недоступна: `framework_swallowed` не притворяется исходным исключением. Хранение/alerts platform logs нужно проверить отдельно.
 - Корневой layout предоставляет Query Client, сессию, язык и тему. Локализация поддерживает русский и английский, темы — Light, Dark и System.
 - `routeTree.gen.ts` — сгенерированное описание маршрутов; редактируйте исходные route-файлы.
 
@@ -62,11 +63,14 @@ erDiagram
 
 Ключевые свойства модели:
 
+- И дни, и упражнения имеют revision: semantic browser PATCH использует CAS, SQL guard отвергает unconditional/stale изменения, reorder увеличивает revision. Открытые формы не получают автоматический rebase. Детали совместимости и неизвестного сетевого результата описаны в [ADR 0006](DECISIONS/0006-program-edit-revisions.md).
 - У пользователя от одного до семи активных дней. Изменение порядка и состава сериализуется функциями базы.
 - Запись упражнения сохраняет историческое имя дня (`day_name`) и ссылку `day_id`; серверная логика проверяет владельца и активность связей.
 - Подходы хранятся отдельно с позицией, весом, повторами, необязательным RIR, типом `working`/`warmup` и типом нагрузки `external`/`bodyweight`.
 - Совместимые legacy-поля записи и legacy snapshot подходов сохраняют прежние данные при переходе к модели по подходам.
 - UUID операции делает сохранение записи идемпотентным; ledger и tombstones блокируют повторное применение изменённой или удалённой операции.
+- Редактирование сохранённого подхода использует `edit_workout_entry_set`: `expected_revision` и отдельный operation UUID. Revision-конфликт сохраняет ввод в редакторе; точный повтор возвращает прежний результат, не применяя правку поверх более новой. Для этого нужна forward-миграция `20261105010000_workout_set_edit_revisions.sql`; старый update RPC без revision закрывается для browser roles.
+- Release gate проверяет исходный operation snapshot отдельно от текущих подходов: допустимые edit/add/delete/reorder не обязаны сохранять равенство legacy-полям записи. Неизменённые legacy-подходы сопоставляются со снимком по ID; отсутствие исходного подхода требует owner-scoped tombstone.
 - Архивирование сохраняет данные. Финальное удаление доступно для архивных объектов через owner-checked RPC; удаление аккаунта отдельным lifecycle не реализовано.
 
 Подробные ограничения и порядок миграций см. в `DATABASE-RELEASE-CONTRACT-RU.md`, `ARCHIVE-DELETION-RU.md` и SQL-тестах. Локальные PGlite проверки не подтверждают конфигурацию удалённого Supabase Auth, PostgREST или RLS.
@@ -84,6 +88,7 @@ erDiagram
 ## Сборка и окружения
 
 - `vite.config.ts` подключает TanStack Start и Nitro с Cloudflare Worker module target. `preview` запускает Wrangler для локальной проверки собранного артефакта.
+- Перед компиляцией Vite и при создании public client проверяется тип значения publishable key: `sb_publishable_*` или legacy JWT с `role=anon`. Secret/service-role и неизвестные значения отклоняются без вывода значения; это не проверка подписи или действительности ключа. Server-only service-role helper остаётся отдельным доверенным путём.
 - `supabase/config.toml` не выбирает hosted project по умолчанию. Для операций с hosted базой требуется явная проверка целевого project ref и отдельное разрешение задачи.
 - CI направляет тесты на локальные mock-сервисы и синтетические URL `.invalid`. Workflow `quality.yml` выполняет качество кода, unit/database/contracts, build/security и четыре Playwright shard; агрегированный check зависит от них. Событийная маршрутизация может пропустить дублирующий push-run при открытом PR, поэтому проверяйте PR-run на точном SHA.
 - `bun run test:worker` выполняет один Chromium-сценарий auth → программа → save → records/reload на `.output/server/wrangler.json` через локальный `wrangler dev --local`. Запускается после существующей сборки в Build & Security; четыре dev-server shard сохранены. Mock перехватывает Supabase `.invalid`, внешние запросы блокируются, service workers выключены. Это проверка production artifact, не hosted Auth/DB или deployment.
@@ -99,6 +104,8 @@ erDiagram
 | GitHub Actions            | Полный регрессионный набор для SHA PR                                             | PASS применим только к проверенному SHA и завершённым обязательным checks.   |
 
 Доступные команды см. в `package.json`; конфигурации — `vitest.config.ts`, `playwright.config.ts`, `playwright.staging.config.ts` и `.github/workflows/quality.yml`.
+
+Межсоединительная конкуренция отдельно проверяется `bun run test:concurrency` на disposable PostgreSQL 18.6. Три различных backend PID используются для двух транзакций и наблюдателя `pg_blocking_pids`: проверяются реальное ожидание блокировки, create retry, stale edit SQLSTATE 40001 и повтор старой операции после новой правки. CI использует официальный образ `library/postgres:18.6` по digest `sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583` ([provenance](https://hub.docker.com/v2/repositories/library/postgres/tags/18.6)). Только явно названная passwordless loopback fixture DB допускается как control endpoint; каждый запуск создаёт новую синтетическую базу. Hosted URL отклоняется до соединения. Локальные fixture DB сохраняются до отдельной очистки, CI service исчезает вместе с job. Проверки PostgreSQL 18 не подтверждают версии/настройки hosted PostgreSQL и не заменяют отдельную rehearsal.
 
 ## Расширение архитектуры
 

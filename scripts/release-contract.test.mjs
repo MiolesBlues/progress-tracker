@@ -7,14 +7,16 @@ const file = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 
 test("machine-readable capability contract names local library and V4 objects", () => {
   const contract = JSON.parse(file("scripts/schema-capability-contract.json"));
-  const v4 = file("drizzle/migrations/20261016204330_per_set_workout_v4.sql");
+  const v4 =
+    file("drizzle/migrations/20261016204330_per_set_workout_v4.sql") +
+    file("drizzle/migrations/20261105010000_workout_set_edit_revisions.sql");
   const library = file("drizzle/migrations/20261016150000_training_template_library.sql");
   for (const table of Object.keys(contract.authoritativeSetTables))
     assert.ok(v4.includes(`public.${table}`));
   for (const rpc of contract.perSetRpcs) assert.ok(v4.includes(`public.${rpc.name}`));
   for (const table of Object.keys(contract.libraryTables))
     assert.ok(library.includes(`public.${table}`));
-  assert.equal(contract.perSetRpcs.length, 5);
+  assert.equal(contract.perSetRpcs.length, 6);
 });
 
 test("release preflight uses a read-only transaction and has no database repair path", () => {
@@ -25,11 +27,15 @@ test("release preflight uses a read-only transaction and has no database repair 
   assert.ok(preflight.includes('environment === "recovery"'));
   assert.ok(preflight.includes("has_table_privilege"));
   assert.ok(preflight.includes("has_function_privilege"));
+  assert.ok(preflight.includes("await tx.unsafe(workoutIntegritySql)"));
+  assert.ok(preflight.includes("workoutIntegrityFailures(assertions[0])"));
+  const integritySql = file("scripts/workout-integrity-preflight.sql");
   assert.ok(
     !/\b(INSERT\s+INTO|UPDATE\s+\w|DELETE\s+FROM|ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b/i.test(
-      preflight,
+      preflight + integritySql,
     ),
   );
+  assert.ok(file("package.json").includes("scripts/release-integrity-db.test.mjs"));
 });
 
 test("the real local env file is not tracked and Vite validates environment before builds", () => {
@@ -218,4 +224,50 @@ test("release preflight rejects the wrong project URL before opening a connectio
       );
     },
   );
+});
+
+test("Vite rejects privileged values under the public key name before compilation without echo", () => {
+  const jwt = (role) =>
+    [
+      Buffer.from('{"alg":"HS256"}').toString("base64url"),
+      Buffer.from(JSON.stringify({ role })).toString("base64url"),
+      "synthetic-signature",
+    ].join(".");
+  for (const candidate of ["sb_secret_synthetic_private_marker", jwt("service_role")]) {
+    assert.throws(
+      () =>
+        execFileSync(
+          process.execPath,
+          ["node_modules/vite/bin/vite.js", "build", "--mode", "test"],
+          {
+            encoding: "utf8",
+            stdio: "pipe",
+            timeout: 15000,
+            env: {
+              ...process.env,
+              SUPABASE_ENVIRONMENT: "test",
+              VITE_SUPABASE_ENVIRONMENT: "test",
+              SUPABASE_URL: "https://workout-e2e.invalid",
+              VITE_SUPABASE_URL: "https://workout-e2e.invalid",
+              SUPABASE_PROJECT_REF: "",
+              VITE_SUPABASE_PROJECT_REF: "",
+              SUPABASE_PROJECT_ID: "",
+              VITE_SUPABASE_PROJECT_ID: "",
+              SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test_only",
+              VITE_SUPABASE_PUBLISHABLE_KEY: candidate,
+              SUPABASE_SERVICE_ROLE_KEY: "",
+              ALLOW_STAGING_DEV: "false",
+            },
+          },
+        ),
+      (error) => {
+        const output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
+        return (
+          output.includes("public key must be a publishable key or a legacy anon JWT") &&
+          !output.includes(candidate) &&
+          !output.includes("modules transformed")
+        );
+      },
+    );
+  }
 });

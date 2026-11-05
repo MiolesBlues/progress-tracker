@@ -60,6 +60,7 @@ const fake = vi.hoisted(() => {
     maxRows: Infinity,
     disableLegacySetSynthesis: false,
     updateRpcResult: null as boolean | null,
+    editErrorCode: null as string | null,
     rpc: vi.fn(
       async (
         name: string,
@@ -71,6 +72,21 @@ const fake = vi.hoisted(() => {
           const message = state.nextError;
           state.nextError = null;
           return { error: { message } };
+        }
+        if (name === "edit_workout_entry_set") {
+          if (state.delayRpc) {
+            const delayed = state.delayRpc;
+            state.delayRpc = null;
+            await delayed;
+          }
+          if (state.editErrorCode) {
+            const code = state.editErrorCode;
+            state.editErrorCode = null;
+            return { data: null, error: { code, message: "synthetic edit rejection" } };
+          }
+          if (state.updateRpcResult === false)
+            return { data: null, error: { code: "P0002", message: "set unavailable" } };
+          return { data: 1, error: null };
         }
         if (
           [
@@ -179,6 +195,10 @@ const fake = vi.hoisted(() => {
           }));
         });
       }
+      if (["workout_entry_sets", "program_days", "program_exercises"].includes(table))
+        rows.forEach((row) => {
+          row["revision"] ??= 0;
+        });
       let found = rows.filter(
         (row) =>
           Object.entries(filters).every(([key, value]) => row[key] === value) &&
@@ -192,6 +212,7 @@ const fake = vi.hoisted(() => {
           return { data: null, error: { code: "23505", message: "duplicate key" } };
         const row = {
           id: String(values.id ?? `new-${++state.sequence}`),
+          revision: 0,
           archived_at: null,
           target_sets: null,
           target_reps: null,
@@ -370,5 +391,6 @@ export function resetFake() {
   fake.state.maxRows = Infinity;
   fake.state.disableLegacySetSynthesis = false;
   fake.state.updateRpcResult = null;
+  fake.state.editErrorCode = null;
   fake.state.rpc.mockClear();
 }

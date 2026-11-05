@@ -5,9 +5,16 @@ import { toISO } from "./workout";
 import type { HistoryEntry } from "./analytics";
 import { MAX_SETS, MAX_WEIGHT, MAX_REPS, isWorkoutDate } from "./workout-input";
 
-export type Day = { id: string; name: string; position: number; archived_at: string | null };
+export type Day = {
+  revision: number;
+  id: string;
+  name: string;
+  position: number;
+  archived_at: string | null;
+};
 
 export type Exercise = {
+  revision: number;
   id: string;
   day_id: string | null;
   name: string;
@@ -41,7 +48,7 @@ export const daysQuery = (userId: string) =>
         (from, to) =>
           supabase
             .from("program_days")
-            .select("id, name, position, archived_at", { count: "exact" })
+            .select("id, name, position, archived_at, revision", { count: "exact" })
             .eq("user_id", userId)
             .order("position")
             .order("created_at")
@@ -63,7 +70,7 @@ export const programQuery = (userId: string) =>
           supabase
             .from("program_exercises")
             .select(
-              "id, day_id, name, position, target_sets, target_reps, target_rir_min, target_rir_max, working_weight, example_reps, archived_at",
+              "id, day_id, name, position, target_sets, target_reps, target_rir_min, target_rir_max, working_weight, example_reps, archived_at, revision",
               { count: "exact" },
             )
             .eq("user_id", userId)
@@ -136,9 +143,12 @@ export const entriesQuery = (
           (from, to) =>
             supabase
               .from("workout_entry_sets")
-              .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
-                count: "exact",
-              })
+              .select(
+                "id, workout_entry_id, revision, position, weight, reps, rir, set_type, load_type",
+                {
+                  count: "exact",
+                },
+              )
               .eq("user_id", userId)
               .in("workout_entry_id", ids.slice(offset, offset + 100))
               .order("workout_entry_id")
@@ -155,6 +165,7 @@ export const entriesQuery = (
             position: row.position,
             weight: Number(row.weight),
             weightExact: String(row.weight),
+            revision: row.revision,
             reps: row.reps,
             rir: row.rir === null ? null : Number(row.rir),
             set_type: row.set_type,
@@ -289,9 +300,12 @@ export const entriesPageQuery = (
         (from, to) =>
           supabase
             .from("workout_entry_sets")
-            .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
-              count: "exact",
-            })
+            .select(
+              "id, workout_entry_id, revision, position, weight, reps, rir, set_type, load_type",
+              {
+                count: "exact",
+              },
+            )
             .eq("user_id", userId)
             .in("workout_entry_id", ids)
             .order("workout_entry_id")
@@ -309,6 +323,7 @@ export const entriesPageQuery = (
           position: row.position,
           weight: Number(row.weight),
           weightExact: String(row.weight),
+          revision: row.revision,
           reps: row.reps,
           rir: row.rir === null ? null : Number(row.rir),
           set_type: row.set_type,

@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { validateRestoreApproval } from "./recovery-contract.mjs";
+import { workoutIntegritySql, workoutIntegrityFailures } from "./workout-integrity-preflight.mjs";
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 
 const contract = JSON.parse(
   readFileSync(new URL("./schema-capability-contract.json", import.meta.url), "utf8"),
@@ -27,14 +29,23 @@ function requireProjectRef(databaseUrl, expectedRef) {
 }
 
 function requireLocalContract() {
+  canonicalMigrations();
   const librarySql = readFileSync(
     new URL("../drizzle/migrations/20261016150000_training_template_library.sql", import.meta.url),
     "utf8",
   );
-  const v4Sql = readFileSync(
-    new URL("../drizzle/migrations/20261016204330_per_set_workout_v4.sql", import.meta.url),
-    "utf8",
-  );
+  const v4Sql =
+    readFileSync(
+      new URL("../drizzle/migrations/20261016204330_per_set_workout_v4.sql", import.meta.url),
+      "utf8",
+    ) +
+    readFileSync(
+      new URL(
+        "../drizzle/migrations/20261105010000_workout_set_edit_revisions.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
   const aclSql = readFileSync(
     new URL(
       "../drizzle/migrations/20261020100000_training_library_least_privilege.sql",
@@ -205,6 +216,25 @@ async function runRemotePreflight() {
       for (const name of allIndexNames)
         if (!actualIndexes.has(name)) failures.push(`missing index ${name}`);
 
+      const triggerRows = await tx`
+        SELECT c.relname AS table_name,t.tgname AS name,t.tgtype AS type,t.tgenabled AS enabled,
+          p.proname AS function_name FROM pg_trigger t
+        JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_proc p ON p.oid=t.tgfoid
+        WHERE n.nspname='public' AND NOT t.tgisinternal`;
+      for (const expected of contract.requiredTriggers ?? []) {
+        const trigger = triggerRows.find(
+          (row) => row.table_name === expected.table && row.name === expected.name,
+        );
+        if (
+          !trigger ||
+          trigger.type !== 19 ||
+          !["O", "A"].includes(trigger.enabled) ||
+          trigger.function_name !== expected.function
+        )
+          failures.push(`missing or disabled write guard ${expected.table}.${expected.name}`);
+      }
+
       const policyRows =
         await tx`SELECT tablename, policyname, cmd, roles, qual, with_check FROM pg_policies WHERE schemaname='public'`;
       const requiredPolicies = [
@@ -259,7 +289,7 @@ async function runRemotePreflight() {
       const rpcRequirements = [
         ...contract.perSetRpcs.map((rpc) => ({
           ...rpc,
-          authenticated: true,
+          authenticated: rpc.authenticated ?? true,
           anon: false,
           definer: true,
         })),
@@ -296,8 +326,8 @@ async function runRemotePreflight() {
           failures.push(`SECURITY DEFINER mode differs for ${expected.name}`);
         if (actual.owner !== "postgres")
           failures.push(`application RPC ${expected.name} is owned by ${actual.owner}`);
-        if (expected.authenticated && !actual.authenticated_execute)
-          failures.push(`authenticated lacks EXECUTE on ${expected.name}`);
+        if (expected.authenticated !== actual.authenticated_execute)
+          failures.push(`authenticated EXECUTE differs for ${expected.name}`);
         if (!expected.anon && actual.anon_execute)
           failures.push(`anon has EXECUTE on ${expected.name}`);
         if (actual.public_execute) failures.push(`PUBLIC has EXECUTE on ${expected.name}`);
@@ -406,36 +436,8 @@ async function runRemotePreflight() {
         tableByName.has("workout_entry_sets") &&
         tableByName.has("workout_entry_operations")
       ) {
-        const assertions = await tx`
-          SELECT
-            (SELECT count(*)::int FROM public.workout_entries w
-              LEFT JOIN LATERAL (
-                SELECT array_agg(s.reps ORDER BY s.position) AS set_reps
-                FROM public.workout_entry_sets s
-                WHERE s.workout_entry_id=w.id AND s.user_id=w.user_id
-              ) actual ON true
-              WHERE actual.set_reps IS DISTINCT FROM w.reps) AS reps_mismatch,
-            (SELECT count(*)::int FROM public.workout_entries w
-              WHERE EXISTS (SELECT 1 FROM public.workout_entry_sets s
-                WHERE s.workout_entry_id=w.id AND s.user_id=w.user_id AND s.legacy_snapshot)
-                AND EXISTS (
-                  SELECT 1 FROM unnest(w.reps) WITH ORDINALITY expected(reps,position)
-                  LEFT JOIN public.workout_entry_sets s
-                    ON s.workout_entry_id=w.id AND s.user_id=w.user_id AND s.position=expected.position
-                  WHERE s.id IS NULL OR s.reps IS DISTINCT FROM expected.reps
-                    OR s.weight IS DISTINCT FROM w.weight OR s.rir IS DISTINCT FROM w.rir
-                    OR s.set_type IS DISTINCT FROM 'working' OR s.load_type IS DISTINCT FROM 'external'
-                    OR NOT s.legacy_snapshot
-                )) AS legacy_value_mismatch,
-            (SELECT count(*)::int FROM public.workout_entry_operations o
-              JOIN public.workout_entries w ON w.id=o.id AND w.user_id=o.user_id
-              WHERE o.set_snapshot IS NULL) AS missing_operation_snapshot`;
-        if (assertions[0].reps_mismatch)
-          failures.push("entry reps differ from ordered authoritative sets");
-        if (assertions[0].legacy_value_mismatch)
-          failures.push("legacy set snapshot differs from source reps, weight, RIR or ordering");
-        if (assertions[0].missing_operation_snapshot)
-          failures.push("existing operation rows lack a per-set retry snapshot");
+        const assertions = await tx.unsafe(workoutIntegritySql);
+        failures.push(...workoutIntegrityFailures(assertions[0]));
       }
       const defaultAclSql = readFileSync(
         new URL("./default-privileges-preflight.sql", import.meta.url),

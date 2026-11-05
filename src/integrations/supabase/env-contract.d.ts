@@ -14,6 +14,7 @@ export interface SupabaseEnvironmentInput {
 }
 export const SUPABASE_PROJECT_REFS: Readonly<{ production: string; staging: string }>;
 export function validateSupabaseEnvironment(input: SupabaseEnvironmentInput): void;
+export function validateSupabasePublishableKey(value: string | undefined): void;
 
 declare global {
   const __ALLOW_STAGING_DEV__: boolean;
