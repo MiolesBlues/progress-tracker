@@ -445,3 +445,27 @@ test("edit ledger and revision API reject foreign callers and the unsafe legacy 
   });
   await assertGatePass();
 });
+
+test("browser legacy metrics are immutable while metadata, safe edits and exact retries still work", async () => {
+  await createEntry();
+  const original = await originalRows();
+  await asUser(A, async () => {
+    for (const patch of ["weight=99", "reps=ARRAY[10]", "rir=3"])
+      await rejectsSql(
+        () => db.query(`UPDATE workout_entries SET ${patch} WHERE id=$1`, [ENTRY]),
+        "42501",
+      );
+    await db.query("UPDATE workout_entries SET notes='updated metadata' WHERE id=$1", [ENTRY]);
+    await db.query("UPDATE workout_entries SET weight=weight,reps=reps,rir=rir WHERE id=$1", [
+      ENTRY,
+    ]);
+    assert.equal((await edit()).rows[0].revision, 1);
+  });
+  await createEntry();
+  assert.deepEqual(await originalRows(), original);
+  assert.equal(
+    (await rows("SELECT notes FROM workout_entries WHERE id=$1", [ENTRY]))[0].notes,
+    "updated metadata",
+  );
+  await assertGatePass();
+});
