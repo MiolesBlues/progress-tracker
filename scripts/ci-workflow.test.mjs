@@ -223,7 +223,7 @@ test("workflow bun run commands resolve to declared package scripts", () => {
 
 test("all external actions are pinned to full commit SHAs with release labels", () => {
   const uses = [...workflow.matchAll(/^\s+uses:\s+([^\s#]+)\s+#\s+([^\s]+)$/gm)];
-  assert.equal(uses.length, 34);
+  assert.equal(uses.length, 35);
   for (const [, reference, release] of uses) {
     assert.match(reference, /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[a-f0-9]{40}$/);
     assert.match(release, /^v\d+\.\d+\.\d+$/);
@@ -284,4 +284,22 @@ test("GitHub Actions expressions have balanced delimiters", () => {
   const openExpressions = [...workflow.matchAll(/\$\{\{/g)].length;
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
+});
+
+test("one browser journey covers the built local Worker without duplicating dev shards", () => {
+  const config = readFileSync("playwright.worker.config.ts", "utf8");
+  assert.match(jobs["build-security"], /run: bun run test:worker/);
+  assert.match(jobs["build-security"], /playwright install --with-deps chromium/);
+  assert.equal(
+    packageScripts["test:worker"],
+    "playwright test --config playwright.worker.config.ts",
+  );
+  assert.match(
+    config,
+    /wrangler\/bin\/wrangler.js dev --local --config \.output\/server\/wrangler.json/,
+  );
+  assert.match(config, /serviceWorkers: "block"/);
+  assert.match(config, /retries: 0/);
+  assert.doesNotMatch(config, /bun run dev|vite dev|remote: true/);
+  assert.match(jobs["build-security"], /test-results\/worker\//);
 });

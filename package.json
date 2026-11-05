@@ -24,7 +24,8 @@
     "test:toolchain": "node --test scripts/toolchain.test.mjs scripts/release-contract.test.mjs scripts/recovery-contract.test.mjs scripts/recovery-infrastructure.test.mjs scripts/ci-workflow.test.mjs",
     "test:e2e": "playwright test",
     "audit": "bun audit",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:worker": "playwright test --config playwright.worker.config.ts"
   },
   "packageManager": "bun@1.4.3",
   "engines": {
