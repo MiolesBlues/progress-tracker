@@ -14,3 +14,4 @@
 - [0002 — Идемпотентность операций записи тренировки](0002-idempotent-workout-operations.md)
 - [0003 — Подходы как отдельные строки с совместимым историческим снимком](0003-workout-sets-and-legacy-snapshot.md)
 - [0004 — Короткоживущие тематические ветки и проверка CI по SHA](0004-branching-and-ci-policy.md)
+- [0005 — Revision и идемпотентность редактирования подхода](0005-workout-edit-revisions.md)

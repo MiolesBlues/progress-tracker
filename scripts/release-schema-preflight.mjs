@@ -32,10 +32,18 @@ function requireLocalContract() {
     new URL("../drizzle/migrations/20261016150000_training_template_library.sql", import.meta.url),
     "utf8",
   );
-  const v4Sql = readFileSync(
-    new URL("../drizzle/migrations/20261016204330_per_set_workout_v4.sql", import.meta.url),
-    "utf8",
-  );
+  const v4Sql =
+    readFileSync(
+      new URL("../drizzle/migrations/20261016204330_per_set_workout_v4.sql", import.meta.url),
+      "utf8",
+    ) +
+    readFileSync(
+      new URL(
+        "../drizzle/migrations/20261105010000_workout_set_edit_revisions.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
   const aclSql = readFileSync(
     new URL(
       "../drizzle/migrations/20261020100000_training_library_least_privilege.sql",
@@ -260,7 +268,7 @@ async function runRemotePreflight() {
       const rpcRequirements = [
         ...contract.perSetRpcs.map((rpc) => ({
           ...rpc,
-          authenticated: true,
+          authenticated: rpc.authenticated ?? true,
           anon: false,
           definer: true,
         })),
@@ -297,8 +305,8 @@ async function runRemotePreflight() {
           failures.push(`SECURITY DEFINER mode differs for ${expected.name}`);
         if (actual.owner !== "postgres")
           failures.push(`application RPC ${expected.name} is owned by ${actual.owner}`);
-        if (expected.authenticated && !actual.authenticated_execute)
-          failures.push(`authenticated lacks EXECUTE on ${expected.name}`);
+        if (expected.authenticated !== actual.authenticated_execute)
+          failures.push(`authenticated EXECUTE differs for ${expected.name}`);
         if (!expected.anon && actual.anon_execute)
           failures.push(`anon has EXECUTE on ${expected.name}`);
         if (actual.public_execute) failures.push(`PUBLIC has EXECUTE on ${expected.name}`);

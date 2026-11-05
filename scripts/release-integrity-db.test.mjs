@@ -113,10 +113,10 @@ test("release gate accepts a legitimate per-set edit without changing its immuta
     "SELECT to_jsonb(o) AS row FROM workout_entry_operations o ORDER BY id",
   );
   await asUser(A, () =>
-    db.query("SELECT update_workout_entry_set($1,$2,'60',9,'1','working','external')", [
-      ENTRY,
-      SET_A,
-    ]),
+    db.query(
+      "SELECT edit_workout_entry_set(gen_random_uuid(),$1,$2,0,'60',9,'1','working','external')",
+      [ENTRY, SET_A],
+    ),
   );
   assert.deepEqual(
     await rows("SELECT to_jsonb(o) AS row FROM workout_entry_operations o ORDER BY id"),
@@ -193,10 +193,10 @@ for (const entry of [LEGACY, LEGACY_NO_DAY]) {
     }
     await assertGatePass();
     await asUser(A, () =>
-      db.query("SELECT update_workout_entry_set($1,$2,'42.5',10,NULL,'working','external')", [
-        entry,
-        ids[0],
-      ]),
+      db.query(
+        "SELECT edit_workout_entry_set(gen_random_uuid(),$1,$2,0,'42.5',10,NULL,'working','external')",
+        [entry, ids[0]],
+      ),
     );
     await assertGatePass();
     await asUser(A, () =>
@@ -271,10 +271,10 @@ test("gate rejects changed untouched legacy values even if some sets were edited
     ])
   ).map((row) => row.id);
   await asUser(A, () =>
-    db.query("SELECT update_workout_entry_set($1,$2,'60',10,NULL,'working','external')", [
-      LEGACY,
-      ids[0],
-    ]),
+    db.query(
+      "SELECT edit_workout_entry_set(gen_random_uuid(),$1,$2,0,'60',10,NULL,'working','external')",
+      [LEGACY, ids[0]],
+    ),
   );
   await assertGatePass();
   await db.query("UPDATE workout_entry_sets SET reps=99 WHERE id=$1", [ids[1]]);
@@ -326,10 +326,10 @@ test("owner, RLS, direct-write and value constraints still reject unauthorized c
     assert.deepEqual(await rows("SELECT id FROM workout_entry_sets"), []);
     await rejectsSql(
       () =>
-        db.query("SELECT update_workout_entry_set($1,$2,'60',9,NULL,'working','external')", [
-          ENTRY,
-          SET_A,
-        ]),
+        db.query(
+          "SELECT edit_workout_entry_set(gen_random_uuid(),$1,$2,0,'60',9,NULL,'working','external')",
+          [ENTRY, SET_A],
+        ),
       "42501",
     );
     await rejectsSql(
@@ -344,10 +344,10 @@ test("owner, RLS, direct-write and value constraints still reject unauthorized c
   await asUser(A, async () => {
     await rejectsSql(
       () =>
-        db.query("SELECT update_workout_entry_set($1,$2,'2001',9,NULL,'working','external')", [
-          ENTRY,
-          SET_A,
-        ]),
+        db.query(
+          "SELECT edit_workout_entry_set(gen_random_uuid(),$1,$2,0,'2001',9,NULL,'working','external')",
+          [ENTRY, SET_A],
+        ),
       "22023",
     );
     await rejectsSql(
@@ -389,4 +389,59 @@ test("incomplete assertion results fail closed and diagnostics contain no row va
   const messages = workoutIntegrityFailures(counters);
   assert.equal(messages.length, 7);
   assert.ok(messages.every((message) => !message.includes(A) && !message.includes(LEGACY)));
+});
+
+const EDIT_A = "20000000-0000-4000-8000-000000000001";
+const EDIT_B = "20000000-0000-4000-8000-000000000002";
+const edit = (operation = EDIT_A, revision = 0, weight = "60") =>
+  db.query("SELECT edit_workout_entry_set($1,$2,$3,$4,$5,9,'1','working','external') AS revision", [
+    operation,
+    ENTRY,
+    SET_A,
+    revision,
+    weight,
+  ]);
+
+test("edit revisions reject the stale interleaving and replay never overwrites a newer edit", async () => {
+  await createEntry();
+  // Both clients have read revision 0 before either edit is delivered.
+  assert.equal(
+    (await rows("SELECT revision FROM workout_entry_sets WHERE id=$1", [SET_A]))[0].revision,
+    0,
+  );
+  await asUser(A, async () => {
+    assert.equal((await edit()).rows[0].revision, 1);
+    await rejectsSql(() => edit(EDIT_B, 0, "70"), "40001");
+    assert.equal((await edit(EDIT_B, 1, "70")).rows[0].revision, 2);
+    assert.equal((await edit()).rows[0].revision, 1); // Lost first response retried after second edit.
+    await rejectsSql(() => edit(EDIT_A, 0, "99"), "22023");
+  });
+  assert.deepEqual(
+    await rows("SELECT weight::text,revision FROM workout_entry_sets WHERE id=$1", [SET_A]),
+    [{ weight: "70", revision: 2 }],
+  );
+  assert.equal((await rows("SELECT count(*)::int AS n FROM workout_set_edit_operations"))[0].n, 2);
+  await assertGatePass();
+});
+
+test("edit ledger and revision API reject foreign callers and the unsafe legacy signature", async () => {
+  await createEntry();
+  await asUser(B, () => rejectsSql(() => edit(), "42501"));
+  await asUser(A, async () => {
+    await rejectsSql(
+      () =>
+        db.query("SELECT update_workout_entry_set($1,$2,'99',10,NULL,'working','external')", [
+          ENTRY,
+          SET_A,
+        ]),
+      "42501",
+    );
+    await rejectsSql(() => db.query("SELECT * FROM workout_set_edit_operations"), "42501");
+    await rejectsSql(() => edit(EDIT_A, -1), "22023");
+    assert.equal((await edit()).rows[0].revision, 1);
+    await db.query("SELECT delete_workout_entry_set($1,$2)", [ENTRY, SET_A]);
+    assert.equal((await edit()).rows[0].revision, 1);
+    await rejectsSql(() => edit(EDIT_B, 1), "P0002");
+  });
+  await assertGatePass();
 });

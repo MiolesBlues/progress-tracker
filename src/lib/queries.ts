@@ -136,9 +136,12 @@ export const entriesQuery = (
           (from, to) =>
             supabase
               .from("workout_entry_sets")
-              .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
-                count: "exact",
-              })
+              .select(
+                "id, workout_entry_id, revision, position, weight, reps, rir, set_type, load_type",
+                {
+                  count: "exact",
+                },
+              )
               .eq("user_id", userId)
               .in("workout_entry_id", ids.slice(offset, offset + 100))
               .order("workout_entry_id")
@@ -155,6 +158,7 @@ export const entriesQuery = (
             position: row.position,
             weight: Number(row.weight),
             weightExact: String(row.weight),
+            revision: row.revision,
             reps: row.reps,
             rir: row.rir === null ? null : Number(row.rir),
             set_type: row.set_type,
@@ -289,9 +293,12 @@ export const entriesPageQuery = (
         (from, to) =>
           supabase
             .from("workout_entry_sets")
-            .select("id, workout_entry_id, position, weight, reps, rir, set_type, load_type", {
-              count: "exact",
-            })
+            .select(
+              "id, workout_entry_id, revision, position, weight, reps, rir, set_type, load_type",
+              {
+                count: "exact",
+              },
+            )
             .eq("user_id", userId)
             .in("workout_entry_id", ids)
             .order("workout_entry_id")
@@ -309,6 +316,7 @@ export const entriesPageQuery = (
           position: row.position,
           weight: Number(row.weight),
           weightExact: String(row.weight),
+          revision: row.revision,
           reps: row.reps,
           rir: row.rir === null ? null : Number(row.rir),
           set_type: row.set_type,

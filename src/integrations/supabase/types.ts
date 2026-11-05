@@ -184,6 +184,7 @@ export type Database = {
       }
       workout_entry_sets: {
         Row: {
+          revision: number
           created_at: string
           id: string
           legacy_snapshot: boolean
@@ -198,6 +199,7 @@ export type Database = {
           workout_entry_id: string
         }
         Insert: {
+          revision?: number
           created_at?: string
           id: string
           legacy_snapshot?: boolean
@@ -212,6 +214,7 @@ export type Database = {
           workout_entry_id: string
         }
         Update: {
+          revision?: number
           created_at?: string
           id?: string
           legacy_snapshot?: boolean
@@ -337,6 +340,20 @@ export type Database = {
           _weight: string
         }
         Returns: boolean
+      }
+      edit_workout_entry_set: {
+        Args: {
+          _operation_id: string
+          _entry_id: string
+          _set_id: string
+          _expected_revision: number
+          _weight: string
+          _reps: number
+          _rir: string | null
+          _set_type?: "warmup" | "working"
+          _load_type?: "external" | "bodyweight"
+        }
+        Returns: number
       }
       delete_workout_entry_set: {
         Args: { _entry_id: string; _set_id: string }
