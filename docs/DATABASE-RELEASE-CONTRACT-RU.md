@@ -87,4 +87,10 @@ Emergency rollback: до появления новых per-set записей д
 
 Исправление не требует новой SQL-миграции и не меняет RLS, права, RPC или сохранённые данные. Hosted schema gate в рамках ARCH-001 не запускался; текущее состояние production/staging остаётся неизвестным.
 
+### Legacy write contract (ARCH-003)
+
+Forward-миграция `20261105020000_legacy_workout_write_contract.sql` запрещает `authenticated`/`anon` менять `workout_entries.weight/reps/rir` прямым UPDATE. Эти поля остаются исходным совместимым результатом; редактируются authoritative sets через проверяющий revision RPC. No-op UPDATE метрик, metadata updates и старый create/retry сохраняются. Защита владельца и snapshot дня остаётся прежней.
+
+Gate требует включённые BEFORE UPDATE guards для revision подходов и legacy-метрик. Наличие SQL-файла не подтверждает hosted применение. В рамках remediation подготовлена и проверена только локальная миграция; её применение требует отдельного разрешения и rehearsal. Старые клиенты, изменяющие legacy-метрики, должны перейти на per-set API. Привилегированное обслуживание PostgreSQL остаётся вне browser trust boundary и не считается защищённым от администратора этим trigger.
+
 Существующие backup/restore отчёты не подтверждают полную recoverability: backup report — `BACKUP NOT VERIFIED`, restore report — `RESTORE NOT VERIFIED`; Storage bytes отдельно не проверялись. Успех локальных PGlite тестов не заменяет restore rehearsal.

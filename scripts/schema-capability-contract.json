@@ -301,11 +301,37 @@
       "authenticated": true,
       "anon": false,
       "public": false
+    },
+    {
+      "name": "bump_workout_set_revision",
+      "argumentTypes": "",
+      "authenticated": false,
+      "anon": false,
+      "public": false
+    },
+    {
+      "name": "guard_legacy_workout_metrics",
+      "argumentTypes": "",
+      "authenticated": false,
+      "anon": false,
+      "public": false
     }
   ],
   "migrationOwnership": {
     "canonicalDirectory": "drizzle/migrations",
     "capabilityMigration": "20261016204330_per_set_workout_v4.sql",
     "journalPolicy": "Compare applied capability and objects; timestamps alone do not establish equivalence. Never rewrite hosted journals automatically."
-  }
+  },
+  "requiredTriggers": [
+    {
+      "table": "workout_entry_sets",
+      "name": "workout_entry_sets_revision",
+      "function": "bump_workout_set_revision"
+    },
+    {
+      "table": "workout_entries",
+      "name": "workout_entries_legacy_metrics_guard",
+      "function": "guard_legacy_workout_metrics"
+    }
+  ]
 }

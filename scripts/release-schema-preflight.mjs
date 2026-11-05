@@ -214,6 +214,25 @@ async function runRemotePreflight() {
       for (const name of allIndexNames)
         if (!actualIndexes.has(name)) failures.push(`missing index ${name}`);
 
+      const triggerRows = await tx`
+        SELECT c.relname AS table_name,t.tgname AS name,t.tgtype AS type,t.tgenabled AS enabled,
+          p.proname AS function_name FROM pg_trigger t
+        JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_proc p ON p.oid=t.tgfoid
+        WHERE n.nspname='public' AND NOT t.tgisinternal`;
+      for (const expected of contract.requiredTriggers ?? []) {
+        const trigger = triggerRows.find(
+          (row) => row.table_name === expected.table && row.name === expected.name,
+        );
+        if (
+          !trigger ||
+          trigger.type !== 19 ||
+          !["O", "A"].includes(trigger.enabled) ||
+          trigger.function_name !== expected.function
+        )
+          failures.push(`missing or disabled write guard ${expected.table}.${expected.name}`);
+      }
+
       const policyRows =
         await tx`SELECT tablename, policyname, cmd, roles, qual, with_check FROM pg_policies WHERE schemaname='public'`;
       const requiredPolicies = [
