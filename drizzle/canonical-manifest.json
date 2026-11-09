@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "hash_format": "sha256 of UTF-8 SQL with CRLF normalized to LF",
+  "migrations": [
+    {
+      "file": "0000_workout_schema.sql",
+      "sha256": "2141df930befb6991fd4effe9d2cb34f971ebb7a2e1b88c6db5ca5d8b1c78958"
+    },
+    {
+      "file": "0001_program_fields_soft_delete_restrict_fk.sql",
+      "sha256": "fbe699d2d9ca4625b136c145a0fe79adad4dec646cfa580feec55e306c165218"
+    },
+    {
+      "file": "0002_personal_program_days.sql",
+      "sha256": "cce28f9ed25ed058db61a82b2c2efa7860a9be19add635bb97d815d09ee2c7fa"
+    },
+    {
+      "file": "0003_program_management.sql",
+      "sha256": "a696e7a7ac7d7a2bd24bde926b09be8b643a25ad5955aae12f6e77457a731672"
+    },
+    {
+      "file": "0004_workout_data_integrity.sql",
+      "sha256": "ca0bf1eb7a963a0df07d3518bd80a42a7d4f22c02e055de6007efde9a4e0e2bf"
+    },
+    {
+      "file": "20261015112617_revoke_workout_truncate.sql",
+      "sha256": "21c0d794f40c93c6cac00038f312fb3cb39c24ddaf3319ffbf1b38cd4e54be7d"
+    },
+    {
+      "file": "20261015144732_guard_new_exercise_day.sql",
+      "sha256": "82261ffcec2480e2a16d6cdfaefd2837f65b0b50ea42d1ec53b056b059645c2f"
+    },
+    {
+      "file": "20261015144758_restrict_workout_table_grants.sql",
+      "sha256": "6f6bb1c44be879e259b2e32fb298130f43c11f7f8fa107c32faa4b408d72b96d"
+    },
+    {
+      "file": "20261015202500_archived_object_deletion.sql",
+      "sha256": "a1cdd20e6fb1be5255657a89a1fd5670db97a6a03a9b442a8a681d578b2dc16c"
+    },
+    {
+      "file": "20261016150000_training_template_library.sql",
+      "sha256": "af5a1622f7215295b5fe050214a02a4496d8e2ba704512b49d472dcf375d82ba"
+    },
+    {
+      "file": "20261016204330_per_set_workout_v4.sql",
+      "sha256": "42e5da7a3a02ade8a53149c184300e046578f9bbdd2797d5ba2a2a9fc875e3a2"
+    },
+    {
+      "file": "20261020100000_training_library_least_privilege.sql",
+      "sha256": "4a1cbacecc292462459b2fd8ae1edb8f4b9483beab22fb628daa8a6a13101207"
+    },
+    {
+      "file": "20261020120000_public_helper_function_privileges.sql",
+      "sha256": "a2caac7278776a5a1778cba811c182aca9307b9a7dc0f1af18ef7a2f99939e23"
+    },
+    {
+      "file": "20261105010000_workout_set_edit_revisions.sql",
+      "sha256": "dfb732980c9163cd92e0c9e2e813a1b4389a2f57c9adec4b47967ea90c7692d2"
+    },
+    {
+      "file": "20261105020000_legacy_workout_write_contract.sql",
+      "sha256": "4a4126629e55d65ab34804df1989b1486889dee3991f793bb252f4daefc44da9"
+    },
+    {
+      "file": "20261105030000_program_edit_revisions.sql",
+      "sha256": "0ee865af2b91f22e123c51b6d7e5e804556ca7430587ddba7d09dd8cf92503d4"
+    }
+  ]
+}

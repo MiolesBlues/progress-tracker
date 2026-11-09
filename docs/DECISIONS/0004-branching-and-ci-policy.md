@@ -1,24 +1,24 @@
-# ADR 0004: Короткоживущие тематические ветки и проверка CI по SHA
+# ADR 0004: Short-lived topic branches and SHA-specific CI checks
 
-- Статус: Принято
-- Дата фиксации: 2026-11-04
+- Status: Accepted
+- Recorded: 4 November 2026
 
-## Контекст
+## Context
 
-Изменения приложения, базы и CI требуют изолированного review, а workflow может пропустить дублирующий push-run, если для ветки уже открыт PR. Локальный тест не заменяет проверку GitHub Actions.
+Application, database, and CI changes need isolated review. A workflow may skip a duplicate push run when a PR is already open, so local tests alone do not replace GitHub Actions evidence.
 
-## Решение
+## Decision
 
-Использовать одну короткоживущую ветку `<категория>/<задача>` от актуального `main` для самостоятельной задачи. Не коммитить напрямую в `main`. Создание commit, PR, push, merge и удаление веток требует явной авторизации в рамках задачи. После разрешённого push проверять обязательные PR checks на точном head SHA; skipped push workflow не считать успешной регрессией.
+Use one short-lived `<category>/<task>` branch from current `main` for each independent task. Do not commit directly to `main`. Creating commits, PRs, pushing, merging, and deleting branches requires explicit authorization for the task. After an authorized push, verify required PR checks on the exact head SHA; a skipped push workflow is not a passing regression run.
 
-Полная регрессия выполняется существующим GitHub Actions workflow. Локально запускаются минимальные релевантные проверки; CI использует локальный mock backend и синтетические `.invalid` URL.
+Run the full regression suite in the existing GitHub Actions workflow. Run the smallest relevant local checks; CI uses a local mock backend and synthetic `.invalid` URLs.
 
-## Последствия
+## Consequences
 
-- Отчёт должен называть ветку, SHA (если коммит создан), локальные проверки и hosted CI отдельно.
-- Изменять CI-архитектуру следует только для конкретной проверяемой причины.
-- Политика не разрешает менять hosted ресурсы или отправлять код без отдельного разрешения.
+- Reports identify the branch, SHA (if a commit exists), local checks, and hosted CI separately.
+- Change CI architecture only for a specific, testable reason.
+- This policy does not authorize hosted resource changes or sending code without separate authorization.
 
-## Источники
+## Evidence
 
-`AGENTS.md`, `.github/workflows/quality.yml`, `scripts/ci-event-router.mjs`, `package.json`.
+`AGENTS.md`, `.github/workflows/quality.yml`, `scripts/ci-event-router.mjs`, and `package.json`.

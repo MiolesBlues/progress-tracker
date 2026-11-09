@@ -1,105 +1,57 @@
-# Контекст проекта Progress Tracker
+# Progress Tracker project context
 
-> Снимок исходников проверен 4 ноября 2026 года. Этот документ описывает код репозитория, а не текущее состояние hosted Supabase или фактическое production-развёртывание. Для поведения всегда проверяйте исходный код и SQL.
+> Source review date: 4 November 2026. This document describes the repository, not the current state of hosted Supabase or a production deployment. Verify behavior in source code and SQL before relying on it.
 
-## 1. Идентичность проекта
+## Product
 
-**Progress Tracker** — личный дневник силовых тренировок. Пользователь создаёт программу из тренировочных дней и упражнений, записывает подходы и сравнивает результаты во времени. Продукт рассчитан на людей, которые ведут собственную силовую программу; поддержка командных или общих журналов в коде не обнаружена.
+Progress Tracker is a personal strength-training log. A signed-in user creates a program from training days and exercises, records sets, and reviews performance over time. The interface supports English and Russian, Light/Dark/System themes, and responsive mobile layouts. It is a web application; no native iOS application or full offline synchronization is present in the repository.
 
-Основные пользовательские потоки:
+Users can create a personal program with one to seven active days or optionally choose a published template. Registration does not automatically create a program. Training days and exercises can be ordered and archived. Workout history is kept when a day is archived or deleted; deleting an exercise also removes its own history through the dedicated deletion flow.
 
-1. Войти или зарегистрироваться.
-2. Настроить 1–7 личных тренировочных дней, при желании применить шаблон.
-3. Добавить и упорядочить упражнения, задать ориентиры для подходов.
-4. Записывать результат каждого подхода.
-5. Просматривать историю и графики по упражнению.
+Workout entries include a date, exercise, optional note, and a list of sets. A set records position, weight, repetitions, optional RIR, working/warmup classification, and external/bodyweight load type. Legacy entry fields and snapshots remain for compatibility. A stable operation UUID makes save retries idempotent. Editing sets uses revisions and explicit conflict handling; the editor does not silently overwrite a newer edit.
 
-Код описывает личный журнал и сравнение тренировочных показателей. Отдельные бизнес-метрики, сроки выпуска и количественные продуктовые цели в актуальном `roadmap.md` не указаны.
+Analytics provide weight, repetitions, and volume charts over 7/30/90/365-day or all-time ranges, and comparisons with the prior session and prior calendar week. A displayed best working set is scoped to a workout entry; it is not a global personal-record entity. Volume trends do not guarantee strength gains.
 
-## 2. Технологии
+## Data and security
 
-| Область                 | Технологии и назначение                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| UI                      | React 19, TypeScript, Tailwind CSS 4; страницы и компоненты веб-приложения.                                                                                         |
-| Маршрутизация и runtime | TanStack Router и TanStack Start; Vite собирает клиент и серверный entry. Nitro настроен на Cloudflare Worker module; Wrangler используется для локального preview. |
-| Клиентское состояние    | TanStack Query — запросы, кеш и обновление данных; отдельный session store отслеживает пользователя и переключение аккаунта.                                        |
-| Auth и доступ к данным  | `@supabase/supabase-js`; браузерный клиент использует Supabase Auth и PostgREST/RPC. PostgreSQL выполняет RLS, ограничения, триггеры и SQL-функции.                 |
-| Проверка данных         | TypeScript-типы Supabase и прикладные валидаторы в `src/lib/`.                                                                                                      |
-| Тестирование            | Vitest + jsdom, Node test runner + PGlite, Playwright для Chromium/WebKit.                                                                                          |
-| Инструменты             | Bun 1.4.3 закреплён в `packageManager`; пакет требует Node.js не ниже 22.16. CI использует Node.js 24.14.0.                                                         |
+Supabase Auth provides identity. User-owned PostgreSQL rows carry `user_id`; RLS, owner checks, constraints, and transactional SQL functions enforce access and domain rules. Client-side user filters support correct query behavior but are not a security boundary. Never expose a service-role key through `VITE_*` variables or client bundles.
 
-В `drizzle.config.ts` подключён Drizzle Kit, но `drizzle/schema.ts` намеренно пуст. Фактическое DDL и функции находятся в SQL-файлах `drizzle/migrations/`; не считайте пустую TypeScript-схему полной моделью базы. Приложение не использует Drizzle ORM для runtime-запросов.
+Archived-object permanent deletion is a separate opt-in behavior guarded by owner-checked RPCs. Account deletion is not implemented. Local source migrations and PGlite tests do not prove that the same schema or grants are installed on a hosted project.
 
-## 3. Реализованные возможности
+The SQL migrations in `drizzle/migrations/` are the schema source of truth. `drizzle/schema.ts` is intentionally empty and Drizzle ORM is not used for runtime access. Do not use `drizzle-kit push`. Any hosted migration needs explicit authorization, target verification, read-only preflight, backup/recovery planning, and a rehearsal appropriate to the change.
 
-Статус **РЕАЛИЗОВАНО** означает, что поток присутствует в текущем коде. Он не подтверждает применение миграций к hosted базе или доступность production-сервиса.
+## Runtime and local development
 
-| Возможность        | Статус и границы                                                                                                                                                                                                                                                                               |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Аутентификация     | **РЕАЛИЗОВАНО в клиентском коде:** email/password и Google OAuth через Supabase Auth. Защищённый layout повторно проверяет пользователя; содержимое предыдущего аккаунта скрывается при переключении.                                                                                          |
-| Программа          | **РЕАЛИЗОВАНО:** пользовательские названия и порядок дней; от 1 до 7 активных дней; после регистрации программа не создаётся автоматически. Настройка проходит через onboarding.                                                                                                               |
-| Шаблоны            | **РЕАЛИЗОВАНО:** доступен выбор опубликованного шаблона по числу дней; применение выполняется RPC. Семидневный шаблон требует отдельного согласия на ежедневный график.                                                                                                                        |
-| Упражнения         | **РЕАЛИЗОВАНО:** личные упражнения, порядок, цели и привязка к дню; архивирование и восстановление.                                                                                                                                                                                            |
-| Тренировки         | **РЕАЛИЗОВАНО:** запись даты, заметок и отдельных подходов с весом, повторами, необязательным RIR, типом подхода и типом нагрузки. Черновик ввода хранится локально.                                                                                                                           |
-| История            | **РЕАЛИЗОВАНО:** записи группируются по упражнению и дате; подходы имеют отдельные строки и порядок. День тренировки сохраняется в записи как `day_name` snapshot.                                                                                                                             |
-| Аналитика          | **РЕАЛИЗОВАНО:** графики веса, повторений и объёма за 7/30/90/365 дней или всё время; есть сравнение с предыдущей сессией и отдельное сравнение с предыдущей календарной неделей. Вычисляется лучший рабочий подход внутри записи, но отдельная сущность all-time personal best не обнаружена. |
-| Локализация и темы | **РЕАЛИЗОВАНО:** русский/английский, Light/Dark/System.                                                                                                                                                                                                                                        |
-| Адаптивность       | **РЕАЛИЗОВАНО в веб-интерфейсе:** мобильная раскладка и браузерные проверки с мобильным viewport. Нативного iOS-приложения в репозитории нет.                                                                                                                                                  |
-| Установка и офлайн | **ЧАСТИЧНО:** есть web manifest и иконки. Service worker и полноценная offline-синхронизация в репозитории не обнаружены; для входа и обмена с базой нужна сеть. Локальный черновик не является офлайн-режимом.                                                                                |
-| Удаление данных    | **РЕАЛИЗОВАНО для архивных дней/упражнений в коде клиента и SQL RPC.** Удаление аккаунта не реализовано. Применение соответствующих миграций к hosted базе из исходников не подтверждается.                                                                                                    |
+The stack uses React, TypeScript, TanStack Start/Router/Query, Vite, Tailwind CSS, and Supabase. The build targets a Cloudflare Worker module through Nitro, and Wrangler can run the built artifact locally. The repository does not contain a deployment workflow; this does not prove the app is not deployed elsewhere.
 
-## 4. Термины домена
+Use the pinned Node.js/Bun toolchain and committed lockfile. The standard local command is `bun run dev`; scripts are listed in `package.json`. The browser client needs a development Supabase URL and publishable key. Secret/service-role credentials must never use a `VITE_*` variable. The environment guard rejects production configuration in development; staging use with Vite requires explicit `ALLOW_STAGING_DEV=true`.
 
-- **Program** — личный набор тренировочных дней и упражнений пользователя.
-- **Training day (`program_days`)** — именованный день программы с порядком и архивным статусом.
-- **Exercise (`program_exercises`)** — упражнение пользователя с целями и позицией в дне. После удаления архивного дня связь может стать `NULL`, чтобы не терять историю.
-- **Workout entry (`workout_entries`)** — запись упражнения за дату с заметкой и совместимыми legacy-полями. Это не контейнер всей тренировки за день.
-- **Workout set (`workout_entry_sets`)** — отдельный подход записи: позиция, вес, повторы, необязательный RIR, `warmup`/`working` и `external`/`bodyweight`.
-- **Historical record** — workout entry и его набор подходов; для удалённого дня текст `day_name` сохраняет отображаемое имя.
-- **Best working set** — лучший по объёму рабочий подход среди подходов одной записи; это не глобальный рекорд пользователя.
-- **RIR** — сохранённый показатель «повторов в запасе». Поля RPE в текущей схеме и UI не обнаружено; не считайте RIR и RPE взаимозаменяемыми без отдельного решения.
+CI uses local mocks and synthetic `.invalid` endpoints. Unit, database, concurrency, build/security, worker-artifact, and Playwright checks provide repository-level evidence, not proof of hosted Auth/RLS configuration or deployment. A successful CI run applies only to its exact commit and completed checks.
 
-## 5. Подтверждённые инварианты
+## Current evidence versus historical reports
 
-- Персональные строки имеют `user_id`; SQL-политики ограничивают доступ через `auth.uid()`. Связанные записи используют владельческие внешние ключи, где это необходимо. Клиентские фильтры по `user_id` не заменяют RLS.
-- Должен оставаться хотя бы один активный день, не более семи. Изменение состава и порядка синхронизируется транзакционными функциями с блокировкой по владельцу.
-- Новая запись проверяется по владельцу и активному упражнению/дню; имя дня задаётся серверным триггером, а не доверяется клиентскому `day_name`.
-- Позиция подхода уникальна в пределах записи; модель ограничивает количество подходов 1–20. Новые значения проверяются SQL-функциями и ограничениями.
-- Сохранение записи использует UUID операции. Повтор с тем же UUID и тем же payload идемпотентен; повтор с другими значениями отклоняется. Tombstones предотвращают повторное использование удалённых operation IDs.
-- Архивирование сохраняет историю. Окончательно удалять можно только архивный объект через owner-checked RPC. Удаление дня отделяет ссылки на день, сохраняя записи и snapshot имени; удаление упражнения удаляет его историю и сохраняет tombstones.
-- Удаление аккаунта не входит в эти правила и остаётся отдельной нереализованной функцией.
+The codebase contains program management, exercise catalog/templates, per-set workout logging, idempotent save operations, revision-checked edits, analytics, auth, environment guards, and localized UI. Confirm current behavior in source, migrations, tests, and CI before making changes.
 
-Эти гарантии подтверждены кодом и локальными SQL-тестами. Они не доказывают, что та же версия схемы установлена на удалённой базе.
+Readiness, staging, branch-integration, security, and phase reports in this repository are dated historical snapshots. Their outcomes apply to the recorded date, commit, and environment only; do not use them as current release status. Hosted database configuration, applied migrations, live Auth/RLS behavior, and actual deployment state remain unknown unless separately verified.
 
-## 6. Текущее состояние разработки
+## Roadmap
 
-- Текущая структура веб-приложения, клиентские потоки тренировок, история, графики, темы и локали присутствуют в `src/`.
-- Миграции SQL, отдельные PGlite-проверки и CI contracts присутствуют в репозитории.
-- Hosted-состояние Supabase, применение последних миграций, состояние реальной Auth/RLS-конфигурации и фактическое развёртывание Cloudflare **НЕИЗВЕСТНЫ** по локальному исходному коду. Успешная сборка или workflow не подтверждают эти факты.
-- В `src/lib/pending-rpc.ts` комментарий утверждает, что перечисленные RPC отсутствуют в сгенерированных типах; текущий `src/integrations/supabase/types.ts` уже содержит эти функции. Комментарий выглядит устаревшим. Этот документ фиксирует расхождение, но не делает вывод о hosted-схеме.
-- Для кода существует `client.server.ts` с service-role helper, однако обычный data path в запросах и компонентах использует браузерный Supabase client. Не импортируйте service-role helper в клиентский код.
-- Отдельных текущих release blockers нельзя установить по исходникам. Исторические readiness-отчёты — датированные свидетельства, а не live release status.
+The repository roadmap currently lists these open items without dates or priorities:
 
-## 7. Roadmap из репозитория
+1. Move training-day controls into a dedicated mobile editor with a compact program summary.
+2. Verify editor operations, automatic refresh, history preservation, and mobile layout.
+3. Run available automated checks and review a production build without changing the database.
 
-`roadmap.md` содержит три незакрытые задачи без сроков и приоритетов:
+Confirm scope and priority with the product owner before expanding the roadmap.
 
-1. Перенести управление тренировочными днями в отдельный мобильный редактор с компактной сводкой программы.
-2. Проверить операции редактора, автообновление, сохранность истории и мобильную раскладку.
-3. Выполнить доступные автоматические проверки и изучить production build без изменения базы.
+## Useful references
 
-Не добавляйте roadmap-приоритеты и даты, пока они не подтверждены владельцем.
-
-## 8. Важные ссылки
-
-- [Workflow четырёх агентов и approval gate](AGENT_WORKFLOW.md): основная сессия показывает полные prompts до одобрения; после него Orchestrator автономно выполняет только выбранный scope. Project defaults read-only/on-request не являются отдельным sandbox каждой роли. Решение: [ADR 0007](DECISIONS/0007-approval-gated-agent-workflow.md).
-- [README проекта](../README.md)
-- [Архитектура](ARCHITECTURE.md)
-- [Решения ADR](DECISIONS/README.md)
-- [Текущий roadmap](../roadmap.md)
-- [Маршруты](../src/routes/README.md), [страницы](../src/routes/), [доменные модули и тесты](../src/lib/)
-- [Supabase client и типы](../src/integrations/supabase/)
-- [SQL migrations](../drizzle/migrations/), [схема миграций и preflight](DATABASE-RELEASE-CONTRACT-RU.md)
-- [Архивирование и удаление](ARCHIVE-DELETION-RU.md)
-- [Vitest config](../vitest.config.ts), [Playwright config](../playwright.config.ts), [GitHub Actions](../.github/workflows/quality.yml)
-- [E2E/release acceptance](E2E-RELEASE-RU.md)
+- [Project README](../README.md)
+- [Architecture](ARCHITECTURE.md)
+- [Architecture decision records](DECISIONS/README.md)
+- [Database release contract](DATABASE-RELEASE-CONTRACT.md)
+- [Archive and deletion behavior](ARCHIVE-DELETION.md)
+- [Application routes](../src/routes/README.md)
+- [SQL migrations](../drizzle/migrations/)
+- [Quality workflow](../.github/workflows/quality.yml)
+- [Documentation index](README.md)

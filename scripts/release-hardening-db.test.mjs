@@ -1,3 +1,4 @@
+import { canonicalMigrations } from "./canonical-migrations.mjs";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync } from "node:fs";
 import { test, before, after } from "node:test";
@@ -45,9 +46,10 @@ before(async () => {
     GRANT USAGE ON SCHEMA auth,public TO anon,authenticated,service_role,public_probe;
     GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated,service_role;`);
-  const journal = JSON.parse(file("drizzle/migrations/meta/_journal.json"));
-  for (const entry of journal.entries.filter((entry) => !tags.includes(entry.tag)))
-    await db.exec(file(`drizzle/migrations/${entry.tag}.sql`));
+  for (const migration of canonicalMigrations().filter(
+    (migration) => !tags.includes(migration.file.slice(0, -4)),
+  ))
+    await db.exec(migration.sql);
   await db.query("INSERT INTO auth.users VALUES ($1),($2)", [A, B]);
   await asUser(A, async () => {
     await db.query("SELECT setup_program($1::text[])", [["Первый", "Второй"]]);
@@ -79,7 +81,9 @@ test("B12 rejects INSERT when a day was archived after the client's successful S
       (await rows("SELECT archived_at FROM program_days WHERE id=$1", [days[1].id]))[0].archived_at,
       null,
     );
-    await db.query("UPDATE program_days SET archived_at=now() WHERE id=$1", [days[1].id]);
+    await db.query("UPDATE program_days SET revision=revision+1,archived_at=now() WHERE id=$1", [
+      days[1].id,
+    ]);
     await assert.rejects(
       db.query("INSERT INTO program_exercises(name,day_id) VALUES ('Lost race',$1)", [days[1].id]),
       (error) => error.code === "22023",
@@ -89,15 +93,18 @@ test("B12 rejects INSERT when a day was archived after the client's successful S
       0,
     );
     // Editing an existing archived exercise remains valid, even in an archived day.
-    await db.query("UPDATE program_exercises SET archived_at=now(),day_id=$1 WHERE id=$2", [
-      days[1].id,
-      exercise,
-    ]);
-    await db.query("UPDATE program_exercises SET name='Жим в архиве',position=2 WHERE id=$1", [
-      exercise,
-    ]);
+    await db.query(
+      "UPDATE program_exercises SET revision=revision+1,archived_at=now(),day_id=$1 WHERE id=$2",
+      [days[1].id, exercise],
+    );
+    await db.query(
+      "UPDATE program_exercises SET revision=revision+1,name='Жим в архиве',position=2 WHERE id=$1",
+      [exercise],
+    );
     await save(); // Replay of a confirmed historical operation, never a new entry.
-    await db.query("UPDATE program_days SET archived_at=NULL WHERE id=$1", [days[1].id]);
+    await db.query("UPDATE program_days SET revision=revision+1,archived_at=NULL WHERE id=$1", [
+      days[1].id,
+    ]);
     await db.query(
       "INSERT INTO program_exercises(name,day_id) VALUES ('После восстановления',$1)",
       [days[1].id],
@@ -238,10 +245,14 @@ test("latest migrations preserve optional template setup, new saves and replay a
       [id],
     );
     assert.equal(original.length, 1);
-    await db.query("UPDATE program_exercises SET archived_at=now() WHERE id=$1", [ex.id]);
-    await db.query("UPDATE program_days SET archived_at=now(),name='Новое название' WHERE id=$1", [
-      ex.day_id,
-    ]);
+    await db.query(
+      "UPDATE program_exercises SET revision=revision+1,archived_at=now() WHERE id=$1",
+      [ex.id],
+    );
+    await db.query(
+      "UPDATE program_days SET revision=revision+1,archived_at=now(),name='Новое название' WHERE id=$1",
+      [ex.day_id],
+    );
     await insert();
     assert.deepEqual(
       await rows("SELECT to_jsonb(w)::text AS row FROM workout_entries w WHERE id=$1", [id]),

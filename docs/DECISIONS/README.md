@@ -1,17 +1,17 @@
-# Архитектурные решения
+# Architecture decision records
 
-Каталог содержит ADR — зафиксированные решения, которые влияют на архитектуру, безопасность данных или рабочий процесс проекта.
+This directory contains ADRs: recorded decisions that affect architecture, data security, or project workflow.
 
-## Формат
+Each ADR includes context, decision, consequences, and supporting repository evidence. An `Accepted` status means the decision reflects the code or an explicitly approved project policy; it does not confirm hosted-service state.
 
-Каждый ADR содержит контекст, решение, последствия и подтверждающие источники в репозитории. Статус `Принято` означает, что решение отражает действующий код или явно утверждённую политику проекта; он не подтверждает состояние hosted-сервисов.
+Number ADRs sequentially (`0001-...md`). Preserve the history of an accepted decision: when it changes, add a new ADR, mark the previous one superseded, and link to its replacement. Significant changes to the data model, security boundaries, API, runtime/deployment, or development policy need an ADR; minor documentation corrections do not.
 
-Нумеруйте документы последовательно (`0001-...md`). Не переписывайте историю принятого решения: при изменении создайте новый ADR, а старый отметьте заменённым и сошлитесь на новый. Изменение ADR требуется для значимых изменений модели данных, границ безопасности, API, runtime/deployment или политики разработки; мелкие исправления документации его не требуют.
+## Decisions
 
-## Решения
-
-- [0001 — Изоляция пользовательских данных на стороне PostgreSQL](0001-postgresql-user-isolation.md)
-- [0002 — Идемпотентность операций записи тренировки](0002-idempotent-workout-operations.md)
-- [0003 — Подходы как отдельные строки с совместимым историческим снимком](0003-workout-sets-and-legacy-snapshot.md)
-- [0004 — Короткоживущие тематические ветки и проверка CI по SHA](0004-branching-and-ci-policy.md)
-- [0007 — Одобряемый workflow четырёх ролей](0007-approval-gated-agent-workflow.md)
+- [0001 — PostgreSQL-enforced user data isolation](0001-postgresql-user-isolation.md)
+- [0002 — Idempotent workout logging operations](0002-idempotent-workout-operations.md)
+- [0003 — Per-set records with a compatible historical snapshot](0003-workout-sets-and-legacy-snapshot.md)
+- [0004 — Short-lived topic branches and SHA-specific CI checks](0004-branching-and-ci-policy.md)
+- [0005 — Revision checks and idempotency for workout-set edits](0005-workout-edit-revisions.md)
+- [0006 — Compare-and-swap for program edits](0006-program-edit-revisions.md)
+- [0007 — Approval-gated agent workflow](0007-approval-gated-agent-workflow.md)

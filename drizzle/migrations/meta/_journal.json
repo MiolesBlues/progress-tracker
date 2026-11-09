@@ -78,6 +78,41 @@
       "when": 1792176210000,
       "tag": "20261016204330_per_set_workout_v4",
       "breakpoints": true
+    },
+    {
+      "version": "7",
+      "when": 1792490400000,
+      "tag": "20261020100000_training_library_least_privilege",
+      "breakpoints": true,
+      "idx": 11
+    },
+    {
+      "version": "7",
+      "when": 1792497600000,
+      "tag": "20261020120000_public_helper_function_privileges",
+      "breakpoints": true,
+      "idx": 12
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793840400000,
+      "tag": "20261105010000_workout_set_edit_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793844000000,
+      "tag": "20261105020000_legacy_workout_write_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793847600000,
+      "tag": "20261105030000_program_edit_revisions",
+      "breakpoints": true
     }
   ]
 }

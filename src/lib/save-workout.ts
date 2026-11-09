@@ -2,6 +2,7 @@ import { pendingRpc } from "@/lib/pending-rpc";
 import { supabase } from "@/integrations/supabase/client";
 import type { WorkoutPayload } from "@/lib/workout-input";
 import type { PerSetWorkoutPayload } from "@/lib/workout-input";
+import type { Database } from "@/integrations/supabase/types";
 
 export class SaveWorkoutError extends Error {
   constructor(
@@ -96,9 +97,9 @@ type SetMutationRpc =
   | "delete_workout_entry_set"
   | "reorder_workout_entry_sets";
 
-async function mutateWorkoutSet(
-  name: SetMutationRpc,
-  args: Record<string, unknown>,
+async function mutateWorkoutSet<Name extends SetMutationRpc>(
+  name: Name,
+  args: Database["public"]["Functions"][Name]["Args"],
   signal: AbortSignal,
 ) {
   const { data, error } = await pendingRpc(name, args)

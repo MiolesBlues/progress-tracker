@@ -3,6 +3,26 @@ export const SUPABASE_PROJECT_REFS = {
   staging: "fdzcwhzszbmpxyawrzzf",
 };
 
+// This checks public key *kind*, not signature validity or authorization.
+// Never include the supplied value (or decoder error) in diagnostics.
+export function validateSupabasePublishableKey(value) {
+  let publicKind = typeof value === "string" && /^sb_publishable_[A-Za-z0-9_-]+$/.test(value);
+  if (!publicKind && typeof value === "string") {
+    const parts = value.split(".");
+    if (parts.length === 3 && parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part))) {
+      try {
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+        publicKind = payload?.role === "anon";
+      } catch {
+        publicKind = false;
+      }
+    }
+  }
+  if (!publicKind) {
+    throw new Error("Supabase public key must be a publishable key or a legacy anon JWT");
+  }
+}
+
 function projectRefFromUrl(value, label, { allowTestHost = false } = {}) {
   if (!value) return undefined;
   let url;

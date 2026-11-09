@@ -39,6 +39,7 @@ export interface EntryLike {
   rir?: number | null;
   sets?: {
     id?: string;
+    revision?: number;
     weightExact?: string;
     position: number;
     weight: number;

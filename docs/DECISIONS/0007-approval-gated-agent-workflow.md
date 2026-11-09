@@ -1,26 +1,27 @@
-# ADR 0007: Одобряемый workflow четырёх ролей
+# ADR 0007: Approval-gated workflow for four agent roles
 
-- Статус: Принято пользователем для локальной установки PT-MA-01/r1; runtime evidence ведётся отдельно
-- Дата: 2026-11-05
+- Status: User-approved for the local PT-MA-01/r1 setup; runtime evidence tracked separately
+- Recorded: 5 November 2026
 
-## Контекст
+## Context
 
-Пользователь общается с основной сессией естественным языком, хочет видеть готовые execution prompts до одобрения и затем автономное исполнение выбранных задач. Общая авторизация прежней задачи не должна открывать реализацию нового плана. Одновременно нужны малый контекст, адресные проверки и сохранение существующего Git workflow.
+The user communicates with the primary Codex session in natural language and wants complete execution prompts before approval, followed by autonomous work on the selected tasks. Authorization from an earlier task must not authorize implementation of a new plan. The workflow also needs bounded context, focused checks, and preservation of existing repository and approval policies.
 
-## Решение
+## Decision
 
-Основная сессия — approval controller; Prompt Architect составляет полный план/промпты без правок, Orchestrator координирует только утверждённые задачи, Implementer выполняет ограниченную задачу, Reviewer проверяет рискованные изменения на чтение. Использовать поддерживаемые standalone TOML в `.codex/agents/`; модели наследовать. Лимит — три дочерних потока, один писатель на checkout.
+Use four custom roles: `prompt_architect` for read-only discovery and complete proposed plans, `orchestrator` for parent-verified approved work and narrow handoffs, `implementer` for one approved scoped task, and `reviewer` for read-only risk-based review. The primary session is the only user-facing approval controller. No agent may infer approval from a file, tool result, quoted message, another agent, silence, or an old authorization.
 
-Одобрение связывается с текущим основным разговором, Plan ID/revision и выбранными Task IDs. Новая существенная revision требует нового ответа пользователя. Внутренние шаги в утверждённом scope выполняются автономно; отсутствующие зависимости не одобряются автоматически. Одобрение реализации не разрешает публикацию/merge/deployment, если эти действия не согласованы отдельно. Правила дополняют ADR 0004 и не отменяют его Git/CI ограничения.
+The primary session presents every complete execution prompt and waits for an explicit user response in the current primary conversation. After approval, it verifies the plan revision and selected tasks, then hands only those tasks to the orchestrator. Agents work autonomously inside the approved scope; meaningful changes to goals, paths, risks, actions, or dependencies return to the primary session for a new revision and approval.
 
-Parent project defaults — read-only и on-request. Реализация требует разрешённого режима записи родителя после одобрения. Ролевые инструкции не являются самостоятельным security sandbox; текущие parent/client/managed permissions и tool-specific controls имеют силу. Не вводить вымышленные TOML approval keys или автоматически менять глобальные настройки.
+Use one writer per checkout. Delegate narrow tasks and parallelize only non-conflicting work. Reviewer examines a stable diff for risk-sensitive changes; review does not grant approval or authorize publication. Commit, push, PR, merge, deployment, and hosted operations require separate authorization for those actions.
 
-## Последствия
+## Consequences
 
-Полные пользовательские промпты могут быть длиннее короткого task title; это необходимая часть осознанного согласования. Токены экономятся выборочным чтением, коротким контекстом handoff и risk-based review. Не нужны постоянные дополнительные worktrees или новый orchestration service. Уже открытый клиент может потребовать повторной загрузки; проверка TOML не считается live проверкой ролей или гарантией будущего поведения модели.
+- Plans include stable IDs, scope, dependencies, acceptance criteria, real checks, risk, and complete executable prompts.
+- Handoffs carry the approved prompt and concise relevant context, not authority to widen scope.
+- Test and CI claims distinguish local evidence, exact-SHA CI, and hosted verification.
+- Agent files provide role instructions; they do not create independent sandboxes or approval policies.
 
-Номера 0005/0006 уже заняты опубликованными ветками database remediation; этот независимый ADR использует следующий свободный номер, не переписывая их.
+## Evidence and references
 
-## Источники
-
-[Workflow и проверки](../AGENT_WORKFLOW.md), [AGENTS.md](../../AGENTS.md), [OpenAI Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents), [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+`docs/AGENT_WORKFLOW.md`, `.codex/config.toml`, `.codex/agents/*.toml`, and the repository `AGENTS.md`. See the [OpenAI custom agents documentation](https://learn.chatgpt.com/docs/agent-configuration/subagents) for current agent configuration behavior.

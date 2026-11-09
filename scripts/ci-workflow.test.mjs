@@ -7,6 +7,40 @@ const workflow = readFileSync(".github/workflows/quality.yml", "utf8");
 const playwrightConfig = readFileSync("playwright.config.ts", "utf8");
 const router = readFileSync("scripts/ci-event-router.mjs", "utf8");
 const packageScripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+const schemaWorkflow = readFileSync(".github/workflows/release-schema-preflight.yml", "utf8");
+
+test("hosted schema workflow accepts only manual main runs and uses immutable verified actions", () => {
+  assert.match(
+    schemaWorkflow,
+    /if: github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/,
+  );
+  assert.doesNotMatch(schemaWorkflow, /\n  (pull_request|push|pull_request_target|workflow_call):/);
+  const pins = [...schemaWorkflow.matchAll(/uses: ([\w-]+\/[\w-]+)@([^\s]+)/g)];
+  assert.deepEqual(
+    pins.map((match) => [match[1], match[2]]),
+    [
+      ["actions/checkout", "d23441a48e516b6c34aea4fa41551a30e30af803"],
+      ["actions/setup-node", "949feb2413d6458794dcd2491c4babbbce0c15c1"],
+      ["oven-sh/setup-bun", "0c5077e51419868618aeaa5fe8019c62421857d6"],
+    ],
+  );
+  assert.match(schemaWorkflow, /runs-on: ubuntu-24\.04/);
+  assert.match(schemaWorkflow, /node-version: 24\.14\.0/);
+  assert.match(schemaWorkflow, /persist-credentials: false/);
+});
+
+test("schema database credentials exist only in the preflight step, not setup/install", () => {
+  const setup = schemaWorkflow.split("      - name: Inspect target schema")[0];
+  assert.doesNotMatch(setup, /secrets\.|RELEASE_DATABASE_URL/);
+  assert.equal((schemaWorkflow.match(/RELEASE_DATABASE_URL:/g) ?? []).length, 1);
+  assert.match(schemaWorkflow, /permissions:\n  contents: read/);
+  assert.doesNotMatch(schemaWorkflow, /write-all|contents: write|actions: write/);
+  assert.match(schemaWorkflow, /bun install --frozen-lockfile --ignore-scripts/);
+  assert.match(
+    schemaWorkflow,
+    /env:\n          RELEASE_DATABASE_URL:.*\n        run: bun run preflight:release/,
+  );
+});
 
 const jobsSection = workflow.split("\njobs:\n")[1];
 const jobs = Object.fromEntries(
@@ -223,7 +257,7 @@ test("workflow bun run commands resolve to declared package scripts", () => {
 
 test("all external actions are pinned to full commit SHAs with release labels", () => {
   const uses = [...workflow.matchAll(/^\s+uses:\s+([^\s#]+)\s+#\s+([^\s]+)$/gm)];
-  assert.equal(uses.length, 34);
+  assert.equal(uses.length, 35);
   for (const [, reference, release] of uses) {
     assert.match(reference, /^[\w.-]+\/[\w.-]+(?:\/[\w.-]+)?@[a-f0-9]{40}$/);
     assert.match(release, /^v\d+\.\d+\.\d+$/);
@@ -284,4 +318,38 @@ test("GitHub Actions expressions have balanced delimiters", () => {
   const openExpressions = [...workflow.matchAll(/\$\{\{/g)].length;
   const closeExpressions = [...workflow.matchAll(/\}\}/g)].length;
   assert.equal(openExpressions, closeExpressions);
+});
+
+test("one browser journey covers the built local Worker without duplicating dev shards", () => {
+  const config = readFileSync("playwright.worker.config.ts", "utf8");
+  assert.match(jobs["build-security"], /run: bun run test:worker/);
+  assert.match(jobs["build-security"], /playwright install --with-deps chromium/);
+  assert.equal(
+    packageScripts["test:worker"],
+    "playwright test --config playwright.worker.config.ts",
+  );
+  assert.match(
+    config,
+    /wrangler\/bin\/wrangler.js dev --local --config \.output\/server\/wrangler.json/,
+  );
+  assert.match(config, /serviceWorkers: "block"/);
+  assert.match(config, /retries: 0/);
+  assert.doesNotMatch(config, /bun run dev|vite dev|remote: true/);
+  assert.match(jobs["build-security"], /test-results\/worker\//);
+});
+
+test("database job runs a digest-pinned disposable PostgreSQL concurrency probe", () => {
+  const job = jobs["database-contracts"];
+  assert.match(job, /image: postgres:18\.6@sha256:[a-f0-9]{64}/);
+  assert.match(job, /POSTGRES_DB: pt_concurrency_fixtures/);
+  assert.match(job, /127\.0\.0\.1:55432:5432/);
+  assert.match(
+    job,
+    /CONCURRENCY_DATABASE_URL: postgresql:\/\/postgres@127\.0\.0\.1:55432\/pt_concurrency_fixtures/,
+  );
+  assert.match(job, /run: bun run test:concurrency/);
+  assert.equal(
+    packageScripts["test:concurrency"],
+    "node --test scripts/postgres-concurrency.test.mjs",
+  );
 });

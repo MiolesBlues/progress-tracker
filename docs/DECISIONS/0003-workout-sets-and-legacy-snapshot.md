@@ -1,22 +1,23 @@
-# ADR 0003: Подходы отдельными строками и совместимый исторический снимок
+# ADR 0003: Per-set records with a compatible historical snapshot
 
-- Статус: Принято
-- Дата фиксации: 2026-11-04
+- Status: Accepted
+- Recorded: 4 November 2026
 
-## Контекст
+## Context
 
-Старая модель хранила отдельные агрегированные вес/повторы/RIR в записи упражнения. Для отображения и анализа реальной тренировки нужны несколько типизированных подходов, сохраняя прежнюю историю.
+The earlier model stored one aggregated weight/reps/RIR set of fields on each workout entry. Real workouts need multiple typed sets while preserving existing history.
 
-## Решение
+## Decision
 
-Хранить каждый подход в `workout_entry_sets` с позицией, типом `working`/`warmup`, типом нагрузки и необязательным RIR. Сохранять legacy-поля записи для совместимости и переносить прежние значения в детерминированные legacy snapshot подходы. Для отображения исторического дня использовать snapshot `day_name`.
+Store every set in `workout_entry_sets` with position, `working`/`warmup` type, load type, and optional RIR. Keep legacy entry fields for compatibility and migrate previous values into deterministic legacy snapshot sets. Use the `day_name` snapshot to display the historical training day.
 
-## Последствия
+## Consequences
 
-- Порядок подходов и диапазон позиций проверяются схемой/сервером.
-- Изменения метрик должны учитывать legacy и новые данные, не создавая фиктивных рабочих подходов.
-- RIR — отдельное понятие; поле RPE не подразумевается.
+- The schema/server validates set order and position range.
+- Metrics must account for legacy and new data without inventing working sets.
+- RIR is distinct from RPE; do not assume an RPE field exists.
+- After the forward legacy-write migration, browser roles cannot update the original weight/reps/RIR entry fields. Set changes use their separate path; the gate distinguishes current sets from the original snapshot. Metadata updates and create/retry remain compatible. Hosted migration status requires separate verification.
 
-## Источники
+## Evidence
 
-SQL migrations для `workout_entries` и `workout_entry_sets`; `src/lib/analytics.ts`, `src/lib/workout.ts`, UI редактора тренировки и PGlite migration tests.
+Migrations for `workout_entries` and `workout_entry_sets`; `src/lib/analytics.ts`, `src/lib/workout.ts`, workout editor UI, and PGlite migration tests.

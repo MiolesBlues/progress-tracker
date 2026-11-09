@@ -1,7 +1,6 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
-import { errorPageResponse } from "./lib/error-page";
-import { requestLanguage } from "./lib/ssr-language";
+import { serverErrorResponse } from "./lib/server-error";
 import { attachSupabaseAuth } from "@/integrations/supabase/auth-attacher";
 
 const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
@@ -12,8 +11,7 @@ const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
       throw error;
     }
     // Do not serialize request exceptions; errors may contain auth or workout data.
-    void error;
-    return errorPageResponse(requestLanguage(request));
+    return serverErrorResponse(request, "request_middleware", error);
   }
 });
 

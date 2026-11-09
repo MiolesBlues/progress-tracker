@@ -7,6 +7,14 @@ export const STORAGE_PREFIX = "app:language:v1:";
 // Russian source text is the key. Missing English translations fail at typed call sites.
 // User-authored names and notes never enter this dictionary.
 export const english = {
+  "Подход изменён в другом окне. Ваш ввод сохранён; отмените редактирование и откройте актуальную запись.":
+    "This set changed in another window. Your input is preserved; cancel editing and reopen the current record.",
+  "Версия подхода недоступна. Обновите запись после обновления базы.":
+    "The set revision is unavailable. Reload the record after the database upgrade.",
+  "Сервер не подтвердил версию подхода. Повторите ту же операцию.":
+    "The server did not confirm the set revision. Retry the same operation.",
+  "Изменение отклонено или не подтверждено. Ваш ввод сохранён.":
+    "The change was rejected or unconfirmed. Your input is preserved.",
   "Прогресс Трекер": "Progress Tracker",
   Настройки: "Settings",
   "Тема оформления": "Appearance",
@@ -37,6 +45,10 @@ export const english = {
   "Управление данными": "Data management",
   "Разрешить полное удаление": "Enable permanent deletion",
   "Показывать архивные дни и упражнения": "Show archived days and exercises",
+  "Показывает окончательное удаление для архивных объектов; удалённые данные нельзя восстановить":
+    "Shows the permanent delete action for archived items; deleted data cannot be recovered",
+  "Показывает архивированные дни и упражнения в программе для восстановления":
+    "Shows archived days and exercises in Program so you can restore them",
   "Автоматически переходить к следующему упражнению": "Automatically switch to the next exercise",
   "После сохранения выбирать следующее упражнение": "Select the next exercise after saving",
   "Выберите тренировочный день": "Select a training day",
@@ -167,6 +179,8 @@ export const english = {
   "{count} подх.": "{count} sets",
   "{count} повт.": "{count} reps",
   "Не удалось загрузить программу.": "Could not load the program.",
+  "Программа изменена в другом окне. Ввод сохранён; отмените редактирование и откройте его снова.":
+    "The program changed in another window. Your input is preserved; cancel editing and reopen it to review the latest version.",
   "Программа изменилась. Обновите страницу и повторите действие.":
     "The program changed. Reload and try again.",
   "Не удалось сохранить изменения. Проверьте соединение и повторите попытку.":
