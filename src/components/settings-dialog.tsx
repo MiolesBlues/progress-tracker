@@ -42,7 +42,7 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
       </DialogTrigger>
       <DialogContent
         closeLabel={t("Закрыть")}
-        className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border-border bg-background p-5 text-foreground"
+        className="scrollbar-hidden max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border-border bg-background p-5 text-foreground"
       >
         <DialogHeader className="pr-8 text-left">
           <DialogTitle>{t("Настройки")}</DialogTitle>
