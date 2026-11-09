@@ -645,7 +645,8 @@ it("keeps each Focus Mode set's manual values independent while navigating and r
   expect(screen.getByLabelText("Повторения подхода 1")).toHaveValue("9");
   expect(screen.getByLabelText("RIR подхода 1")).toHaveValue("2");
   fireEvent.click(screen.getByRole("button", { name: "Добавить подход" }));
-  expect(screen.getByLabelText("Вес подхода 4")).toHaveValue("");
+  expect(screen.getByRole("combobox", { name: "Выбрать подход" })).toHaveValue("0");
+  expect(screen.getByLabelText("Вес подхода 1")).toHaveValue("51.25");
   fireEvent.click(screen.getByRole("button", { name: "Убрать последний подход" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Выбрать подход" }), {
     target: { value: "1" },
