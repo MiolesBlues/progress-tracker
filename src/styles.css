@@ -133,6 +133,16 @@
 @utility safe-bottom {
   padding-bottom: calc(env(safe-area-inset-bottom) + 0.5rem);
 }
+@layer utilities {
+  .scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+  }
+}
 @utility safe-top {
   padding-top: calc(env(safe-area-inset-top) + 0.75rem);
 }
