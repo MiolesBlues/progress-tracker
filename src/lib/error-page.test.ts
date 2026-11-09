@@ -50,7 +50,7 @@ describe("standalone error page language (no React hydration)", () => {
     ).toBe(expected);
   });
 
-  it("uses Russian when no request exists", () => expect(requestLanguage()).toBe("ru"));
+  it("uses English when no request exists", () => expect(requestLanguage()).toBe("en"));
 });
 
 it("formats ISO dates for display only and tolerates incomplete old draft input", () => {

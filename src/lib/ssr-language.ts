@@ -24,5 +24,5 @@ export function requestLanguage(request?: Request): Language {
         (language === "ru" || language === "en") && quality > 0 && quality <= 1,
     )
     .sort((a, b) => b.quality - a.quality);
-  return accepted[0]?.language === "en" ? "en" : "ru";
+  return accepted[0]?.language === "ru" ? "ru" : "en";
 }
