@@ -1,119 +1,105 @@
-# Архитектура Progress Tracker
+# Progress Tracker architecture
 
-> Состояние исходников проверено 4 ноября 2026 года. Здесь описана реализация в репозитории. Наличие локальной миграции не подтверждает её применение к hosted Supabase, а Cloudflare-конфигурация не подтверждает факт развёртывания.
+> Source review date: 4 November 2026. This document describes the repository implementation. A local migration does not prove that it has been applied to hosted Supabase, and Cloudflare configuration does not prove a deployment exists.
 
-## Обзор
+## Overview
 
-Progress Tracker — браузерное React-приложение для личных силовых тренировок. Клиентский код обращается к Supabase Auth, PostgREST и RPC. PostgreSQL отвечает за изоляцию строк, ограничения целостности и транзакционные доменные операции.
+Progress Tracker is a browser-based React application for personal strength training. The browser communicates with Supabase Auth, PostgREST, and database RPCs. PostgreSQL enforces row isolation, integrity constraints, and transactional domain operations.
 
 ```mermaid
 flowchart LR
-  User[Браузер пользователя] --> Routes[TanStack Router / React]
-  Routes --> Auth[Supabase Auth через браузерный клиент]
-  Routes --> Query[TanStack Query и доменные модули]
+  User[User's browser] --> Routes[TanStack Router / React]
+  Routes --> Auth[Supabase Auth via browser client]
+  Routes --> Query[TanStack Query and domain modules]
   Query --> REST[Supabase PostgREST]
   Query --> RPC[PostgreSQL RPC]
-  REST --> RLS[PostgreSQL: RLS, ограничения и триггеры]
+  REST --> RLS[PostgreSQL: RLS, constraints, triggers]
   RPC --> RLS
   RLS --> DB[(PostgreSQL)]
-  Build[Vite + TanStack Start + Nitro] -. сборка .-> Artifact[Cloudflare Worker module]
+  Build[Vite + TanStack Start + Nitro] -. build .-> Artifact[Cloudflare Worker module]
 ```
 
-## Слои и границы
+## Layers and boundaries
 
-### UI и маршрутизация
+### UI and routing
 
-- `src/routes/` содержит корневой layout, страницу входа и защищённую группу `_authenticated`.
-- Защищённые маршруты работают с `ssr: false`; проверка сессии выполняется через Supabase Auth в браузере. `AccountBoundary` препятствует отображению кеша предыдущего аккаунта при смене пользователя.
-- Необработанные SSR ошибки возвращают generic HTML с `x-pt-error-id`. Сервер пишет только событие `ssr_failure`, фиксированные `boundary`/`kind` и случайный ID; message, stack, cause, URL, headers и пользовательские данные не записываются. Для swallowed h3 response причина уже недоступна: `framework_swallowed` не притворяется исходным исключением. Хранение/alerts platform logs нужно проверить отдельно.
-- Корневой layout предоставляет Query Client, сессию, язык и тему. Локализация поддерживает русский и английский, темы — Light, Dark и System.
-- `routeTree.gen.ts` — сгенерированное описание маршрутов; редактируйте исходные route-файлы.
+- `src/routes/` contains the root layout, sign-in page, and the authenticated route group.
+- Authenticated routes use `ssr: false`; session checks use Supabase Auth in the browser. `AccountBoundary` prevents cached data from a previous account from appearing after an account change.
+- Unhandled SSR errors return generic HTML with `x-pt-error-id`. The server records only `ssr_failure`, fixed `boundary`/`kind` values, and a random ID. It does not record message, stack, cause, URL, headers, or user data. When h3 has swallowed the response error, `framework_swallowed` does not claim to be the original exception. Platform log retention and alerts require separate verification.
+- The root layout provides the Query Client, session, locale, and theme. The UI supports English and Russian, and Light, Dark, and System themes.
+- `routeTree.gen.ts` is generated. Edit route source files instead.
 
-### Клиентское состояние и доступ к данным
+### Client state and data access
 
-- `src/integrations/supabase/client.ts` создаёт браузерный Supabase JS client с сохранением и обновлением сессии и обёрткой storage для preview-среды.
-- `src/lib/queries.ts` и функциональные модули используют PostgREST, пользовательские фильтры и ключи TanStack Query. Фильтры клиента нужны для корректных запросов, но границей безопасности остаются RLS и owner-checks на стороне базы.
-- Мутации вызывают SQL RPC для операций, требующих атомарности или проверки доменных инвариантов.
-- В репозитории есть server-only helpers, включая service-role helper, но проверенный пользовательский data path проходит через браузерный клиент. Не импортируйте секретный helper в клиентские модули.
-- TanStack Start/Nitro присутствуют в сборке. На момент проверки в `src/` не найдено вызовов `createServerFn`, пользовательских API routes или server functions; не описывайте их как текущую границу данных.
+- `src/integrations/supabase/client.ts` creates the browser Supabase JS client with session persistence and refresh, plus a storage wrapper for preview environments.
+- `src/lib/queries.ts` and feature modules use PostgREST, user-scoped filters, and TanStack Query keys. Client filters shape requests; RLS and database owner checks remain the security boundary.
+- Mutations use SQL RPCs for operations that need atomicity or domain invariant checks.
+- Server-only helpers, including a service-role helper, exist in the repository. The inspected user data path uses the browser client. Never import a secret helper into client modules.
+- TanStack Start/Nitro are part of the build. The reviewed `src/` tree contained no `createServerFn`, custom API routes, or server functions; do not describe them as the current data boundary.
 
-### Доменная логика
+### Domain logic
 
-- `src/lib/workout.ts` содержит чистые расчёты метрик и сравнений.
-- UI и запросы сгруппированы вокруг программы, тренировок, истории, библиотеки и аналитики; общего отдельного серверного backend-service слоя нет.
-- Черновик тренировки сохраняется локально для восстановления ввода. Это не офлайн-синхронизация: авторизация и обмен данными требуют сети.
+- `src/lib/workout.ts` contains pure metric and comparison calculations.
+- UI and queries are organized around programs, workouts, history, the exercise library, and analytics. There is no separate general-purpose backend service layer.
+- A workout draft is saved locally for input recovery. This is not offline synchronization; sign-in and database access require a network connection.
 
-### Данные и PostgreSQL
+### Data and PostgreSQL
 
-Фактический DDL, функции и триггеры находятся в `drizzle/migrations/*.sql`. `drizzle/schema.ts` намеренно пуст, Drizzle ORM не участвует в runtime-запросах. `drizzle.config.ts` и Drizzle Kit обслуживают миграционный workflow, а не источник runtime-модели.
+The actual DDL, functions, and triggers are in `drizzle/migrations/*.sql`. `drizzle/schema.ts` is intentionally empty, and Drizzle ORM is not used for runtime queries. `drizzle.config.ts` and Drizzle Kit support migration workflows; they do not define the runtime data model.
 
-```mermaid
-erDiagram
-  program_days ||--o{ program_exercises : содержит
-  program_exercises ||--o{ workout_entries : история
-  workout_entries ||--o{ workout_entry_sets : подходы
-  workout_entry_operations ||--o{ workout_entry_operation_tombstones : защита-повтора
-  workout_entries ||--o{ workout_entry_set_tombstones : удалённые-подходы
-  training_templates ||--o{ training_template_days : дни
-  training_template_days ||--o{ training_template_slots : упражнения
-  training_templates ||--o{ training_template_applications : применение
-```
+Primary tables include `program_days`, `program_exercises`, `workout_entries`, `workout_entry_sets`, operation and tombstone tables, `training_exercise_catalog`, and published-template tables. User-owned rows use `user_id`; migrations define RLS, owner policies, foreign keys, constraints, and RPCs.
 
-Основные таблицы включают `program_days`, `program_exercises`, `workout_entries`, `workout_entry_sets`, таблицы операций и tombstones, а также `training_exercise_catalog` и таблицы опубликованных шаблонов. Пользовательские строки связаны с `user_id`; миграции определяют RLS, owner policies, внешние ключи, ограничения и RPC.
+Key model properties:
 
-Ключевые свойства модели:
+- Days and exercises have revisions. Semantic browser PATCH requests use compare-and-swap (CAS); SQL guards reject unconditional or stale changes, and reorder increments revisions. Editors do not automatically rebase. See [ADR 0006](DECISIONS/0006-program-edit-revisions.md).
+- Each user has one to seven active training days. Database functions serialize changes to membership and order.
+- Workout entries preserve the historical day name (`day_name`) and `day_id`; server-side logic checks ownership and active relationships.
+- Sets are stored separately with position, weight, reps, optional RIR, `working`/`warmup` type, and `external`/`bodyweight` load type.
+- Legacy entry fields and legacy set snapshots preserve earlier data during the move to per-set records.
+- A stable operation UUID makes workout saves idempotent. Ledgers and tombstones prevent changed or deleted operations from being replayed.
+- Editing a saved set uses `edit_workout_entry_set`, an `expected_revision`, and a separate operation UUID. Conflicts preserve editor input; exact retries return the prior result without overwriting newer sets. This behavior requires `20261105010000_workout_set_edit_revisions.sql`. The older update RPC without revision is closed to browser roles.
+- The release gate validates the original operation snapshot separately from current sets, so valid edits/adds/deletes/reorders need not keep legacy entry fields equal. Unchanged legacy sets are matched by ID; removal of an original set requires an owner-scoped tombstone.
+- Archiving preserves data. Final deletion of archived objects uses owner-checked RPCs. Account deletion is a separate, unimplemented lifecycle.
 
-- И дни, и упражнения имеют revision: semantic browser PATCH использует CAS, SQL guard отвергает unconditional/stale изменения, reorder увеличивает revision. Открытые формы не получают автоматический rebase. Детали совместимости и неизвестного сетевого результата описаны в [ADR 0006](DECISIONS/0006-program-edit-revisions.md).
-- У пользователя от одного до семи активных дней. Изменение порядка и состава сериализуется функциями базы.
-- Запись упражнения сохраняет историческое имя дня (`day_name`) и ссылку `day_id`; серверная логика проверяет владельца и активность связей.
-- Подходы хранятся отдельно с позицией, весом, повторами, необязательным RIR, типом `working`/`warmup` и типом нагрузки `external`/`bodyweight`.
-- Совместимые legacy-поля записи и legacy snapshot подходов сохраняют прежние данные при переходе к модели по подходам.
-- UUID операции делает сохранение записи идемпотентным; ledger и tombstones блокируют повторное применение изменённой или удалённой операции.
-- Редактирование сохранённого подхода использует `edit_workout_entry_set`: `expected_revision` и отдельный operation UUID. Revision-конфликт сохраняет ввод в редакторе; точный повтор возвращает прежний результат, не применяя правку поверх более новой. Для этого нужна forward-миграция `20261105010000_workout_set_edit_revisions.sql`; старый update RPC без revision закрывается для browser roles.
-- Release gate проверяет исходный operation snapshot отдельно от текущих подходов: допустимые edit/add/delete/reorder не обязаны сохранять равенство legacy-полям записи. Неизменённые legacy-подходы сопоставляются со снимком по ID; отсутствие исходного подхода требует owner-scoped tombstone.
-- Архивирование сохраняет данные. Финальное удаление доступно для архивных объектов через owner-checked RPC; удаление аккаунта отдельным lifecycle не реализовано.
+See [the database release contract](DATABASE-RELEASE-CONTRACT.md), [archive and deletion guidance](ARCHIVE-DELETION.md), and SQL tests for constraints and migration order. Local PGlite checks do not prove remote Supabase Auth, PostgREST, or RLS configuration.
 
-Подробные ограничения и порядок миграций см. в `DATABASE-RELEASE-CONTRACT-RU.md`, `ARCHIVE-DELETION-RU.md` и SQL-тестах. Локальные PGlite проверки не подтверждают конфигурацию удалённого Supabase Auth, PostgREST или RLS.
+## Request flow
 
-## Потоки запросов
+1. The route obtains the current user through Supabase Auth.
+2. A query function reads user data through the browser Supabase client; TanStack Query manages cache keys and refetching.
+3. PostgreSQL applies RLS and constraints to PostgREST requests.
+4. Multi-row mutations call an RPC that checks ownership and invariants in a transaction.
+5. On success, the UI updates or invalidates the relevant user-scoped cache.
 
-1. Маршрут получает текущего пользователя через Supabase Auth.
-2. Query-функция читает пользовательские данные через браузерный клиент Supabase; TanStack Query управляет ключом, кешем и повторным чтением.
-3. PostgreSQL применяет RLS и ограничения к PostgREST-запросу.
-4. Составные изменения вызывают RPC, которая проверяет владельца и инварианты в одной транзакции.
-5. После успешной мутации UI обновляет или инвалидирует относящийся к пользователю кеш.
+Verify individual mutation behavior in its source and SQL instead of inferring details from this overview.
 
-Точные детали конкретной мутации нужно сверять в её исходнике и SQL, а не выводить из этой общей схемы.
+## Build and environments
 
-## Сборка и окружения
+- `vite.config.ts` configures TanStack Start and Nitro for a Cloudflare Worker module target. `preview` runs Wrangler for local inspection of the built artifact.
+- Before Vite compilation and public-client creation, the app checks that a publishable key has the `sb_publishable_*` form or is a legacy JWT with `role=anon`. Secret/service-role and unknown values are rejected without printing the value. This does not validate key signatures or validity. The server-only service-role helper remains a separate trusted path.
+- `supabase/config.toml` does not select a hosted project by default. Hosted database operations require explicit project-ref verification and separate task authorization.
+- CI directs tests to local mocks and synthetic `.invalid` URLs. `quality.yml` runs code quality, unit/database/contracts, build/security, and four Playwright shards; the aggregate check depends on these jobs. Event routing may skip a duplicate push run when a PR is open, so verify the PR run against the exact SHA.
+- `bun run test:worker` runs one Chromium auth → program → save → records/reload scenario against `.output/server/wrangler.json` through local `wrangler dev --local`. It runs after the existing build in Build & Security; four dev-server shards remain. The mock intercepts Supabase `.invalid`; external requests are blocked and service workers disabled. This checks the production artifact, not hosted Auth/database or deployment.
+- No deployment workflow was found in the repository. That does not prove the app is not deployed elsewhere.
 
-- `vite.config.ts` подключает TanStack Start и Nitro с Cloudflare Worker module target. `preview` запускает Wrangler для локальной проверки собранного артефакта.
-- Перед компиляцией Vite и при создании public client проверяется тип значения publishable key: `sb_publishable_*` или legacy JWT с `role=anon`. Secret/service-role и неизвестные значения отклоняются без вывода значения; это не проверка подписи или действительности ключа. Server-only service-role helper остаётся отдельным доверенным путём.
-- `supabase/config.toml` не выбирает hosted project по умолчанию. Для операций с hosted базой требуется явная проверка целевого project ref и отдельное разрешение задачи.
-- CI направляет тесты на локальные mock-сервисы и синтетические URL `.invalid`. Workflow `quality.yml` выполняет качество кода, unit/database/contracts, build/security и четыре Playwright shard; агрегированный check зависит от них. Событийная маршрутизация может пропустить дублирующий push-run при открытом PR, поэтому проверяйте PR-run на точном SHA.
-- `bun run test:worker` выполняет один Chromium-сценарий auth → программа → save → records/reload на `.output/server/wrangler.json` через локальный `wrangler dev --local`. Запускается после существующей сборки в Build & Security; четыре dev-server shard сохранены. Mock перехватывает Supabase `.invalid`, внешние запросы блокируются, service workers выключены. Это проверка production artifact, не hosted Auth/DB или deployment.
-- В репозитории не обнаружен workflow deployment. Это не доказывает, что приложение нигде не развёрнуто.
+## Testing
 
-## Тестирование
+| Level                     | Covers                                                                        | Limitation                                                           |
+| ------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Vitest + jsdom            | UI and client logic                                                           | Does not verify a remote backend.                                    |
+| Node test runner + PGlite | SQL migrations, roles, `auth.uid()`, constraints, and RPCs in local emulation | Not equivalent to hosted Supabase Auth/PostgREST or production data. |
+| Playwright                | Chromium/WebKit browser flows and mobile viewports                            | Ordinary CI uses a local mock backend; staging is separate.          |
+| GitHub Actions            | Regression checks for a PR SHA                                                | A pass applies only to the tested SHA and completed required checks. |
 
-| Уровень                   | Проверяет                                                                         | Ограничение                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Vitest + jsdom            | UI и клиентская логика                                                            | Не подтверждает удалённый backend.                                           |
-| Node test runner + PGlite | SQL migrations, роли, `auth.uid()`, ограничения и RPC в локальной эмуляции        | Не эквивалентен hosted Supabase Auth/PostgREST и production-данным.          |
-| Playwright                | браузерные сценарии Chromium/WebKit с мобильным viewport и тестовой конфигурацией | Staging-конфигурация отдельна; обычный CI использует локальный mock backend. |
-| GitHub Actions            | Полный регрессионный набор для SHA PR                                             | PASS применим только к проверенному SHA и завершённым обязательным checks.   |
+Commands are listed in `package.json`; test configurations include `vitest.config.ts`, `playwright.config.ts`, `playwright.staging.config.ts`, and `.github/workflows/quality.yml`.
 
-Доступные команды см. в `package.json`; конфигурации — `vitest.config.ts`, `playwright.config.ts`, `playwright.staging.config.ts` и `.github/workflows/quality.yml`.
+Cross-connection concurrency is separately checked by `bun run test:concurrency` against disposable PostgreSQL 18.6. Three backend PIDs are used for two transactions and a `pg_blocking_pids` observer. The check covers real lock waiting, create retry, stale-edit SQLSTATE 40001, and replaying an old operation after a newer edit. CI pins the official `library/postgres:18.6` image by digest. Only an explicitly named passwordless loopback fixture database may be used as the control endpoint; each run creates a new synthetic database. Hosted URLs are rejected before connecting. Local fixtures remain until explicitly cleaned up; the CI service ends with its job. PostgreSQL 18 checks do not establish hosted PostgreSQL versions or settings and do not replace a separate rehearsal.
 
-Межсоединительная конкуренция отдельно проверяется `bun run test:concurrency` на disposable PostgreSQL 18.6. Три различных backend PID используются для двух транзакций и наблюдателя `pg_blocking_pids`: проверяются реальное ожидание блокировки, create retry, stale edit SQLSTATE 40001 и повтор старой операции после новой правки. CI использует официальный образ `library/postgres:18.6` по digest `sha256:bd5dfa494a5a259704365813dbfa5fa6b3e69be7348d43b547f540c730478583` ([provenance](https://hub.docker.com/v2/repositories/library/postgres/tags/18.6)). Только явно названная passwordless loopback fixture DB допускается как control endpoint; каждый запуск создаёт новую синтетическую базу. Hosted URL отклоняется до соединения. Локальные fixture DB сохраняются до отдельной очистки, CI service исчезает вместе с job. Проверки PostgreSQL 18 не подтверждают версии/настройки hosted PostgreSQL и не заменяют отдельную rehearsal.
+## Extending the architecture
 
-## Расширение архитектуры
+- Personal data needs an owner, RLS policies, and server-side checks. Review existing migrations and test contracts first.
+- Implement atomic operations and cross-row invariants in SQL RPCs with ownership, replay, and deletion checks where applicable.
+- Keep domain calculations pure and test them directly; do not move security checks exclusively into the UI.
+- Verify source and configuration before documenting server functions, full offline support, account deletion, or deployment.
 
-- Новые персональные данные должны получать владельца, RLS policies и серверные проверки; сначала изучите существующие миграции и тестовые контракты.
-- Новые атомарные операции и межстрочные инварианты реализуйте в SQL RPC с проверками владельца, повторов и удаления, когда это применимо.
-- Доменную математику держите чистой и покрывайте целевыми тестами; не переносите проверки безопасности только в UI.
-- Перед описанием server functions, полноценного offline, account deletion или deployment подтверждайте реализацию фактическими исходниками и конфигурацией.
-
-## Источники для актуализации
-
-Проверяйте `package.json`, `vite.config.ts`, `src/start.ts`, `src/server.ts`, `src/routes/`, `src/integrations/supabase/`, `src/lib/`, `drizzle/migrations/`, тестовые конфигурации и workflows. Справочник продукта и ссылок находится в [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).
+For updates, inspect `package.json`, `vite.config.ts`, `src/start.ts`, `src/server.ts`, `src/routes/`, `src/integrations/supabase/`, `src/lib/`, `drizzle/migrations/`, test configuration, and workflows. See [the documentation index](README.md).
