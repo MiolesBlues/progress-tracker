@@ -87,7 +87,7 @@ function SessionLayout() {
           </button>
         </div>
       </header>
-      <main className="px-5 pb-32">
+      <main className="px-5 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
         {daysResult.isError ? (
           <LoadError onRetry={() => void daysResult.refetch()}>
             {t("Не удалось загрузить тренировочные дни.")}
