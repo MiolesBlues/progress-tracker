@@ -1,84 +1,28 @@
-# Готовность к релизу — 13 октября 2026
+# Release readiness — 13 October 2026 (historical report)
 
-**Решение: NO-GO для публичного релиза.** Локальные проверки кода и сборка успешны. Реальные JWT двух пользователей, фактическая схема/RLS production Supabase, старые данные, резервное восстановление и физический iPhone не проверены. Успех тестов с подменённым API не снимает эти блокеры.
+**Decision: NO-GO for public release.** Local code checks and build passed. Real JWTs for two users, production Supabase schema/RLS, legacy data, backup restore, and physical iPhone were not verified. Passing mocked-API tests did not clear these blockers.
 
-## Основание и ветка
+## Basis and branch
 
-Прочитан полный `../workout-audit-2026-10-12/AUDIT-RU.md` (ревизия аудита `c2d41ef`) и отчёты [первого](SECURITY-FIXES-RU.md) и [второго](WORKOUT-DATA-INTEGRITY-RU.md) этапов. Третий этап выполнен в `fix/analytics-and-release`, созданной от проверенной ветки `fix/workout-data-integrity`, HEAD `85c3067`. Исправления первого этапа `7b518a4` сохранены; регрессионные тесты обоих этапов повторно прошли.
+The full `../workout-audit-2026-10-12/AUDIT.md` (audit revision `c2d41ef`) and [Stage 1](SECURITY-FIXES.md)/[Stage 2](WORKOUT-DATA-INTEGRITY.md) reports were reviewed. Stage 3 was performed on `fix/analytics-and-release`, created from verified `fix/workout-data-integrity`, HEAD `85c3067`. Stage 1 fixes `7b518a4` were retained; regression tests from both prior stages passed again.
 
-Форматирование выделено в коммит `5471e5a` — `Normalize line endings and apply consistent formatting`. Функциональные изменения, CI и этот отчёт находятся в следующем отдельном коммите этой ветки. Исходная вложенная папка отдельного Next.js-проекта не изменялась и не включена в коммиты. Различие generated `routeTree.gen.ts` касалось только окончаний строк; содержимое маршрутов не переписано вручную.
+Formatting was isolated in commit `5471e5a` (`Normalize line endings and apply consistent formatting`). Functional changes, CI, and this report were in the next separate commit on the branch. The nested standalone Next.js project was not changed or committed. The generated `routeTree.gen.ts` difference concerned line endings only; routes were not manually rewritten.
 
-## Статус A01–A17
+## A01–A17 status
 
-«Исправлено» в таблице означает код репозитория и локальные доказательства, а не подтверждённое применение в production.
+“Fixed” below means repository code and local evidence only; it does not mean production deployment.
 
-| ID  | Результат                                                                                                                       | Подтверждение                                                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| A01 | Изоляция кэша/форм по пользователю, отмена запросов и поздних ответов; refresh той же личности сохраняет ввод                   | `session.test.tsx`, `workout-flow.test.tsx`, браузерный A→B→A; добавлен стабильный анонимный SSR-снимок для гидратации                          |
-| A02 | Устаревшая модель DAYS/DayId/Exercise.day не возвращена; TypeScript и build исправлены                                          | Итоговые typecheck/build PASS                                                                                                                   |
-| A03 | 1–7 активных персональных UUID дней, имена/порядок/архив/восстановление; управление упражнениями и целями                       | ProgramManager tests, SQL с каждым количеством дней 1–7; браузерные программы 1/2/4/7 дней и изменение количества после регистрации             |
-| A04 | Пустой вес отклоняется, 0 допустим, десятичная запятая поддерживается; подходы не теряются, `8-8-7-6` отклоняется с объяснением | Unit/component и SQL-тесты границ/массивов; браузерный ввод 52,5                                                                                |
-| A05 | Dirty-поля не заменяются last-entry; старые ответы не меняют новое упражнение/пользователя/дату                                 | Component-тесты задержек; last-entry ограничен выбранной датой и стабильно сортируется                                                          |
-| A06 | UUID создаётся до отправки, сохраняется в черновике, повтор возвращает ту же запись; намеренный новый лог разрешён              | Двойной клик/отказ/таймаут в component/SQL, браузерный commit с потерянным ответом и retry без дубликата                                        |
-| A07 | CHECK новых записей и example_reps, одномерность/NULL/границы/точность; без автоматического исправления старых строк            | 0004 проверена на изолированной PostgreSQL/PGlite, синтетические старые нарушения сохранены; реальный preflight остаётся блокером               |
-| A08 | Два независимых сравнения относительно выбранной записи, вес %, сумма повторений, объём, подходы и RIR; предупреждения условий  | `analytics.test.ts`, `progress-page.test.tsx`; same-day, микросекунды created_at, UUID, год/недели, ноль/нет данных, другой владелец/упражнение |
-| A09 | Новая запись проверяет владельца и соответствие активного упражнения дню; снимок имени определяется сервером                    | SQL подмены ID/владельца/снимка, архив без потери истории; production RPC/политики ещё не подтверждены                                          |
-| A10 | Loading/error/empty/success и Retry; ошибки полной загрузки блокируют расчёты                                                   | Component-тесты экранов; браузерный отказ проверки сессии и успешный Retry, без отображения пустой истории вместо ошибки                        |
-| A11 | Черновик привязан к пользователю/упражнению, восстановление после reload, очистка только подтверждённого UUID                   | Unit/component, браузерный reload и A→B→A; полноценные offline app-shell/очередь отложены по согласованному объёму                              |
-| A12 | 7/30/90/365/всё время, две включённые границы, будущее исключено, выбор упражнения/показателя                                   | Проверки границ всех периодов и трёх метрик, component-тест графика и браузерный экран                                                          |
-| A13 | Полная постраничная загрузка заданного диапазона, устойчивый performed_on/created_at/id; UI по 20 записей                       | 1207 строк при maxRows=137, архив программ при maxRows=1, смена count/дубликат/обрыв/отмена; проценты не отображаются при неполноте             |
-| A14 | Все 11 advisories исходного аудита разобраны; пять совместимых обновлений и один адресный override                              | Frozen install, `bun audit --json` → `{}`; 2 теста совместимости esbuild/Drizzle; [подробности](docs/DEPENDENCIES-RU.md)                        |
-| A15 | Возвращаемые setSession/signOut ошибки и исключения OAuth обработаны на русском; Google busy/try/finally                        | `auth-actions.test.ts`, `auth-page.test.tsx`; различается локальный выход и неподтверждённый глобальный отзыв; getUser/JWT-проверка сохранена   |
-| A16 | LF через .gitattributes/Prettier, prefer-const исправлен; массовое форматирование отдельным коммитом                            | ESLint и format:check PASS; Fast Refresh исключён только для модулей UI/context с намеренными смешанными экспортами                             |
-| A17 | README, AGENTS, landing/metadata/manifest и техдокументация описывают личные дни; аварийная страница русская и тёмная           | Сверка с SQL/интерфейсом; Upper/Lower везде обозначен необязательным шаблоном                                                                   |
+| ID      | Recorded result                              | Evidence boundary                                                                                                                                       |
+| ------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A01–A03 | Closed in local code in earlier phases       | See [security fixes](SECURITY-FIXES.md); no hosted rollout implied.                                                                                     |
+| A04–A17 | Assessed in the audit and later stage report | Verify exact issue/status in the dated audit and [workout integrity report](WORKOUT-DATA-INTEGRITY.md); do not infer deployed state from this snapshot. |
 
-Для недельного сравнения выбранной сессии берётся **последняя сессия того же упражнения за предыдущую календарную неделю (пн–вс)**. Сумма всей недели не подменяет результат одной сессии. Это явно подписано в UI. Период графика не меняет точку сравнения. Объём равен весу × сумме повторений и не называется гарантированным ростом силы.
+## Release blockers
 
-## Выполненные проверки
+- Real JWT/Auth and cross-user RLS behavior for accounts A/B were not checked against hosted Supabase.
+- Existing production schema, migration state, and legacy data were not independently verified.
+- Backup restoration was not demonstrated.
+- Physical iPhone/Safari acceptance was not performed.
+- Mocked HTTP and local database tests are not equivalent to hosted Auth/PostgREST or production data.
 
-Среда: Windows, Node.js 24.14.0, Bun 1.4.3, TypeScript 5.9.3, Vitest 4.1.11, Playwright 1.64.0. Набор включает регрессию предыдущих этапов и 42 новых unit/component-тестов третьего этапа.
-
-| Проверка                  | Команда                                          | Результат                                                                                 |
-| ------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| Установка по lockfile     | `bun install --frozen-lockfile --ignore-scripts` | PASS; проверена чистая установка, включая реально разрешённый esbuild                     |
-| TypeScript                | `npm.cmd run typecheck`                          | PASS, 0 ошибок                                                                            |
-| ESLint                    | `npm.cmd run lint`                               | PASS, 0 ошибок/предупреждений                                                             |
-| Форматирование            | `npm.cmd run format:check`                       | PASS                                                                                      |
-| Unit/component/regression | `npm.cmd test -- --reporter=dot`                 | PASS, **131/131**, 13 файлов                                                              |
-| SQL/migration/RLS         | `npm.cmd run test:db`                            | PASS, **25/25**, PostgreSQL/PGlite в памяти                                               |
-| Совместимость toolchain   | `npm.cmd run test:toolchain`                     | PASS, **2/2**, transform/transformSync и Drizzle check без подключения к БД               |
-| Браузерные E2E UI         | `playwright test --reporter=list`                | PASS, **10/10**, Chromium/WebKit, все 4 ширины и отдельный сценарий A→B→A в каждом движке |
-| Production build          | `npm.cmd run build`                              | PASS, клиент + SSR + Nitro/Cloudflare-артефакт в `.output`; deploy не выполнен            |
-| Dependency audit          | `bun audit --json`                               | PASS, `{}`, exit 0; dev/runtime зависимости включены                                      |
-| Чистота патча             | `git diff --check`                               | PASS                                                                                      |
-
-В PowerShell Bun запускался через `npm.cmd exec --yes --package=bun -- bun ...`. SQL-тесты не используют реальный Supabase. В сетевом браузерном сценарии намеренно возникает ошибка getUser: diagnostic console выводит её, UI показывает ошибку, Retry восстанавливает экран. Это ожидаемый сценарий теста, не скрытый провал.
-
-Браузерные проверки: регистрация через реальную форму, создание программы, добавление дня/упражнения, ввод, восстановление черновика после reload, UUID retry после уже выполненного сохранения с потерянным ответом, архив дня/упражнения и сохранность истории, график и смена аккаунтов. Измерялось отсутствие горизонтального overflow на главной, форме регистрации/onboarding, программе, форме тренировки и истории. Использованы длинные названия и 20 подходов в истории; неожиданных JS/hydration ошибок в мобильных сценариях нет. Скриншоты `progress-320/375/390/430.png` находятся в `test-results/`, HTML-отчёт — `playwright-report/`; артефакты не коммитятся.
-
-CI добавлен в [.github/workflows/quality.yml](.github/workflows/quality.yml): frozen install, TypeScript, ESLint, Prettier, unit/SQL/toolchain tests, build, audit, Chromium/WebKit. Workflow имеет только read-доступ к содержимому и не применяет миграции/не развёртывает приложение. **Удалённый запуск GitHub Actions не выполнялся**: ветка не отправлялась.
-
-## Ограничения и оставшиеся риски
-
-1. **Блокер:** настоящие JWT двух пользователей, RLS/grants/RPC опубликованного Supabase, Google OAuth/redirects, email confirmation, Auth rate limits и резервное восстановление не проверены. Браузер использует фиктивный API и токены; SQL — тестовый auth.uid(), одно подключение. Это не доказательство production-безопасности.
-2. **Блокер:** production-схема и реальные старые строки неизвестны. Пользователь подтвердил отсутствие локального дампа/копии. Нужны read-only `program-preflight.sql`/`workout-preflight.sql`, рассмотрение NULL day_id и нарушений, backup и репетиция 0000–0004 на staging. NOT VALID не исправляет историю; автоматического backfill/VALIDATE не было. Некорректные массивы/вес в загруженной истории блокируют расчёты без изменения строк.
-3. **Не проверено:** физический iPhone/Safari, установка с manifest, виртуальная клавиатура, safe-area устройства, VoiceOver/контраст/крупный системный шрифт. Chromium/WebKit проверены как узкие viewport на Windows; это не реальные устройства. Внешние шрифты в изолированных E2E блокируются, используется fallback.
-4. **Не проверено:** несколько настоящих соединений PostgreSQL и гонки setup/лимита дней/reorder/одинакового UUID; несколько вкладок и конфликт редактирования одного локального черновика. На сервере есть блокировки/ограничения, но тест одного PGlite-подключения не подтверждает конкурентное выполнение.
-5. Offset-пагинация проверяет count и дубликаты, но не даёт транзакционного снимка при параллельных правках без изменения count. Для такого режима нужен серверный snapshot/RPC. Большая история загружается целиком перед аналитикой; предусмотрен защитный предел 100000 строк, нагрузка такого размера не тестировалась. Основной список и выбор выполненных тренировок ограничены локальной сегодняшней датой; будущие строки сохранены в БД, исключены из этого экрана.
-6. Нет полноценного offline app-shell/синхронизации. Черновики зависят от localStorage и могут быть удалены очисткой данных браузера. Удаление аккаунта/retention данных без FK на auth.users требует отдельного продуктового решения; каскадное удаление истории не добавлялось.
-7. Scoped override legacy esbuild требует повторной оценки при обновлении Drizzle/loader. Нулевой audit относится к текущему реестру advisories, а не ко всем потенциальным уязвимостям. Production-хостинг и исполнение Cloudflare-артефакта не проверены.
-
-Новых SQL-миграций в третьем этапе нет. Production-миграции, изменение существующих пользовательских данных, merge в main, push и deploy не выполнялись.
-
-## Условия перехода к GO
-
-Выполнить [сценарии staging E2E](docs/E2E-RELEASE-RU.md) с настоящими A/B, подтвердить применённую схему и результат read-only preflight, проверить backup restore и конкурентные операции, пройти физический iPhone/Safari. Затем отдельно согласовать production-миграции и выпуск. Техническое описание: [программа/БД/аналитика](docs/PROGRAM-AND-DATABASE-RU.md). До этих подтверждений публичный релиз остаётся **NO-GO**.
-
-## Файлы функционального коммита
-
-- Аналитика/история: `src/lib/analytics.ts`, `src/lib/analytics.test.ts`, `src/lib/pagination.ts`, `src/lib/pagination.test.ts`, `src/lib/queries.ts`, `src/lib/workout.ts`, `src/components/progress-page.tsx`, `src/components/progress-page.test.tsx`, `src/routes/_authenticated/progress.tsx`.
-- Auth/ввод/регрессия: `src/lib/auth-actions.ts`, `src/lib/auth-actions.test.ts`, `src/test/auth-page.test.tsx`, `src/lib/session.tsx`, `src/lib/session.test.tsx`, `src/integrations/lovable/index.ts`, `src/routes/auth.tsx`, `src/routes/_authenticated/route.tsx`, `src/components/workout-form.tsx`, `src/components/workout-flow.test.tsx`, `src/test/supabase-mock.ts`, `src/integrations/supabase/previewAuthStorage.ts`.
-- Описание/документы: `src/routes/index.tsx`, `src/lib/error-page.ts`, `public/manifest.webmanifest`, `README.md`, `AGENTS.md`, `docs/PROGRAM-AND-DATABASE-RU.md`, `docs/DEPENDENCIES-RU.md`, `docs/E2E-RELEASE-RU.md`, `RELEASE-READINESS.md`.
-- Проверки/зависимости: `.github/workflows/quality.yml`, `playwright.config.ts`, `e2e/mock-supabase.ts`, `e2e/release.spec.ts`, `scripts/toolchain.test.mjs`, `package.json`, `bun.lock`, `tsconfig.json`, `eslint.config.js`, `.gitignore`, `.prettierignore`.
-
-Механические изменения 18 файлов (включая `.gitattributes`/`.prettierrc`, UI-заготовки, Supabase helpers и прежние отчёты) находятся отдельно: `git show --stat 5471e5a`. Функциональные исправления в этот форматирующий коммит не включены.
+No merge, push, deployment, or production migration was performed. Treat this report as historical evidence only; use current source, migration preflight, and a separately authorized staging run for a release decision.

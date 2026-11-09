@@ -1,22 +1,22 @@
-# ADR 0006: Compare-and-swap для редактирования программы
+# ADR 0006: Compare-and-swap for program edits
 
-- Статус: Принято в исходниках; hosted rollout не выполнен
-- Дата: 2026-11-05
+- Status: Accepted in source; hosted rollout not confirmed
+- Recorded: 5 November 2026
 
-## Контекст
+## Context
 
-Обычный PATCH дня или упражнения не имел признака свежести. Блокировка строки сериализовала изменения, но позволяла форме с устаревшими данными затереть более новую правку. ADR 0005 сохраняет самостоятельное решение для подходов и не заменяется этим ADR.
+Ordinary PATCH requests for days and exercises had no freshness indicator. Row locking serialized changes but still allowed a stale form to overwrite a newer edit. ADR 0005 remains a separate decision for workout sets.
 
-## Решение и последствия
+## Decision and consequences
 
-Forward migration `20261105030000_program_edit_revisions.sql` добавляет revisions дней и упражнений. Browser PATCH передаёт `revision=base+1`, фильтрует по base revision и проверяет подтверждённые ID/revision. Trigger сравнивает предложенную revision с актуальной строкой и отклоняет semantic update без CAS (40001), поэтому старый direct PATCH не может обойти клиентский predicate. Все UPDATE увеличивают revision. Position-only reorder остаётся доступен старым invoker RPC, также увеличивая revision; доверенные definer maintenance операции сохраняют работу. RLS и owner constraints не меняются.
+Forward migration `20261105030000_program_edit_revisions.sql` adds revisions to days and exercises. Browser PATCH sends `revision=base+1`, filters on the base revision, and checks confirmed IDs/revisions. A trigger compares the proposed revision with the current row and rejects semantic updates without CAS (SQLSTATE 40001), preventing an old direct PATCH from bypassing the client predicate. All updates increment the revision. Position-only reorder remains available through the older invoker RPC and also increments revisions; trusted definer maintenance operations continue to work. RLS and owner constraints are unchanged.
 
-Формы фиксируют revision при открытии, сохраняют ввод при конфликте/refetch, не подставляют новую revision автоматически. Перенос упражнения в другом окне не перемонтирует editor; rename draft дня хранится по ID даже при перемещении в архив. Для пересмотра новой версии нужно явно закрыть/отменить и снова открыть editor. Данные draft живут в памяти текущего компонента, не восстанавливаются после закрытия страницы.
+Editors capture the revision when opened and preserve input on conflict/refetch; they do not automatically substitute the new revision. Moving an exercise in another window does not remount the editor. A day-rename draft is keyed by ID even if the day is archived. To review a newer version, explicitly close/cancel and reopen the editor. Drafts exist only in the mounted component and are not restored after leaving the page.
 
-Program PATCH не получает новый operation ledger: это условная замена, а не составная операция создания. После потери ответа повтор с прежней base revision безопасно даёт конфликт/ноль строк и не меняет новую версию. Он не выдаёт доказательство исхода предыдущего запроса: нужно сверить обновлённую строку; автоматического rebase/retry нет. Workout operation ledger и семантика create retry сохранены.
+Program PATCH does not use a new operation ledger: it is a conditional replacement, not a composite creation. If the response is lost, retrying with the original base revision safely produces a conflict or zero updated rows and cannot change a newer version. That does not prove the outcome of the earlier request; inspect the updated row. There is no automatic rebase/retry. Workout operation-ledger and create-retry behavior is unchanged.
 
-Нужно согласованное обновление hosted schema и клиентов. Старые program clients без revision теряют semantic update, сохраняя reads/create/reorder. Эта несовместимость требуется для закрытия unsafe write path. Пока migration не применена, новый клиент не использует fallback. Lifecycle удаления аккаунта остаётся отдельным продуктовым решением.
+A coordinated hosted schema/client update is required. Older program clients without revisions lose semantic updates while reads, creation, and reorder remain. This incompatibility closes an unsafe write path. Until the migration is installed, the new client must not use a fallback. Account deletion remains a separate product decision.
 
-## Источники
+## Evidence
 
-`20261105030000_program_edit_revisions.sql`, `src/components/program-manager.tsx`, `src/lib/queries.ts`, `scripts/release-integrity-db.test.mjs`, `scripts/postgres-concurrency.test.mjs`, `src/components/program-manager.test.tsx`.
+`20261105030000_program_edit_revisions.sql`, `src/components/program-manager.tsx`, `src/lib/queries.ts`, `scripts/release-integrity-db.test.mjs`, `scripts/postgres-concurrency.test.mjs`, and `src/components/program-manager.test.tsx`.

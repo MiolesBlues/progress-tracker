@@ -1,22 +1,22 @@
-# ADR 0002: Идемпотентность операций записи тренировки
+# ADR 0002: Idempotent workout logging operations
 
-- Статус: Принято
-- Дата фиксации: 2026-11-04
+- Status: Accepted
+- Recorded: 4 November 2026
 
-## Контекст
+## Context
 
-Сетевые повторы и восстановление ввода могут повторно доставить операцию сохранения. Повторное создание записи или повторное применение удаления может повредить историю.
+Network retries and draft recovery can deliver a save operation more than once. Repeating an entry creation or deletion could corrupt workout history.
 
-## Решение
+## Decision
 
-Операция сохранения использует стабильный UUID и ledger. Повтор того же UUID с тем же payload возвращает прежний результат; повтор с другим payload отклоняется. Tombstones сохраняют сведения об удалённых операциях, чтобы старый идентификатор нельзя было применить повторно. Аналогичные проверки применяются к операциям подходов там, где это определено миграциями.
+Each save operation uses a stable UUID and an operation ledger. Repeating the same UUID with the same payload returns the prior result; reusing it with another payload is rejected. Tombstones retain deleted operation IDs so an old operation cannot be replayed. Similar checks apply to set operations where defined by migrations.
 
-## Последствия
+## Consequences
 
-- Идентификатор операции должен сохраняться при повторе одной логической операции.
-- Проверки payload, владельца и tombstones должны быть транзакционными и оставаться на стороне базы.
-- Новые типы мутаций требуют отдельного анализа повтора и поздней доставки.
+- Retries of one logical operation must retain its operation ID.
+- Payload, ownership, and tombstone checks must be transactional and enforced by the database.
+- New mutation types need an explicit review of retries and late delivery.
 
-## Источники
+## Evidence
 
-SQL migrations для `workout_entry_operations`, `workout_entry_operation_tombstones`, `workout_entry_set_tombstones`; соответствующие Node/PGlite тесты; `src/lib/pending-rpc.ts` и вызывающий код сохранения.
+Migrations for `workout_entry_operations`, `workout_entry_operation_tombstones`, and `workout_entry_set_tombstones`; related Node/PGlite tests; `src/lib/pending-rpc.ts` and the save caller.
