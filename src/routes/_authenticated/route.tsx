@@ -60,6 +60,9 @@ function SessionLayout() {
   const daysResult = useQuery(daysQuery(userId));
   const days = daysResult.data;
   const path = useLocation({ select: (l) => l.pathname });
+  const activeTabIndex = navigationTabs.findIndex(
+    ({ to }) => path === to || path.startsWith(`${to}/`),
+  );
   useEffect(() => {
     if (!daysResult.isSuccess) return;
     if (days && needsOnboarding(days) && path !== "/onboarding")
@@ -97,14 +100,25 @@ function SessionLayout() {
           <Outlet />
         )}
       </main>
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 border-t bg-background/90 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-md grid-cols-4">
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 border-t border-border/50 bg-background/70 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+        <div className="relative mx-auto grid max-w-md grid-cols-4">
+          {activeTabIndex >= 0 && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-1.5 left-0 w-1/4 rounded-2xl border border-white/70 bg-white/45 shadow-[0_4px_16px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-2xl transition-transform duration-300 ease-out motion-reduce:transition-none dark:border-white/15 dark:bg-white/10 dark:shadow-[0_4px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.14)]"
+              style={{ transform: `translateX(${activeTabIndex * 100}%)` }}
+            />
+          )}
           {navigationTabs.map(({ to, label, Icon }) => (
             <Link
               key={to}
               to={to}
-              className="flex flex-col items-center gap-1 rounded-sm py-2.5 text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              activeProps={{ className: "text-[color:var(--nav-active-text)]" }}
+              className="relative z-10 flex flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              activeProps={{
+                "aria-current": "page",
+                className:
+                  "font-semibold text-[color:var(--nav-active-text)] hover:text-[color:var(--nav-active-text)]",
+              }}
             >
               <Icon className="h-5 w-5" />
               {t(label)}
