@@ -745,7 +745,6 @@ function PerSetWorkoutForm({
                     },
                     "sets",
                   );
-                  if (focusMode) setActiveSetIndex(fields.sets.length);
                 }}
               >
                 <Plus className="h-4 w-4" />
