@@ -12,3 +12,12 @@ export function PageCard({ className, ...props }: ComponentProps<"section">) {
     />
   );
 }
+
+export function PageCardHeading({ className, ...props }: ComponentProps<"h1">) {
+  return (
+    <h1
+      className={cn("min-w-0 break-words text-2xl font-extrabold tracking-tight", className)}
+      {...props}
+    />
+  );
+}

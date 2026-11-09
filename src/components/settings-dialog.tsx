@@ -42,7 +42,7 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
       </DialogTrigger>
       <DialogContent
         closeLabel={t("Закрыть")}
-        className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border-border bg-background p-5 text-foreground"
+        className="scrollbar-hidden max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl border-border bg-background p-5 text-foreground"
       >
         <DialogHeader className="pr-8 text-left">
           <DialogTitle>{t("Настройки")}</DialogTitle>
@@ -93,21 +93,38 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
         </fieldset>
         <fieldset className="space-y-3 border-t pt-4" disabled={!archive.available}>
           <legend className="pb-2 text-sm font-semibold">{t("Управление данными")}</legend>
-          <label className="flex min-h-11 items-center gap-3 text-sm">
+          <label className="flex min-h-11 items-start gap-3 text-sm">
             <Checkbox
               checked={archive.deletionEnabled}
               onCheckedChange={(checked) => archive.setDeletionEnabled(checked === true)}
               aria-label={t("Разрешить полное удаление")}
+              aria-describedby="permanent-deletion-description"
             />
-            <span>{t("Разрешить полное удаление")}</span>
+            <span className="space-y-1">
+              <span className="block">{t("Разрешить полное удаление")}</span>
+              <span
+                id="permanent-deletion-description"
+                className="block text-xs text-muted-foreground"
+              >
+                {t(
+                  "Показывает окончательное удаление для архивных объектов; удалённые данные нельзя восстановить",
+                )}
+              </span>
+            </span>
           </label>
-          <label className="flex min-h-11 items-center gap-3 text-sm">
+          <label className="flex min-h-11 items-start gap-3 text-sm">
             <Checkbox
               checked={archive.showArchive}
               onCheckedChange={(checked) => archive.setShowArchive(checked === true)}
               aria-label={t("Показывать архивные дни и упражнения")}
+              aria-describedby="show-archive-description"
             />
-            <span>{t("Показывать архивные дни и упражнения")}</span>
+            <span className="space-y-1">
+              <span className="block">{t("Показывать архивные дни и упражнения")}</span>
+              <span id="show-archive-description" className="block text-xs text-muted-foreground">
+                {t("Показывает архивированные дни и упражнения в программе для восстановления")}
+              </span>
+            </span>
           </label>
         </fieldset>
         <fieldset className="space-y-3 border-t pt-4" disabled={!workout.available}>

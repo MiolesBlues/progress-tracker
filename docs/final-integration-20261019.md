@@ -1,38 +1,38 @@
-# Финальная интеграция: локали и тема
+# Final integration: locales and theme (historical report)
 
-Дата: 2026-10-19  
-Ветка: `integration/clean-merge-20261019`  
-База интеграции: `main` (`c2d41efa81921c3dc8f43618c912bb82f32a489a`)
+**Date:** 19 October 2026
+**Branch:** `integration/clean-merge-20261019`
+**Base:** `main` (`c2d41efa81921c3dc8f43618c912bb82f32a489a`)
 
-## Результат
+## Result
 
-Интегрированы интерфейсные настройки русского/английского языка и светлой/тёмной/системной темы. Язык применяется через существующий `LanguageProvider` с пользовательским/гостевым хранением. Тема сохраняется локально, реагирует на смену системной темы и обновляет цвет браузерного интерфейса. Стандартный и Focus режимы используют общий контекст. При отсутствующем английском переводе показывается исходный ключ вместо ошибки.
+Integrated Russian/English UI settings and light/dark/system themes. The existing `LanguageProvider` applied the locale with user/guest storage. Theme choice was stored locally, reacted to system-theme changes, and updated browser UI color. Standard and Focus modes shared context. If an English translation was missing, the source key appeared instead of an error.
 
-Изменены провайдеры приложения, диалог настроек, цветовые токены и состояния кнопок/переключателей/уведомлений; добавлены тесты провайдера, настроек и сценарии E2E. `AGENTS.md` и `README.md` обновлены, чтобы отражать RU/EN и три режима темы.
+Changed app providers, settings dialog, color tokens, and button/toggle/toast states; added provider/settings tests and E2E scenarios. `AGENTS.md` and `README.md` were updated to describe RU/EN and three theme modes.
 
-Защищённый вложенный каталог не открывался, не сканировался и не изменялся. Основная и резервная ветки остались на исходном SHA. `.env` не читался и не менялся; он уже отслеживается в main и содержимое его переменных в этот отчёт не включается. Supabase-конфигурация, миграции и данные не менялись.
+The protected nested directory was not opened, scanned, or changed. Main and backup branches remained at their original SHAs. `.env` was not read or changed; it was already tracked in main and variable contents are omitted. Supabase config, migrations, and data were unchanged.
 
-## Hardening
+## Hardening scope
 
-Ветки `fix/v2-release-hardening` локальной и удалённой версии не переносились: найденные изменения затрагивают per-set workout, актуальные RPC-типы/тесты и содержат конфликтующие изменения конфигурации backend. Безопасную совместимую порцию, которую можно подтвердить без риска перезаписи актуальной модели, не удалось выделить. Исходные ветки оставлены без изменений.
+Neither local nor remote `fix/v2-release-hardening` was transferred. Its changes touched per-set workouts, current RPC types/tests, and conflicting backend configuration; no safe compatible subset could be identified without risking overwrite of the current model. Both source branches were left unchanged.
 
-Изменения тем из `feature/system-theme` и палитры из `feature/light-blue-palette` взяты выборочно; сами ветки не менялись, полный merge не выполнялся.
+Theme changes from `feature/system-theme` and palette changes from `feature/light-blue-palette` were selected individually. Those branches were not changed, and no full merge occurred.
 
-## Проверки
+## Checks
 
-- TypeScript: успешно.
-- ESLint: успешно, без предупреждений.
-- Vitest: 266/266 успешно.
-- Production build: успешно.
-- Полный Playwright E2E: 149 успешно, 5 пропущено, 0 ошибок.
-- Скомпилированный production Worker запущен локально с тестовыми значениями окружения. Проверка браузером: 7/7 сценариев успешно, включая RU/EN, тему, мобильную ширину 320 px и основные экраны; ошибок браузера нет.
+- TypeScript: PASS.
+- ESLint: PASS, no warnings.
+- Vitest: 266/266 PASS.
+- Production build: PASS.
+- Full Playwright E2E: 149 passed, 5 skipped, 0 failed.
+- Built production Worker ran locally with test environment values. Browser check: 7/7 scenarios passed, including RU/EN, theme, 320 px mobile width, and primary screens; no browser errors.
 
-Пять пропусков относятся к ограниченным WebKit-сценариям: редактор упражнения на responsive, системная тема, сортировка записей, общий theme screenshot/app и перетаскивание подхода (ограничение touch-сценария). Реальные production credentials и удалённый Supabase не использовались.
+Five skips were constrained WebKit scenarios: responsive exercise editor, system theme, records sorting, combined theme screenshot/app, and set drag (touch-scenario limitation). Real production credentials and remote Supabase were not used.
 
-Обычный `vite preview` для этого Cloudflare/Nitro build не подходит: ожидаемый им `dist/server/server.js` не создаётся. Для проверки использован локальный Wrangler preview непосредственно собранного Worker.
+Ordinary `vite preview` is unsuitable for this Cloudflare/Nitro build because it does not produce the expected `dist/server/server.js`. The check used local Wrangler preview directly on the built Worker.
 
-Предыдущий документ `clean-integration-validation-20261019.md` описывает более раннее состояние и уступает этому отчёту для RU/EN и темы.
+Earlier [clean integration validation](clean-integration-validation-20261019.md) describes an earlier state and is superseded by this report for RU/EN and theme work.
 
-## Готовность
+## Readiness
 
-Интеграционная ветка готова к рассмотрению для merge в `main`: проверки приложения прошли, конфликты изменений hardening явно оставлены вне интеграции. Это не означает готовность к публичному выпуску: размещённый staging, реальные auth/RLS-проверки и приёмка на физических iPhone в этом запуске не выполнялись.
+The integration branch was ready for review for merge into `main`: app checks passed and hardening conflicts were explicitly excluded. This did not mean ready for public release; hosted staging, real auth/RLS checks, and physical iPhone acceptance were not performed in that run.

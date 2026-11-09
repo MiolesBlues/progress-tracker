@@ -1,22 +1,22 @@
-# ADR 0001: Изоляция пользовательских данных на стороне PostgreSQL
+# ADR 0001: PostgreSQL-enforced user data isolation
 
-- Статус: Принято
-- Дата фиксации: 2026-11-04
+- Status: Accepted
+- Recorded: 4 November 2026
 
-## Контекст
+## Context
 
-Приложение хранит личные программы, упражнения, записи и шаблонные применения разных пользователей в общей PostgreSQL базе. Проверка только в браузере не защищает данные от прямых запросов.
+The application stores personal programs, exercises, workout entries, and template applications for multiple users in one PostgreSQL database. Browser-only checks do not protect data from direct requests.
 
-## Решение
+## Decision
 
-Использовать Supabase Auth для идентичности и PostgreSQL RLS/owner-checks как границу доступа к персональным данным. Клиент может добавлять user-scoped фильтры, но они не заменяют RLS. RPC с привилегированным контекстом обязана самостоятельно проверить владельца и допустимость операции. Service-role helper не должен попадать в клиентский bundle.
+Use Supabase Auth for identity and PostgreSQL RLS/owner checks as the access boundary for personal data. Clients may add user-scoped filters, but those filters do not replace RLS. Any RPC using a privileged context must verify ownership and operation validity itself. A service-role helper must never enter a client bundle.
 
-## Последствия
+## Consequences
 
-- Миграции должны содержать политики и владельческие ограничения; изменения проверяются SQL-тестами.
-- Клиентские проверки нужны для UX, но не считаются security control.
-- Локальные тесты подтверждают только локальную модель; hosted-конфигурацию проверяют отдельно.
+- Migrations must define policies and ownership constraints; changes require SQL tests.
+- Client checks support UX but are not security controls.
+- Local tests validate only the local model; hosted configuration must be checked separately.
 
-## Источники
+## Evidence
 
-`drizzle/migrations/`, `scripts/*db.test.mjs`, `src/integrations/supabase/client.ts`, `src/integrations/supabase/client.server.ts`.
+`drizzle/migrations/`, `scripts/*db.test.mjs`, `src/integrations/supabase/client.ts`, and `src/integrations/supabase/client.server.ts`.

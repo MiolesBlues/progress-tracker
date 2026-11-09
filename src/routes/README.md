@@ -1,21 +1,18 @@
 # Routes
 
-TanStack Start uses **file-based routing**. Every `.tsx` file in this directory
-defines a route. Do **not** create `src/pages/`, `src/routes/_app/index.tsx`, or
-`app/layout.tsx` — those are Next.js / Remix conventions. The only root layout
-is `src/routes/__root.tsx`.
+TanStack Start uses file-based routing. Each route file in this directory defines a route. The application's root layout is `src/routes/__root.tsx`.
 
-## Conventions
+Do not add `src/pages/`, `src/routes/_app/index.tsx`, or `app/layout.tsx`; those are conventions from other frameworks. `routeTree.gen.ts` is generated and must not be edited by hand.
 
-| File                     | URL                                                     |
-| ------------------------ | ------------------------------------------------------- |
-| `index.tsx`              | `/`                                                     |
-| `about.tsx`              | `/about`                                                |
-| `users/index.tsx`        | `/users`                                                |
-| `users/$id.tsx`          | `/users/:id` (dynamic — bare `$`, no curly braces)      |
-| `posts/{-$category}.tsx` | `/posts/:category?` (optional segment)                  |
-| `files/$.tsx`            | `/files/*` (splat — read via `_splat` param, never `*`) |
-| `_layout.tsx`            | layout route (renders children via `<Outlet />`)        |
-| `__root.tsx`             | app shell — wraps every page; preserve `<Outlet />`     |
+## File naming examples
 
-`routeTree.gen.ts` is auto-generated. Don't edit it by hand.
+| File                     | URL                 | Notes                                                      |
+| ------------------------ | ------------------- | ---------------------------------------------------------- |
+| `index.tsx`              | `/`                 | Index route                                                |
+| `about.tsx`              | `/about`            | Static segment                                             |
+| `users/index.tsx`        | `/users`            | Nested index route                                         |
+| `users/$id.tsx`          | `/users/:id`        | Dynamic parameter                                          |
+| `posts/{-$category}.tsx` | `/posts/:category?` | Optional segment                                           |
+| `files/$.tsx`            | `/files/*`          | Splat, read from `_splat`                                  |
+| `_layout.tsx`            | —                   | Layout route; renders children through `<Outlet />`        |
+| `__root.tsx`             | —                   | Application shell; wraps routes and preserves `<Outlet />` |
