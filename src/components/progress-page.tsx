@@ -28,7 +28,7 @@ import {
 import { useUserSession } from "@/lib/session";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "./ui/button";
-import { PageCard } from "@/components/ui/page-card";
+import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 
 const selectCls =
   "h-11 min-w-0 w-full appearance-none truncate rounded-md border border-input bg-card px-3 pr-9 text-foreground";
@@ -50,8 +50,8 @@ export function ProgressPage() {
     exercises.some((exercise) => exercise.archived_at || !exercise.day_id);
   return (
     <div className="min-w-0 space-y-4">
-      <h1 className="text-2xl font-extrabold tracking-tight">{t("Прогресс")}</h1>
       <PageCard className="space-y-4">
+        <PageCardHeading>{t("Прогресс")}</PageCardHeading>
         {programResult.isError || daysResult.isError ? (
           <LoadError
             onRetry={() => {
