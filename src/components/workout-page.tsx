@@ -260,9 +260,9 @@ export function WorkoutPage() {
       </PageCard>
     );
   return (
-    <div className={focusMode ? "space-y-5" : "space-y-4"}>
+    <div className={`w-full min-w-0 ${focusMode ? "space-y-5" : "space-y-4"}`}>
       <PageCard
-        className={`space-y-4 ${focusMode ? "overflow-hidden animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : ""}`}
+        className={`min-h-[36rem] space-y-4 sm:min-h-[40rem] ${focusMode ? "overflow-hidden animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : ""}`}
         aria-label={
           activeFocus
             ? t("Focus Mode")
