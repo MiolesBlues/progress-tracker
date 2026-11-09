@@ -9,7 +9,7 @@ import { toISO } from "@/lib/workout";
 import { isWorkoutDate } from "@/lib/workout-input";
 import { WorkoutForm } from "@/components/workout-form";
 import { Button } from "@/components/ui/button";
-import { PageCard } from "@/components/ui/page-card";
+import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 import { Loading, LoadError } from "@/components/query-feedback";
 import { useI18n, exerciseCount } from "@/lib/i18n";
 import {
@@ -261,13 +261,8 @@ export function WorkoutPage() {
     );
   return (
     <div className={focusMode ? "space-y-5" : "space-y-4"}>
-      <h1 className="text-2xl font-extrabold tracking-tight">{t("Тренировка")}</h1>
       <PageCard
-        className={
-          focusMode
-            ? "overflow-hidden animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none"
-            : ""
-        }
+        className={`space-y-4 ${focusMode ? "overflow-hidden animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : ""}`}
         aria-label={
           activeFocus
             ? t("Focus Mode")
@@ -276,7 +271,8 @@ export function WorkoutPage() {
               : undefined
         }
       >
-        <div className={`mb-4 ${focusMode ? "space-y-2" : ""}`}>
+        <PageCardHeading>{t("Тренировка")}</PageCardHeading>
+        <div className={focusMode ? "space-y-2" : ""}>
           <div
             className="grid grid-cols-2 rounded-xl bg-muted p-1"
             role="group"

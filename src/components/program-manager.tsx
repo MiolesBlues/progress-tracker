@@ -26,7 +26,7 @@ import {
   readPendingProgramCreate,
 } from "@/lib/program-create";
 import { Button } from "@/components/ui/button";
-import { PageCard } from "@/components/ui/page-card";
+import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -715,8 +715,8 @@ export function ProgramManager() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-extrabold">{t("Программа")}</h1>
       <PageCard className="space-y-6">
+        <PageCardHeading>{t("Программа")}</PageCardHeading>
         {error && !managingDays && !addingExercise && (
           <p role="alert" className="break-words rounded-xl border border-destructive p-3 text-sm">
             {translateKnown(language, error)}

@@ -29,7 +29,7 @@ import { editWorkoutSet, WorkoutEditConflict, type WorkoutSetEdit } from "@/lib/
 import { toast } from "sonner";
 import type { HistoryEntry } from "@/lib/analytics";
 import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
-import { PageCard } from "@/components/ui/page-card";
+import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 
 const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
@@ -113,8 +113,8 @@ export function EntriesPage() {
 
   return (
     <div className="min-w-0 space-y-5">
-      <h1 className="text-2xl font-extrabold tracking-tight">{t("Записи")}</h1>
       <PageCard className="space-y-5">
+        <PageCardHeading>{t("Записи")}</PageCardHeading>
         {!days.length && !hasUnassigned ? (
           <p>{t("Сначала добавьте тренировочный день и упражнения в программе.")}</p>
         ) : (
