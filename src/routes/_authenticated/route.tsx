@@ -105,9 +105,11 @@ function SessionLayout() {
           {activeTabIndex >= 0 && (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-1.5 left-0 w-1/4 rounded-2xl border border-white/70 bg-white/45 shadow-[0_4px_16px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-2xl transition-transform duration-300 ease-out motion-reduce:transition-none dark:border-white/15 dark:bg-white/10 dark:shadow-[0_4px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.14)]"
+              className="pointer-events-none absolute inset-y-1.5 left-0 w-1/4 transition-transform duration-300 ease-out motion-reduce:transition-none"
               style={{ transform: `translateX(${activeTabIndex * 100}%)` }}
-            />
+            >
+              <span className="absolute inset-x-1.5 inset-y-0 rounded-2xl border border-white/70 bg-white/45 shadow-[0_4px_16px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-2xl dark:border-white/15 dark:bg-white/10 dark:shadow-[0_4px_18px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.14)]" />
+            </span>
           )}
           {navigationTabs.map(({ to, label, Icon }) => (
             <Link
