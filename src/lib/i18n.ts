@@ -597,16 +597,28 @@ export function translateKnown(language: Language, message: string) {
 }
 
 export function readLanguage(userId: string | null): Language {
-  if (typeof window === "undefined") return "ru";
+  if (typeof window === "undefined") return "en";
   try {
-    return localStorage.getItem(`${STORAGE_PREFIX}${userId ?? "guest"}`) === "en" ? "en" : "ru";
+    const saved = localStorage.getItem(`${STORAGE_PREFIX}${userId ?? "guest"}`);
+    if (saved === "ru" || saved === "en") return saved;
   } catch {
-    return "ru";
+    // Browser preference is still available when local storage is blocked.
   }
+  const preferences =
+    typeof navigator === "undefined"
+      ? []
+      : navigator.languages?.length
+        ? navigator.languages
+        : [navigator.language];
+  for (const preference of preferences) {
+    const language = preference.trim().toLowerCase().split(/[-_]/, 1)[0];
+    if (language === "ru" || language === "en") return language;
+  }
+  return "en";
 }
 
 export function rememberSignupLanguage(userId: string, language: Language) {
-  if (language === "ru" || typeof window === "undefined") return;
+  if (typeof window === "undefined") return;
   try {
     const key = `${STORAGE_PREFIX}${userId}`;
     if (localStorage.getItem(key) === null) {

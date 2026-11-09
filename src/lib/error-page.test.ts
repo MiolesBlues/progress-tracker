@@ -38,7 +38,7 @@ describe("standalone error page language (no React hydration)", () => {
     ["en-GB,en;q=0.9,ru;q=0.8", "en"],
     ["en;q=0.1,ru-RU;q=0.8", "ru"],
     ["en;q=0,ru;q=0.9", "ru"],
-    ["fr-FR, de;q=0.8", "ru"],
+    ["fr-FR, de;q=0.8", "en"],
     ["en;q=invalid,ru;q=0.2", "ru"],
   ] as const)("negotiates browser languages %s with a safe fallback", (accepted, expected) => {
     expect(
@@ -50,7 +50,7 @@ describe("standalone error page language (no React hydration)", () => {
     ).toBe(expected);
   });
 
-  it("uses Russian when no request exists", () => expect(requestLanguage()).toBe("ru"));
+  it("uses English when no request exists", () => expect(requestLanguage()).toBe("en"));
 });
 
 it("formats ISO dates for display only and tolerates incomplete old draft input", () => {

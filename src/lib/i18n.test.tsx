@@ -56,6 +56,10 @@ function mount() {
 beforeEach(() => {
   resetFake();
   localStorage.clear();
+  Object.defineProperty(navigator, "languages", {
+    configurable: true,
+    value: ["ru-RU"],
+  });
 });
 afterEach(() => {
   cleanup();

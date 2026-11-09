@@ -36,7 +36,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       // Only the active display preference crosses the SSR boundary, never auth or user IDs.
       document.cookie = `${DISPLAY_LANGUAGE_COOKIE}=${language}; Path=/; Max-Age=31536000; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     } catch {
-      // With cookies blocked the standalone error page uses Accept-Language, then Russian.
+      // With cookies blocked the standalone error page uses Accept-Language, then English.
     }
     const manifest = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     if (manifest)

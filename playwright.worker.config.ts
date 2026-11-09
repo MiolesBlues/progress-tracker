@@ -12,6 +12,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { outputFolder: "playwright-report/worker", open: "never" }]],
   use: {
     browserName: "chromium",
+    locale: "ru-RU",
     baseURL: "http://127.0.0.1:4174",
     viewport: { width: 390, height: 844 },
     serviceWorkers: "block",
