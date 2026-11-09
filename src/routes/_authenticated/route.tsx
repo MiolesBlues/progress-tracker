@@ -118,8 +118,8 @@ function SessionLayout() {
               className="relative z-10 flex flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               activeProps={{
                 "aria-current": "page",
-                className:
-                  "font-semibold text-[color:var(--nav-active-text)] hover:text-[color:var(--nav-active-text)]",
+                style: { color: "var(--nav-active-text)" },
+                className: "font-semibold hover:text-[color:var(--nav-active-text)]",
               }}
             >
               <Icon className="h-5 w-5" />
