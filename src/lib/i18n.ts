@@ -16,6 +16,8 @@ export const english = {
   "Изменение отклонено или не подтверждено. Ваш ввод сохранён.":
     "The change was rejected or unconfirmed. Your input is preserved.",
   "Прогресс Трекер": "Progress Tracker",
+  "Основная навигация": "Main navigation",
+  "План тренировки": "Workout plan",
   Настройки: "Settings",
   "Тема оформления": "Appearance",
   Авто: "Auto",

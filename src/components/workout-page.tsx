@@ -260,7 +260,9 @@ export function WorkoutPage() {
       </PageCard>
     );
   return (
-    <div className={`w-full min-w-0 ${focusMode ? "space-y-5" : "space-y-4"}`}>
+    <div
+      className={`w-full min-w-0 ${focusMode ? "space-y-5" : day ? "grid gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]" : "space-y-4"}`}
+    >
       <PageCard
         className={`space-y-4 ${focusMode ? "overflow-hidden animate-in fade-in zoom-in-95 duration-250 motion-reduce:animate-none motion-reduce:transition-none" : "min-h-[36rem] sm:min-h-[40rem]"}`}
         aria-label={
@@ -492,6 +494,46 @@ export function WorkoutPage() {
           </div>
         )}
       </PageCard>
+      {!focusMode && day && (
+        <aside aria-labelledby="workout-plan-heading" className="hidden min-w-0 xl:block">
+          <PageCard className="sticky top-6 space-y-4">
+            <div>
+              <h2 id="workout-plan-heading" className="text-base font-bold">
+                {t("План тренировки")}
+              </h2>
+              <p className="mt-1 break-words text-sm text-muted-foreground">{day.name}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {current
+                ? t("Упражнение {number} из {count}", {
+                    number: currentIndex + 1,
+                    count: exercises.length,
+                  })
+                : t("В этом дне нет активных упражнений.")}
+            </p>
+            <ol className="space-y-1">
+              {exercises.map((item, index) => {
+                const selected = item.id === current?.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-current={selected ? "step" : undefined}
+                      onClick={() => select(day.id, item.id)}
+                      className={`flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected ? "bg-primary/10 font-semibold text-primary-text" : "text-foreground hover:bg-muted"}`}
+                    >
+                      <span className="num w-5 shrink-0 text-xs text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words">{item.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </PageCard>
+        </aside>
+      )}
       {completedDay &&
         completedDay.dayId === day?.id &&
         completedDay.date === workoutDate &&

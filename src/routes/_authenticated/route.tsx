@@ -71,8 +71,8 @@ function SessionLayout() {
       navigate({ to: "/workout", replace: true });
   }, [days, daysResult.isSuccess, path, navigate]);
   return (
-    <div className="mx-auto min-h-dvh max-w-md">
-      <header className="safe-top flex items-center justify-between px-5 pb-2">
+    <div className="mx-auto min-h-dvh w-full max-w-md lg:max-w-[1600px]">
+      <header className="safe-top flex items-center justify-between px-5 pb-2 lg:px-8 lg:pt-2">
         <span className="text-sm font-bold tracking-widest text-muted-foreground uppercase">
           {t("Прогресс Трекер")}
         </span>
@@ -87,20 +87,45 @@ function SessionLayout() {
           </button>
         </div>
       </header>
-      <main className="px-5 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
-        {daysResult.isError ? (
-          <LoadError onRetry={() => void daysResult.refetch()}>
-            {t("Не удалось загрузить тренировочные дни.")}
-          </LoadError>
-        ) : daysResult.isPending ? (
-          <Loading>{t("Загрузка тренировочных дней…")}</Loading>
-        ) : !daysResult.data.length && path !== "/onboarding" ? (
-          <Loading>{t("Настройка программы…")}</Loading>
-        ) : (
-          <Outlet />
-        )}
-      </main>
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 border-t border-border/50 bg-background/70 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+      <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8 lg:px-8">
+        <nav aria-label={t("Основная навигация")} className="hidden lg:block">
+          <div className="sticky top-6 space-y-2 pt-5">
+            {navigationTabs.map(({ to, label, Icon }) => (
+              <Link
+                key={to}
+                to={to}
+                className="flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                activeProps={{
+                  "aria-current": "page",
+                  style: { color: "var(--nav-active-text)" },
+                  className:
+                    "bg-card font-semibold shadow-sm hover:text-[color:var(--nav-active-text)]",
+                }}
+              >
+                <Icon aria-hidden="true" className="h-5 w-5 shrink-0" />
+                <span>{t(label)}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+        <main className="min-w-0 px-5 pb-[calc(env(safe-area-inset-bottom)+5rem)] lg:px-0 lg:pb-10">
+          {daysResult.isError ? (
+            <LoadError onRetry={() => void daysResult.refetch()}>
+              {t("Не удалось загрузить тренировочные дни.")}
+            </LoadError>
+          ) : daysResult.isPending ? (
+            <Loading>{t("Загрузка тренировочных дней…")}</Loading>
+          ) : !daysResult.data.length && path !== "/onboarding" ? (
+            <Loading>{t("Настройка программы…")}</Loading>
+          ) : (
+            <Outlet />
+          )}
+        </main>
+      </div>
+      <nav
+        aria-label={t("Основная навигация")}
+        className="safe-bottom fixed inset-x-0 bottom-0 border-t border-border/50 bg-background/70 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl lg:hidden"
+      >
         <div className="relative mx-auto grid max-w-md grid-cols-4">
           {activeTabIndex >= 0 && (
             <span
