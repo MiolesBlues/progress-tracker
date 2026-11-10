@@ -123,6 +123,10 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+  body[data-scroll-locked] {
+    /* The root always reserves the vertical scrollbar, so Radix's body margin would reserve it twice. */
+    margin-right: 0 !important;
+  }
   input,
   select,
   textarea {

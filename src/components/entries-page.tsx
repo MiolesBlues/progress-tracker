@@ -13,6 +13,13 @@ import { useUserSession } from "@/lib/session";
 import { effectiveSets, toISO, workoutMetrics } from "@/lib/workout";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useI18n, setsCount, translateKnown } from "@/lib/i18n";
 import { useArchivePreferences } from "@/lib/archive-preferences";
 import { ArrowDownUp, Check } from "lucide-react";
@@ -31,10 +38,10 @@ import type { HistoryEntry } from "@/lib/analytics";
 import { MAX_REPS, MAX_WEIGHT } from "@/lib/workout-input";
 import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 
-const selectCls = "h-12 min-w-0 w-full rounded-md border border-input bg-card px-3 text-foreground";
 type Period = "today" | 7 | 30 | "all";
 type Sort = "recent" | "weight-desc" | "weight-asc";
 const UNASSIGNED = "unassigned";
+const EMPTY_EXERCISE = "__empty_exercise__";
 const PAGE_SIZE = 20;
 const SORT_PREFERENCE_PREFIX = "app:entries-sort:v1:";
 
@@ -62,7 +69,7 @@ export function EntriesPage() {
   const daysResult = useQuery(daysQuery(userId));
   const programResult = useQuery(programQuery(userId));
   const [chosenDay, setChosenDay] = useState("");
-  const [chosenExercise, setChosenExercise] = useState("");
+  const [chosenExercise, setChosenExercise] = useState<string | null>(null);
   if (daysResult.isError || programResult.isError)
     return (
       <PageCard>
@@ -105,11 +112,13 @@ export function EntriesPage() {
   );
   const exerciseId = !dayId
     ? ""
-    : chosenExercise
+    : chosenExercise !== null
       ? dayExercises.some((exercise) => exercise.id === chosenExercise)
         ? chosenExercise
         : ""
       : (dayExercises[0]?.id ?? "");
+  const selectedDay = days.find((day) => day.id === dayId);
+  const selectedExercise = dayExercises.find((exercise) => exercise.id === exerciseId);
 
   return (
     <div className="min-w-0 space-y-5">
@@ -120,25 +129,42 @@ export function EntriesPage() {
         ) : (
           <>
             <label className="block min-w-0 space-y-1 text-sm">
-              {t("Тренировочный день")}
-              <select
-                aria-label={t("День записей")}
-                className={selectCls}
+              <span>{t("Тренировочный день")}</span>
+              <Select
                 value={dayId}
-                onChange={(event) => {
-                  setChosenDay(event.target.value);
-                  setChosenExercise("");
+                onValueChange={(value) => {
+                  setChosenDay(value);
+                  setChosenExercise(null);
                 }}
               >
-                {!dayId && <option value="">{t("Выберите тренировочный день")}</option>}
-                {days.map((day) => (
-                  <option key={day.id} value={day.id}>
-                    {day.name}
-                    {day.archived_at ? t(" (архив)") : ""}
-                  </option>
-                ))}
-                {hasUnassigned && <option value={UNASSIGNED}>{t("Без назначенного дня")}</option>}
-              </select>
+                <SelectTrigger aria-label={t("День записей")}>
+                  <SelectValue placeholder={t("Выберите тренировочный день")}>
+                    {dayId === UNASSIGNED
+                      ? t("Без назначенного дня")
+                      : selectedDay
+                        ? `${selectedDay.name}${selectedDay.archived_at ? t(" (архив)") : ""}`
+                        : undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent
+                  position="popper"
+                  align="start"
+                  collisionPadding={8}
+                  className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+                >
+                  {days.map((day) => (
+                    <SelectItem key={day.id} value={day.id} className="h-auto">
+                      <span className="block min-w-0 break-words leading-snug">
+                        {day.name}
+                        {day.archived_at ? t(" (архив)") : ""}
+                      </span>
+                    </SelectItem>
+                  ))}
+                  {hasUnassigned && (
+                    <SelectItem value={UNASSIGNED}>{t("Без назначенного дня")}</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </label>
             {!dayId ? (
               <p>{t("Выберите тренировочный день")}</p>
@@ -147,21 +173,39 @@ export function EntriesPage() {
             ) : (
               <>
                 <label className="block min-w-0 space-y-1 text-sm">
-                  {t("Упражнение")}
-                  <select
-                    aria-label={t("Упражнение записей")}
-                    className={selectCls}
-                    value={exerciseId}
-                    onChange={(event) => setChosenExercise(event.target.value)}
+                  <span>{t("Упражнение")}</span>
+                  <Select
+                    value={exerciseId || EMPTY_EXERCISE}
+                    onValueChange={(value) => {
+                      setChosenExercise(value === EMPTY_EXERCISE ? "" : value);
+                    }}
                   >
-                    {!exerciseId && <option value="">{t("Выберите упражнение")}</option>}
-                    {dayExercises.map((exercise) => (
-                      <option key={exercise.id} value={exercise.id}>
-                        {exercise.name}
-                        {exercise.archived_at ? t(" (архив)") : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger aria-label={t("Упражнение записей")}>
+                      <SelectValue placeholder={t("Выберите упражнение")}>
+                        {selectedExercise
+                          ? `${selectedExercise.name}${selectedExercise.archived_at ? t(" (архив)") : ""}`
+                          : t("Выберите упражнение")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      align="start"
+                      collisionPadding={8}
+                      className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+                    >
+                      {!exerciseId && (
+                        <SelectItem value={EMPTY_EXERCISE}>{t("Выберите упражнение")}</SelectItem>
+                      )}
+                      {dayExercises.map((exercise) => (
+                        <SelectItem key={exercise.id} value={exercise.id} className="h-auto">
+                          <span className="block min-w-0 break-words leading-snug">
+                            {exercise.name}
+                            {exercise.archived_at ? t(" (архив)") : ""}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 {exerciseId ? (
                   <ExerciseEntries

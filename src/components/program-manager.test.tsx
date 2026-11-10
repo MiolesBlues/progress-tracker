@@ -45,6 +45,10 @@ async function chooseProgramDay(name: string) {
   fireEvent.click(await screen.findByRole("combobox", { name: "День для упражнений" }));
   fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^${name} ·`) }));
 }
+async function chooseEditorDay(form: HTMLElement, optionName: string) {
+  fireEvent.click(within(form).getByRole("combobox", { name: "Тренировочный день" }));
+  fireEvent.click(await screen.findByRole("option", { name: optionName }));
+}
 async function openDayManagement() {
   fireEvent.click(await screen.findByRole("button", { name: "Изменить дни" }));
 }
@@ -255,9 +259,7 @@ it("creates an exercise for the selected day and edits it without changing its w
   fireEvent.change(within(form).getByLabelText("Название упражнения"), {
     target: { value: "Жим сидя" },
   });
-  fireEvent.change(within(form).getByLabelText("Тренировочный день"), {
-    target: { value: "Второй" },
-  });
+  await chooseEditorDay(form, "Второй");
   expect(within(form).queryByLabelText("Вес, кг")).not.toBeInTheDocument();
   fireEvent.change(within(form).getByLabelText("Подходы"), { target: { value: "4" } });
   fireEvent.change(within(form).getByLabelText("Повторения"), { target: { value: "6–8" } });
@@ -469,11 +471,11 @@ it("shows NULL day_id without automatic backfill and assigns a day only on expli
       await screen.findByRole("button", { name: "Редактировать: Старое упражнение" }),
     ),
     await screen.findByRole("form", { name: "Упражнение: Старое упражнение" }));
-  expect(within(form).getByLabelText("Тренировочный день")).toHaveValue("");
+  expect(within(form).getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "Без назначенного дня",
+  );
   expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
-  fireEvent.change(within(form).getByLabelText("Тренировочный день"), {
-    target: { value: "Первый" },
-  });
+  await chooseEditorDay(form, "Первый");
   expect(fake.state.rows.program_exercises![0]?.day_id).toBeNull();
   fireEvent.click(within(form).getByRole("button", { name: "Сохранить" }));
   await waitFor(() => expect(fake.state.rows.program_exercises![0]?.day_id).toBe("Первый"));
@@ -648,7 +650,9 @@ it("B05 shows an empty state and preserves archive exercise management", async (
   fireEvent.click(screen.getByText("Упражнения архивного дня"));
   fireEvent.click(screen.getByRole("button", { name: "Редактировать: Старый жим" }));
   const editor = await screen.findByRole("dialog", { name: "Редактирование упражнения" });
-  expect(within(editor).getByLabelText("Тренировочный день")).toHaveValue("Архив");
+  expect(within(editor).getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "Архив",
+  );
   expect(fake.state.calls.every((call) => call.operation === "select")).toBe(true);
 });
 
@@ -779,7 +783,9 @@ it("renders exercise editing in a compact centered dialog with a fixed save acti
   expect(dialog).toHaveStyle({ width: "min(480px, calc(100vw - 2rem))" });
   expect(dialog.querySelector(".overflow-y-auto")).not.toBeNull();
   expect(within(dialog).getByLabelText("Название упражнения")).toHaveValue("Жим");
-  expect(within(dialog).getByLabelText("Тренировочный день")).toHaveValue("Первый");
+  expect(within(dialog).getByRole("combobox", { name: "Тренировочный день" })).toHaveTextContent(
+    "Первый",
+  );
   expect(within(dialog).getByLabelText("Подходы")).toHaveValue("3");
   expect(within(dialog).getByLabelText("Повторения")).toHaveValue("8-12");
   expect(within(dialog).getByRole("button", { name: "Сохранить" })).toHaveClass("w-full");

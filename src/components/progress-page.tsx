@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -28,10 +27,15 @@ import {
 import { useUserSession } from "@/lib/session";
 import { LoadError, Loading } from "@/components/query-feedback";
 import { Button } from "./ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageCard, PageCardHeading } from "@/components/ui/page-card";
 
-const selectCls =
-  "h-11 min-w-0 w-full appearance-none truncate rounded-md border border-input bg-card px-3 pr-9 text-foreground";
 const PAGE_SIZE = 20;
 
 export function ProgressPage() {
@@ -89,55 +93,62 @@ export function ProgressPage() {
               <>
                 <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2.5">
                   <label className="block min-w-0 space-y-1 text-xs">
-                    {t("Тренировочный день")}
-                    <span className="relative block min-w-0">
-                      <select
-                        aria-label={t("Тренировочный день")}
-                        className={selectCls}
-                        value={selection.dayId}
-                        onChange={(event) => {
-                          setDay(event.target.value);
-                          setExercise("");
-                        }}
+                    <span>{t("Тренировочный день")}</span>
+                    <Select
+                      value={selection.dayId}
+                      onValueChange={(value) => {
+                        setDay(value);
+                        setExercise("");
+                      }}
+                    >
+                      <SelectTrigger aria-label={t("Тренировочный день")}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        align="start"
+                        collisionPadding={8}
+                        className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
                       >
                         {selection.dayOptions.map((day) => (
-                          <option key={day.id} value={day.id}>
-                            {day.name}
-                          </option>
+                          <SelectItem key={day.id} value={day.id} className="h-auto">
+                            <span className="block min-w-0 break-words leading-snug">
+                              {day.name}
+                            </span>
+                          </SelectItem>
                         ))}
                         {mode === "archive" && exercises.some((exercise) => !exercise.day_id) && (
-                          <option value={UNASSIGNED_HISTORY_DAY}>
-                            {t("История без активного дня")}
-                          </option>
+                          <SelectItem value={UNASSIGNED_HISTORY_DAY} className="h-auto">
+                            <span className="block min-w-0 break-words leading-snug">
+                              {t("История без активного дня")}
+                            </span>
+                          </SelectItem>
                         )}
-                      </select>
-                      <ChevronDown
-                        aria-hidden="true"
-                        className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                      />
-                    </span>
+                      </SelectContent>
+                    </Select>
                   </label>
                   {selection.exerciseId && (
                     <label className="block min-w-0 space-y-1 text-xs">
-                      {t("Упражнение")}
-                      <span className="relative block min-w-0">
-                        <select
-                          aria-label={t("Упражнение")}
-                          className={selectCls}
-                          value={selection.exerciseId}
-                          onChange={(event) => setExercise(event.target.value)}
+                      <span>{t("Упражнение")}</span>
+                      <Select value={selection.exerciseId} onValueChange={setExercise}>
+                        <SelectTrigger aria-label={t("Упражнение")}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent
+                          position="popper"
+                          align="start"
+                          collisionPadding={8}
+                          className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
                         >
                           {selection.dayExercises.map((exercise) => (
-                            <option key={exercise.id} value={exercise.id}>
-                              {exercise.name}
-                            </option>
+                            <SelectItem key={exercise.id} value={exercise.id} className="h-auto">
+                              <span className="block min-w-0 break-words leading-snug">
+                                {exercise.name}
+                              </span>
+                            </SelectItem>
                           ))}
-                        </select>
-                        <ChevronDown
-                          aria-hidden="true"
-                          className="pointer-events-none absolute right-[13px] top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                        />
-                      </span>
+                        </SelectContent>
+                      </Select>
                     </label>
                   )}
                 </div>
@@ -211,19 +222,19 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
         ))}
       </div>
       <label className="block text-sm">
-        {t("Показатель")}
-        <select
-          aria-label={t("Показатель")}
-          className={selectCls}
-          value={metric}
-          onChange={(e) => setMetric(e.target.value as Metric)}
-        >
-          {METRICS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.id === "weight" ? t("Вес") : m.id === "reps" ? t("Повторения") : t("Объём")}
-            </option>
-          ))}
-        </select>
+        <span>{t("Показатель")}</span>
+        <Select value={metric} onValueChange={(value) => setMetric(value as Metric)}>
+          <SelectTrigger aria-label={t("Показатель")}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start" collisionPadding={8}>
+            {METRICS.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.id === "weight" ? t("Вес") : m.id === "reps" ? t("Повторения") : t("Объём")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
       <p className="text-xs text-muted-foreground">
         {period === "all" ? t("Всё время") : date(from)} — {date(to)}.{" "}
@@ -307,23 +318,30 @@ function ExerciseHistory({ userId, exerciseId }: { userId: string; exerciseId: s
       {selected ? (
         <>
           <label className="block text-sm">
-            {t("Тренировка для сравнения")}
-            <select
-              aria-label={t("Тренировка для сравнения")}
-              className={selectCls}
-              value={selected.id}
-              onChange={(e) => setSelected(e.target.value)}
-            >
-              {[...entries].reverse().map((e, index) => (
-                <option key={e.id} value={e.id}>
-                  {date(e.performed_on)} · {number(e.weight)} {t("кг")} ·{" "}
-                  {t("{count} подх. · запись {number}", {
-                    count: e.reps.length,
-                    number: entries.length - index,
-                  })}
-                </option>
-              ))}
-            </select>
+            <span>{t("Тренировка для сравнения")}</span>
+            <Select value={selected.id} onValueChange={setSelected}>
+              <SelectTrigger aria-label={t("Тренировка для сравнения")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                position="popper"
+                align="start"
+                collisionPadding={8}
+                className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+              >
+                {[...entries].reverse().map((e, index) => (
+                  <SelectItem key={e.id} value={e.id} className="h-auto">
+                    <span className="block min-w-0 break-words leading-snug">
+                      {date(e.performed_on)} · {number(e.weight)} {t("кг")} ·{" "}
+                      {t("{count} подх. · запись {number}", {
+                        count: e.reps.length,
+                        number: entries.length - index,
+                      })}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <p className="text-xs text-muted-foreground">
             {t(

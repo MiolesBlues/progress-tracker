@@ -1,6 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { addExercise, register, fillWorkout } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
+
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 test("auto-advance preference stays per-user and off mode supports repeated historical entries", async ({
   page,
@@ -34,7 +39,9 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
 
   const exercise = backend.rows["program_exercises"]!.find((row) => row["name"] === "Жим лёжа")!;
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    "Жим лёжа",
+  );
 
   const fillEntry = async (date: string, weight: string, reps: string[]) => {
     await page.getByLabel("Дата", { exact: true }).fill(date);
@@ -47,7 +54,9 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
   backend.loseSaveResponse = true;
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   await page.getByRole("button", { name: "Повторить сохранение", exact: true }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    "Жим лёжа",
+  );
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date1);
   await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("50");
   await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("8");
@@ -60,7 +69,9 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
   const date2 = "2026-09-05";
   await fillEntry(date2, "52,5", ["8", "8", "7"]);
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    "Жим лёжа",
+  );
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date2);
   await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("52.5");
   await expect(page.getByLabel("RIR подхода 1", { exact: true })).toHaveValue("2");
@@ -68,7 +79,9 @@ test("auto-advance preference stays per-user and off mode supports repeated hist
   const date3 = "2026-09-10";
   await fillEntry(date3, "55", ["8", "7", "6"]);
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(exercise.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    "Жим лёжа",
+  );
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue(date3);
 
   const entries = backend.rows["workout_entries"]!.filter(

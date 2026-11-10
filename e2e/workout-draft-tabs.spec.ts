@@ -1,6 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { addExercise, register } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
+
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 test("two tabs keep independent workout drafts when one tab saves", async ({ page, context }) => {
   await page.clock.setFixedTime(new Date("2026-10-15T12:00:00Z"));
@@ -18,7 +23,7 @@ test("two tabs keep independent workout drafts when one tab saves", async ({ pag
   const secondTab = await context.newPage();
   await secondTab.goto("/");
   await secondTab.getByRole("link", { name: "Тренировка", exact: true }).click();
-  await secondTab.getByLabel("Упражнение", { exact: true }).selectOption(String(exercise["id"]));
+  await chooseSelectOption(secondTab, "Упражнение", String(exercise["name"]));
   await secondTab.getByLabel("Вес подхода 1", { exact: true }).fill("72");
   await secondTab.getByLabel("Повторения подхода 1", { exact: true }).fill("6");
 

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import {
   addExercise,
@@ -10,6 +10,11 @@ import {
   secondName,
 } from "./helpers";
 import { mockSupabase } from "./mock-supabase";
+
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 test("English registration and onboarding keep the new account's language", async ({ page }) => {
   const backend = await mockSupabase(page);
@@ -93,8 +98,8 @@ for (const width of [320, 375, 390, 430]) {
     await expect(page.locator("html")).toHaveAttribute("lang", "ru");
     await addExercise(page);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
-    await expect(page.getByLabel("Тренировочный день", { exact: true })).toHaveValue(/.+/);
-    await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(/.+/);
+    await expect(page.getByRole("combobox", { name: "Тренировочный день" })).not.toBeEmpty();
+    await expect(page.getByRole("combobox", { name: "Упражнение" })).not.toBeEmpty();
     await noOverflow(page);
   });
 }
@@ -124,10 +129,12 @@ test("day then exercise selection, archived results, and account-scoped language
     notes: "Личная заметка",
   });
   await page.getByRole("link", { name: "Прогресс", exact: true }).click();
-  const day = page.getByLabel("Тренировочный день", { exact: true });
-  await expect(day).toHaveValue(backend.rows["program_days"]![0]!.id);
-  await day.selectOption(secondDay.id);
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
+  const day = page.getByRole("combobox", { name: "Тренировочный день", exact: true });
+  await expect(day).toContainText(String(backend.rows["program_days"]![0]!["name"]));
+  await chooseSelectOption(page, "Тренировочный день", String(secondDay["name"]));
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    secondName,
+  );
   await expect(page.getByText(/1\. 72 кг × 8 · RIR 2.*2\. 72 кг × 8 · RIR 2/)).toBeVisible();
   await page.getByRole("link", { name: "Программа", exact: true }).click();
   await chooseProgramDay(page, "День B");
@@ -135,7 +142,9 @@ test("day then exercise selection, archived results, and account-scoped language
   await page.getByRole("link", { name: "Прогресс", exact: true }).click();
   await expect(page.getByRole("button", { name: "Архивная история" })).toBeVisible();
   await page.getByRole("button", { name: "Архивная история" }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    secondName,
+  );
   await expect(page.getByText(/1\. 72 кг × 8 · RIR 2.*2\. 72 кг × 8 · RIR 2/)).toBeVisible();
   await page.getByRole("button", { name: "Настройки" }).click();
   await page
@@ -145,7 +154,9 @@ test("day then exercise selection, archived results, and account-scoped language
   await page.getByRole("option", { name: "English" }).click();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("heading", { name: "Progress" })).toBeVisible();
-  await expect(page.getByRole("option", { name: secondName })).toBeAttached();
+  await expect(page.getByRole("combobox", { name: "Exercise", exact: true })).toContainText(
+    secondName,
+  );
   await page.reload();
   await expect(page.getByRole("heading", { name: "Progress" })).toBeVisible();
   await expect(page).toHaveTitle("Progress — Progress Tracker");

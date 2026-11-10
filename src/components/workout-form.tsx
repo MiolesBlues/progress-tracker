@@ -41,6 +41,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useI18n, translateKnown } from "@/lib/i18n";
 import { SortableList } from "@/components/Sortable";
 
@@ -130,7 +137,7 @@ function LegacyRetry({
   return (
     <div className="space-y-3">
       <div
-        className="grid min-w-0 grid-cols-[minmax(0,45fr)_minmax(0,55fr)] items-start gap-2.5"
+        className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2.5"
         role="group"
         aria-label={t("Дата и тренировочный день")}
       >
@@ -143,7 +150,7 @@ function LegacyRetry({
               id="legacy-retry-date"
               type="date"
               value={initialDate}
-              className="box-border h-11 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:opacity-0"
+              className="box-border h-12 w-full min-w-0 max-w-full rounded-md border border-input bg-card px-3 text-sm [&::-webkit-calendar-picker-indicator]:opacity-0"
               disabled
             />
             <CalendarDays
@@ -660,7 +667,7 @@ function PerSetWorkoutForm({
       {!focusMode && (
         <>
           <div
-            className="grid min-w-0 grid-cols-[minmax(0,45fr)_minmax(0,55fr)] items-start gap-2.5"
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2.5"
             role="group"
             aria-label={t("Дата и тренировочный день")}
           >
@@ -675,7 +682,7 @@ function PerSetWorkoutForm({
                   type="date"
                   value={fields.date}
                   onChange={(event) => update({ ...fields, date: event.target.value }, "date")}
-                  className="box-border h-11 w-full min-w-0 max-w-full appearance-none rounded-md border border-input bg-card px-3 text-xs [&::-webkit-calendar-picker-indicator]:hidden"
+                  className="box-border h-12 w-full min-w-0 max-w-full appearance-none rounded-md border border-input bg-card px-3 text-sm [&::-webkit-calendar-picker-indicator]:hidden"
                   required
                   disabled={locked}
                 />
@@ -760,18 +767,21 @@ function PerSetWorkoutForm({
                     count: fields.sets.length,
                   })}
                 </span>
-                <select
-                  aria-label={t("Выбрать подход")}
-                  value={activeSetIndex}
-                  onChange={(event) => setActiveSetIndex(Number(event.target.value))}
-                  className="num h-8 w-14 shrink-0 appearance-none rounded-md border border-border bg-background px-1 text-center text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                <Select
+                  value={String(activeSetIndex)}
+                  onValueChange={(value) => setActiveSetIndex(Number(value))}
                 >
-                  {fields.sets.map((set, index) => (
-                    <option key={set.id} value={index}>
-                      {index + 1}/{fields.sets.length}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label={t("Выбрать подход")} className="w-auto shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" align="end" collisionPadding={8}>
+                    {fields.sets.map((set, index) => (
+                      <SelectItem key={set.id} value={String(index)}>
+                        {index + 1}/{fields.sets.length}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <Progress value={focusProgress} aria-label={t("Прогресс подходов")} />
             </div>

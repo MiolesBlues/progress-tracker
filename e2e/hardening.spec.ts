@@ -12,6 +12,11 @@ import {
   sortRecords,
 } from "./helpers";
 
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
 async function authSpacing(page: Page, name: string) {
   const button = page.getByRole("button", { name, exact: true });
   expect(
@@ -160,8 +165,8 @@ for (const width of [320, 375, 390, 430]) {
     await page.getByRole("checkbox", { name: "Показывать архивные дни и упражнения" }).click();
     await page.getByRole("button", { name: "Закрыть", exact: true }).click();
     await page.getByRole("link", { name: "Записи", exact: true }).click();
-    await page.getByLabel("День записей", { exact: true }).selectOption(first!.id);
-    await page.getByLabel("Упражнение записей", { exact: true }).selectOption(exercise.id);
+    await chooseSelectOption(page, "День записей", "Переименованный день");
+    await chooseSelectOption(page, "Упражнение записей", String(exercise["name"]));
     const diary = page.getByRole("region", { name: "Дневник записей упражнения", exact: true });
     await expect(diary.getByRole("heading", { name: "Записи · 25", exact: true })).toBeVisible();
     await expect(diary.getByRole("listitem")).toHaveCount(20);
@@ -172,7 +177,7 @@ for (const width of [320, 375, 390, 430]) {
     await expect(diary.getByRole("listitem").first()).toContainText("0 кг");
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`entries-${width}.png`), fullPage: true });
-    await page.getByLabel("День записей", { exact: true }).selectOption("unassigned");
+    await chooseSelectOption(page, "День записей", "Без назначенного дня");
     await expect(diary.getByText("История без дня", { exact: true })).toBeVisible();
     expect(legacy.day_id).toBeNull();
     await page.getByRole("link", { name: "Программа", exact: true }).click();

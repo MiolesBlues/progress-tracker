@@ -51,6 +51,10 @@ function mount() {
   );
   act(() => authEvent("SIGNED_IN", "A"));
 }
+async function chooseSelectOption(label: string, optionName: string | RegExp) {
+  fireEvent.click(await screen.findByRole("combobox", { name: label }));
+  fireEvent.click(await screen.findByRole("option", { name: optionName }));
+}
 it("explains that invalid legacy results need review and leaves the saved data unchanged", async () => {
   const legacy = {
     id: "legacy",
@@ -90,8 +94,7 @@ it("selects an older workout independently of graph period and preserves archive
   ];
   mount();
   fireEvent.click(await screen.findByRole("button", { name: "Архивная история" }));
-  const select = await screen.findByLabelText("Тренировка для сравнения");
-  fireEvent.change(select, { target: { value: "selected" } });
+  await chooseSelectOption("Тренировка для сравнения", /28\.09\.2020.*55 кг/);
   const sessions = screen
     .getByRole("heading", { name: "С предыдущей сессией" })
     .closest("section")!;
@@ -104,7 +107,9 @@ it("selects an older workout independently of graph period and preserves archive
   fireEvent.click(screen.getByRole("button", { name: "Всё время" }));
   expect(screen.getByText("Записи за период (4)")).toBeInTheDocument();
   expect(screen.getByTestId("series")).not.toHaveTextContent("2099");
-  expect(screen.getByLabelText("Тренировка для сравнения")).toHaveValue("selected");
+  expect(screen.getByRole("combobox", { name: "Тренировка для сравнения" })).toHaveTextContent(
+    "28.09.2020",
+  );
 });
 it("shows every history page and never silently stops at twenty records", async () => {
   fake.state.rows.workout_entries = Array.from({ length: 23 }, (_, i) =>
@@ -151,18 +156,19 @@ it("selects a day first, filters exercises, and never keeps the previous exercis
     { ...entry("two", "2020-10-05", 90), exercise_id: "ex-2" },
   ];
   mount();
-  const day = await screen.findByLabelText("Тренировочный день");
-  const exercise = screen.getByLabelText("Упражнение");
+  const day = await screen.findByRole("combobox", { name: "Тренировочный день" });
+  const exercise = screen.getByRole("combobox", { name: "Упражнение" });
   const filters = day.closest("label")?.parentElement;
   expect(filters?.className).toContain("grid-cols-[minmax(0,1fr)_minmax(0,1fr)]");
   expect(filters?.className).toContain("gap-2.5");
-  expect(day).toHaveClass("h-11", "appearance-none", "truncate", "min-w-0");
-  expect(exercise).toHaveClass("h-11", "appearance-none", "truncate", "min-w-0");
-  expect(day).toHaveValue("first");
-  expect(exercise).toHaveValue("ex-1");
-  expect(screen.queryByRole("option", { name: /Жим · Push/ })).not.toBeInTheDocument();
-  fireEvent.change(day, { target: { value: "second" } });
-  expect(exercise).toHaveValue("ex-2");
-  expect(screen.queryByRole("option", { name: "Жим" })).not.toBeInTheDocument();
-  expect(await screen.findByLabelText("Тренировка для сравнения")).toHaveValue("two");
+  expect(day).toHaveClass("h-12", "min-w-0");
+  expect(exercise).toHaveClass("h-12", "min-w-0");
+  expect(day).toHaveTextContent("Push");
+  expect(exercise).toHaveTextContent("Жим");
+  await chooseSelectOption("Тренировочный день", "Очень длинное название тренировочного дня");
+  expect(screen.getByRole("combobox", { name: "Упражнение" })).toHaveTextContent("Тяга");
+  await chooseSelectOption("Упражнение", "Тяга");
+  expect(screen.getByRole("combobox", { name: "Тренировка для сравнения" })).toHaveTextContent(
+    "05.10.2020",
+  );
 });

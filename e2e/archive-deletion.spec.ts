@@ -1,7 +1,12 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mockSupabase } from "./mock-supabase";
 import { addExercise, longDay, noOverflow, register } from "./helpers";
+
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 for (const width of [320, 375, 390, 430]) {
   test(`archive settings and safe deletion at ${width}px`, async ({ page }) => {
@@ -67,14 +72,12 @@ for (const width of [320, 375, 390, 430]) {
     });
     await daysDialog.getByRole("button", { name: "Готово" }).click();
     await page.getByRole("link", { name: "Записи", exact: true }).click();
-    await page.getByLabel("День записей").selectOption("unassigned");
+    await chooseSelectOption(page, "День записей", "Без назначенного дня");
     await expect(page.getByText("Сохранить снимок")).toBeVisible();
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
     await page.getByRole("button", { name: "Архивная история" }).click();
-    await page
-      .getByLabel("Тренировочный день", { exact: true })
-      .selectOption("__unassigned_history__");
-    await expect(page.getByRole("option", { name: "Исторический жим" })).toBeAttached();
+    await chooseSelectOption(page, "Тренировочный день", "История без активного дня");
+    await chooseSelectOption(page, "Упражнение", "Исторический жим");
     await page.getByRole("button", { name: "Всё время" }).click();
     await expect(page.getByText("Записи за период (1)")).toBeVisible();
     await page.getByRole("link", { name: "Программа", exact: true }).click();

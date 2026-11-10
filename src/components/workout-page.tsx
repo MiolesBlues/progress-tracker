@@ -194,7 +194,7 @@ export function WorkoutPage() {
         <SelectTrigger
           aria-label={t("Тренировочный день")}
           aria-labelledby="training-day-label"
-          className={`${focusMode ? "h-12" : "h-11"} w-full min-w-0 bg-card px-3 text-foreground`}
+          className="px-3"
         >
           <SelectValue placeholder={t("Нет активных дней")} />
         </SelectTrigger>
@@ -208,11 +208,7 @@ export function WorkoutPage() {
           {days.map((item) => {
             const count = activeExercises.filter((exercise) => exercise.day_id === item.id).length;
             return (
-              <SelectItem
-                key={item.id}
-                value={item.id}
-                className="h-auto min-h-10 whitespace-normal py-2"
-              >
+              <SelectItem key={item.id} value={item.id} className="h-auto whitespace-normal py-2">
                 <span className="block min-w-0 whitespace-normal break-words leading-snug">
                   {item.name} · {exerciseCount(count, language)}
                 </span>
@@ -225,19 +221,24 @@ export function WorkoutPage() {
   );
   const exerciseSelector = current && day && (
     <label className="block min-w-0 space-y-1 text-sm">
-      {t("Упражнение")}
-      <select
-        aria-label={t("Упражнение")}
-        className="h-10 w-full min-w-0 rounded-md border border-input bg-card px-3"
-        value={current.id}
-        onChange={(event) => select(day.id, event.target.value)}
-      >
-        {exercises.map((exercise) => (
-          <option key={exercise.id} value={exercise.id}>
-            {exercise.name}
-          </option>
-        ))}
-      </select>
+      <span>{t("Упражнение")}</span>
+      <Select value={current.id} onValueChange={(exerciseId) => select(day.id, exerciseId)}>
+        <SelectTrigger aria-label={t("Упражнение")} className="px-3">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent
+          position="popper"
+          align="start"
+          collisionPadding={8}
+          className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+        >
+          {exercises.map((exercise) => (
+            <SelectItem key={exercise.id} value={exercise.id} className="h-auto">
+              <span className="block min-w-0 break-words leading-snug">{exercise.name}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </label>
   );
   if (programResult.isError || daysResult.isError)

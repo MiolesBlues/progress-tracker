@@ -58,7 +58,7 @@ import {
 type Result = { error: { message: string; code?: string } | null };
 type DayEditDraft = { name: string; revision: number };
 type Run = (action: () => PromiseLike<Result>) => Promise<boolean>;
-const selectCls = "h-12 w-full min-w-0 rounded-md border border-input bg-card px-3 text-foreground";
+const UNASSIGNED_DAY = "__progress_tracker_unassigned_day__";
 function safePendingCreate(userId: string, kind: "day" | "exercise") {
   try {
     return readPendingProgramCreate(userId, kind);
@@ -890,7 +890,7 @@ export function ProgramManager() {
           >
             <SelectTrigger
               aria-label={t("День для упражнений")}
-              className="h-12 w-full min-w-0 bg-card text-left [&>span]:min-w-0 [&>span]:truncate"
+              className="text-left [&>span]:min-w-0 [&>span]:truncate"
             >
               <SelectValue placeholder={t("Нет активных дней")} />
             </SelectTrigger>
@@ -901,7 +901,7 @@ export function ProgramManager() {
               className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
             >
               {active.map((day) => (
-                <SelectItem key={day.id} value={day.id} className="min-h-10 whitespace-normal py-2">
+                <SelectItem key={day.id} value={day.id} className="whitespace-normal py-2">
                   <span className="block min-w-0 break-words leading-snug">
                     {day.name} ·{" "}
                     {t("{count} упр.", {
@@ -1306,23 +1306,38 @@ function ExerciseEditor({
         </label>
         <label className="block space-y-1 text-xs">
           {t("Тренировочный день")}
-          <select
-            className={selectCls}
-            aria-describedby={error ? "exercise-editor-error" : undefined}
-            value={dayId}
-            onChange={(event) => setDayId(event.target.value)}
+          <Select
+            value={dayId || UNASSIGNED_DAY}
+            onValueChange={(value) => setDayId(value === UNASSIGNED_DAY ? "" : value)}
             disabled={busy}
           >
-            {!ex.day_id && <option value="">{t("Без назначенного дня")}</option>}
-            {days
-              .filter((day) => !day.archived_at || day.id === ex.day_id)
-              .map((day) => (
-                <option key={day.id} value={day.id}>
-                  {day.name}
-                  {day.archived_at ? t(" (архив)") : ""}
-                </option>
-              ))}
-          </select>
+            <SelectTrigger
+              aria-label={t("Тренировочный день")}
+              aria-describedby={error ? "exercise-editor-error" : undefined}
+            >
+              <SelectValue placeholder={t("Без назначенного дня")} />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              align="start"
+              collisionPadding={8}
+              className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-1rem)]"
+            >
+              {!ex.day_id && (
+                <SelectItem value={UNASSIGNED_DAY}>{t("Без назначенного дня")}</SelectItem>
+              )}
+              {days
+                .filter((day) => !day.archived_at || day.id === ex.day_id)
+                .map((day) => (
+                  <SelectItem key={day.id} value={day.id} className="h-auto">
+                    <span className="block min-w-0 break-words leading-snug">
+                      {day.name}
+                      {day.archived_at ? t(" (архив)") : ""}
+                    </span>
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="space-y-1 text-xs">

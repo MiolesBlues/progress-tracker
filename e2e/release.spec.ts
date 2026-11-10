@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { mockSupabase } from "./mock-supabase";
 import {
   register,
@@ -18,6 +18,11 @@ import {
   fillWorkout,
   sortRecords,
 } from "./helpers";
+
+async function chooseSelectOption(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 for (const [width, count] of [
   [320, 1],
@@ -117,7 +122,9 @@ for (const [width, count] of [
     await expect(daySelect).toBeFocused();
     const otherDay = days.find((day) => day.id !== firstDay.id)!;
     await chooseDay(page, `${otherDay["name"]} · 0 упражнений`);
-    await expect(page.getByText("В этом дне нет активных упражнений.")).toBeVisible();
+    await expect(
+      page.getByText("В этом дне нет активных упражнений. Добавьте упражнение", { exact: true }),
+    ).toBeVisible();
     await chooseDay(page, `${longDay} · 2 упражнения`);
     await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("50");
     await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("6");
@@ -134,7 +141,9 @@ for (const [width, count] of [
     backend.loseSaveResponse = true;
     await page.getByRole("button", { name: "Сохранить", exact: true }).click();
     await page.getByRole("button", { name: "Повторить сохранение", exact: true }).click();
-    await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
+    await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+      secondName,
+    );
     await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("");
     await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveCount(0);
@@ -167,17 +176,15 @@ for (const [width, count] of [
     const restoredRequest = page.waitForRequest(
       (request) => request.url().includes("/workout_entries?") && request.url().includes(first.id),
     );
-    await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
+    await chooseSelectOption(page, "Упражнение", firstName);
     expect(new URL((await restoredRequest).url()).searchParams.get("select")).toContain("notes");
     await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("7");
     await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("52.5");
     await expect(page.getByLabel("Заметки", { exact: true })).toHaveValue("Черновик на устройстве");
     await page.getByRole("link", { name: "Записи", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Записи", exact: true })).toBeVisible();
-    await page
-      .getByRole("combobox", { name: "День записей", exact: true })
-      .selectOption(firstDay.id);
-    await page.getByLabel("Упражнение записей", { exact: true }).selectOption(first.id);
+    await chooseSelectOption(page, "День записей", longDay);
+    await chooseSelectOption(page, "Упражнение записей", firstName);
     const diary = page.getByRole("region", { name: "Дневник записей упражнения", exact: true });
     for (const [label, records] of [
       ["Сегодня", 2],
@@ -200,8 +207,8 @@ for (const [width, count] of [
     await expect(diary.getByRole("listitem").first()).toContainText("40 кг");
     await noOverflow(page);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
-    await page.getByLabel("Тренировочный день", { exact: true }).selectOption(firstDay.id);
-    await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
+    await chooseSelectOption(page, "Тренировочный день", longDay);
+    await chooseSelectOption(page, "Упражнение", firstName);
     await page.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(page.getByText("Записи за период (4)", { exact: true })).toBeVisible();
     await expect(
@@ -214,8 +221,8 @@ for (const [width, count] of [
     await expect(
       page.getByLabel("График тренировок", { exact: true }).locator("svg"),
     ).toBeVisible();
-    for (const metric of ["weight", "reps", "volume"])
-      await page.getByLabel("Показатель", { exact: true }).selectOption(metric);
+    for (const metric of ["Вес", "Повторения", "Объём"])
+      await chooseSelectOption(page, "Показатель", metric);
     await noOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`progress-${width}.png`), fullPage: true });
     const historyIds = backend.rows["workout_entries"]!.map((row) => row.id);
@@ -236,16 +243,14 @@ for (const [width, count] of [
     await page.getByRole("checkbox", { name: "Показывать архивные дни и упражнения" }).click();
     await page.getByRole("button", { name: "Закрыть", exact: true }).click();
     await page.getByRole("link", { name: "Записи", exact: true }).click();
-    await page
-      .getByRole("combobox", { name: "День записей", exact: true })
-      .selectOption(firstDay.id);
-    await page.getByLabel("Упражнение записей", { exact: true }).selectOption(first.id);
+    await chooseSelectOption(page, "День записей", `${longDay} (архив)`);
+    await chooseSelectOption(page, "Упражнение записей", `${firstName} (архив)`);
     await diary.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(diary.getByRole("listitem")).toHaveCount(4);
     await page.getByRole("link", { name: "Прогресс", exact: true }).click();
     await page.getByRole("button", { name: "Архивная история", exact: true }).click();
-    await page.getByLabel("Тренировочный день", { exact: true }).selectOption(firstDay.id);
-    await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
+    await chooseSelectOption(page, "Тренировочный день", longDay);
+    await chooseSelectOption(page, "Упражнение", firstName);
     await page.getByRole("button", { name: "Всё время", exact: true }).click();
     await expect(page.getByText("Записи за период (4)", { exact: true })).toBeVisible();
     expect(backend.rows["workout_entries"]!.map((row) => row.id)).toEqual(historyIds);
@@ -321,7 +326,7 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   const { first, second } = seedHistory(backend);
   await page.getByRole("link", { name: "Тренировка", exact: true }).click();
   await expect(page.getByLabel("Повторения подхода 4", { exact: true })).toHaveValue("6");
-  await page.getByLabel("Упражнение", { exact: true }).selectOption(second.id);
+  await chooseSelectOption(page, "Упражнение", secondName);
   await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
   const latest = backend.rows["workout_entries"]!.find(
     (row) => row["exercise_id"] === first.id && row["performed_on"] === "2026-10-15",
@@ -329,10 +334,10 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   latest["weight"] = 55;
   latest["reps"] = [9, 9, 8, 7];
   latest["rir"] = 1;
-  await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
+  await chooseSelectOption(page, "Упражнение", firstName);
   await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("55");
   await expect(page.getByLabel("Повторения подхода 1", { exact: true })).toHaveValue("9");
-  await page.getByLabel("Упражнение", { exact: true }).selectOption(second.id);
+  await chooseSelectOption(page, "Упражнение", secondName);
   let release!: () => void;
   backend.delayLastRead = {
     exerciseId: first.id,
@@ -340,7 +345,7 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
       release = done;
     }),
   };
-  await page.getByLabel("Упражнение", { exact: true }).selectOption(first.id);
+  await chooseSelectOption(page, "Упражнение", firstName);
   await expect.poll(() => backend.delayLastRead).toBeNull();
   await page.getByLabel("Вес подхода 1", { exact: true }).fill("62,5");
   release();
@@ -365,7 +370,9 @@ test("stage 1 regressions: stale cached history, late reply, old next-exercise d
   );
   await fillWorkout(page, "62,5", ["9", "9", "8", "7"], "1");
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.getByLabel("Упражнение", { exact: true })).toHaveValue(second.id);
+  await expect(page.getByRole("combobox", { name: "Упражнение", exact: true })).toContainText(
+    secondName,
+  );
   await expect(page.getByLabel("Дата", { exact: true })).toHaveValue("2026-10-15");
   await expect(page.getByLabel("Вес подхода 1", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Повторения подхода 3", { exact: true })).toHaveValue("");

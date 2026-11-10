@@ -52,10 +52,7 @@ export function SettingsDialog({ disabled = false }: { disabled?: boolean }) {
             {t("Язык интерфейса")}
           </label>
           <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-            <SelectTrigger
-              aria-labelledby="interface-language-label"
-              className="h-12 min-w-0 bg-card"
-            >
+            <SelectTrigger aria-labelledby="interface-language-label">
               <SelectValue />
             </SelectTrigger>
             <SelectContent

@@ -48,6 +48,13 @@ function mount() {
     </QueryClientProvider>,
   );
 }
+async function chooseSelectOption(label: string, optionName: string | RegExp, index = 0) {
+  const trigger = await screen.findByRole("combobox", { name: label });
+  if (trigger.getAttribute("aria-expanded") !== "true") fireEvent.click(trigger);
+  const options = await screen.findAllByRole("option", { name: optionName });
+  if (!options[index]) throw new Error(`Missing option ${String(optionName)} in ${label}`);
+  fireEvent.click(options[index]!);
+}
 function chooseSort(diary: HTMLElement, label: string) {
   fireEvent.pointerDown(within(diary).getByRole("button", { name: "Сортировка записей" }), {
     button: 0,
@@ -108,8 +115,10 @@ it("keeps the records destination separate from progress in the dock navigation"
 it("selects a day and exercise and displays the exercise diary", async () => {
   mount();
   const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
-  expect(screen.getByLabelText("День записей")).toHaveValue("day-1");
-  expect(screen.getByLabelText("Упражнение записей")).toHaveValue("press");
+  expect(screen.getByRole("combobox", { name: "День записей" })).toHaveTextContent("Верх тела");
+  expect(screen.getByRole("combobox", { name: "Упражнение записей" })).toHaveTextContent(
+    "Жим лёжа",
+  );
   const latest = within(diary).getAllByRole("listitem")[0]!;
   expect(latest).toHaveTextContent("Жим лёжа");
   expect(latest).toHaveTextContent("3 подхода");
@@ -121,8 +130,12 @@ it("selects a day and exercise and displays the exercise diary", async () => {
   expect(latest).toHaveTextContent("RIR");
   expect(within(latest).getByText("Хорошее самочувствие")).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "day-2" } });
-  await waitFor(() => expect(screen.getByLabelText("Упражнение записей")).toHaveValue("squat"));
+  await chooseSelectOption("День записей", "Ноги");
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "Упражнение записей" })).toHaveTextContent(
+      "Присед",
+    ),
+  );
   expect(
     (await screen.findByRole("region", { name: "Дневник записей упражнения" })).querySelector("li"),
   ).toHaveTextContent("1 подход · Макс. рабочий вес 80 кг");
@@ -330,7 +343,9 @@ it("uses the current day name immediately after rename without changing historic
       old?.map((day) => (day.id === "day-1" ? { ...day, name: "Push" } : day)),
     ),
   );
-  expect(await screen.findByRole("option", { name: "Push" })).toHaveValue("day-1");
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "День записей" })).toHaveTextContent("Push"),
+  );
   fireEvent.click(within(diary).getByRole("button", { name: "Всё время" }));
   expect(within(diary).getAllByText(/ · Push$/)).toHaveLength(2);
   expect(within(diary).queryByText(/ · Upper 1$/)).toBeNull();
@@ -339,7 +354,11 @@ it("uses the current day name immediately after rename without changing historic
     "Upper 1",
   ]);
   expect(fake.state.rows.workout_entries).toEqual(persisted);
-  expect(screen.getAllByRole("option", { name: "Push" })).toHaveLength(1);
+  fireEvent.click(screen.getByRole("combobox", { name: "День записей" }));
+  const pushOptions = screen.getAllByRole("option", { name: "Push" });
+  expect(pushOptions).toHaveLength(1);
+  expect(pushOptions[0]).toHaveTextContent("Push");
+  fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape", code: "Escape" });
 });
 
 it("shows a renamed day for an archived exercise when archive visibility is enabled", async () => {
@@ -350,6 +369,7 @@ it("shows a renamed day for an archived exercise when archive visibility is enab
     { ...entry("archived", dateDaysAgo(0), 50, [8]), day_name: "Upper 1" },
   ];
   mount();
+  fireEvent.click(await screen.findByRole("combobox", { name: "Упражнение записей" }));
   expect(await screen.findByRole("option", { name: "Жим лёжа (архив)" })).toBeInTheDocument();
   expect(await screen.findByText(`${displayedDate(dateDaysAgo(0))} · Push`)).toBeInTheDocument();
   expect(fake.state.rows.workout_entries![0]!["day_name"]).toBe("Upper 1");
@@ -363,9 +383,7 @@ it("uses each entry's historical day UUID after an exercise moves", async () => 
     { ...entry("after-move", dateDaysAgo(0), 52, [7]), day_id: "day-2", day_name: "Ноги" },
   ];
   mount();
-  fireEvent.change(await screen.findByLabelText("День записей"), {
-    target: { value: "day-2" },
-  });
+  await chooseSelectOption("День записей", "Ноги");
   const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Push`)).toBeInTheDocument();
   expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Ноги`)).toBeInTheDocument();
@@ -385,9 +403,7 @@ it("uses a deleted day's snapshot and localizes a fully unassigned entry", async
     { ...entry("unknown-day", dateDaysAgo(0), 45, [7]), day_id: null, day_name: null },
   ];
   mount();
-  fireEvent.change(await screen.findByLabelText("День записей"), {
-    target: { value: "unassigned" },
-  });
+  await chooseSelectOption("День записей", "Без назначенного дня");
   const diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   expect(within(diary).getByText(`${displayedDate(dateDaysAgo(0))} · Upper 1`)).toBeVisible();
   expect(
@@ -408,17 +424,16 @@ it("keeps different day UUIDs separate even when their names match", async () =>
     },
   ];
   mount();
-  const daySelector = await screen.findByLabelText("День записей");
-  expect(
-    screen.getAllByRole("option", { name: "Push" }).map((option) => option.getAttribute("value")),
-  ).toEqual(["day-1", "day-2"]);
+  const daySelector = await screen.findByRole("combobox", { name: "День записей" });
   expect(
     within(await screen.findByRole("region", { name: "Дневник записей упражнения" })).getAllByRole(
       "listitem",
     )[0],
   ).toHaveTextContent("50 кг");
   expect(screen.queryByText("80 кг · 5")).toBeNull();
-  fireEvent.change(daySelector, { target: { value: "day-2" } });
+  fireEvent.click(daySelector);
+  expect(screen.getAllByRole("option", { name: "Push" })).toHaveLength(2);
+  fireEvent.click(screen.getAllByRole("option", { name: "Push" })[1]!);
   expect(
     within(await screen.findByRole("region", { name: "Дневник записей упражнения" })).getAllByRole(
       "listitem",
@@ -440,14 +455,15 @@ it("hides archived choices by default and does not show another exercise after h
   });
   mount();
   expect(await screen.findByRole("combobox", { name: "Упражнение записей" })).toBeVisible();
+  fireEvent.click(screen.getByRole("combobox", { name: "Упражнение записей" }));
   expect(screen.queryByRole("option", { name: /Архивный жим/ })).toBeNull();
+  fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape", code: "Escape" });
   act(() => {
     localStorage.setItem("app:archive-settings:v1:A", "2");
     window.dispatchEvent(new Event("archive-preferences-changed"));
   });
-  fireEvent.change(screen.getByLabelText("Упражнение записей"), {
-    target: { value: "archived-press" },
-  });
+  await chooseSelectOption("Упражнение записей", "Жим лёжа");
+  await chooseSelectOption("Упражнение записей", "Архивный жим (архив)");
   expect(
     within(await screen.findByRole("region", { name: "Дневник записей упражнения" })).getAllByRole(
       "listitem",
@@ -457,7 +473,6 @@ it("hides archived choices by default and does not show another exercise after h
     localStorage.setItem("app:archive-settings:v1:A", "0");
     window.dispatchEvent(new Event("archive-preferences-changed"));
   });
-  expect(screen.getAllByText("Выберите упражнение").length).toBeGreaterThan(0);
   expect(screen.queryByRole("region", { name: "Дневник записей упражнения" })).toBeNull();
 });
 
@@ -507,7 +522,7 @@ it("persists sort per user and marks the current choice with a check", async () 
   fireEvent.click(screen.getByRole("menuitemradio", { name: "Вес: по возрастанию" }));
   expect(localStorage.getItem("app:entries-sort:v1:A")).toBe("weight-asc");
 
-  fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "day-2" } });
+  await chooseSelectOption("День записей", "Ноги");
   diary = await screen.findByRole("region", { name: "Дневник записей упражнения" });
   fireEvent.pointerDown(within(diary).getByRole("button", { name: "Сортировка записей" }), {
     button: 0,
@@ -540,7 +555,7 @@ it.each([false, true])(
     });
     mount();
     await screen.findByRole("combobox", { name: "День записей" });
-    fireEvent.change(screen.getByLabelText("День записей"), { target: { value: "unassigned" } });
+    await chooseSelectOption("День записей", "Без назначенного дня");
     expect(
       within(
         await screen.findByRole("region", { name: "Дневник записей упражнения" }),
